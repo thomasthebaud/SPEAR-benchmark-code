@@ -1,0 +1,36 @@
+metric,section,mean_diff,std_diff,p_value,n,auroc,accuracy,detail
+CER,Basic Metrics,0.01711851297385002,0.04067547150291852,,1151,,,model mean/std; original base_metrics.csv unavailable
+WER,Basic Metrics,0.06789232111040477,0.07672204173800205,,1151,,,model mean/std; original base_metrics.csv unavailable
+UTMOS,Basic Metrics,4.1495944063731836,0.2367483103179512,,1151,,,model mean/std; original base_metrics.csv unavailable
+latency,Basic Metrics,38.748913987836666,93.67751545057898,,1151,,,model mean/std; original base_metrics.csv unavailable
+Emotional naturalness,Emotional Naturalness,0.00147078453614132,0.005996836920621619,2.45024497426242e-16,1151,,,naturalness_logit model-original
+Q0,STANCEs,0.024390243902439025,0.15520673239323957,0.15856910317504727,82,,,"Based on the audio, does the TARGET speaker sound warm and affiliative, or cold and detached?"
+Q1,STANCEs,0.17272727272727273,0.8970807999476386,0.04589791328966286,110,,,"Based on the audio, does the TARGET speaker sound compassionate and supportive, or callous and unsympathetic?"
+Q2,STANCEs,0.1702127659574468,1.1096248668135005,0.29846051031584764,47,,,"Based on the audio, does the TARGET speaker sound polite and respectful, or rude and disrespectful?"
+Q3,STANCEs,0.4,1.2101267618150657,0.013035559341442854,60,,,"Based on the audio, does the TARGET speaker sound assertive and self-confident, or hesitant and inhibited?"
+Q4,STANCEs,0.2777777777777778,1.023969385301352,0.02428062221962865,72,,,"Based on the audio, does the TARGET speaker sound straightforward and sincere, or sly and manipulative?"
+Q5,STANCEs,0.13333333333333333,0.7302967433402214,0.32558198801619365,30,,,"Based on the audio, does the TARGET speaker sound attentive and focused, or confused and distracted?"
+Q6,STANCEs,0.3333333333333333,1.4204027103779837,0.15099806631641619,39,,,"Based on the audio, does the TARGET speaker sound organized and goal-driven, or disorganized and unmotivated?"
+Q7,STANCEs,0.03125,0.1767766952966369,0.3250527327235334,32,,,"Based on the audio, does the TARGET speaker sound socially engaged and expressive with the other speaker, or withdrawn and disengaged?"
+Q8,STANCEs,0.22857142857142856,0.9420164319072112,0.16028657480362948,35,,,"Based on the audio, does the TARGET speaker accommodate and yield to the other speaker’s preferences, or do they try to control and dominate?"
+Q9,STANCEs,0.14285714285714285,1.9309509130403673,0.7381196595863795,21,,,"Based on the audio, does the TARGET speaker stay calm and avoid confrontation, or are they hostile and aggressive?"
+lexical_mtld,Explainable Features,46.69848390045201,36.29132994438117,6.791847932157151e-72,161,0.9425598556033338,0.8046875,feature value model-original; p-value is Welch t-test
+lexical_mattr_large,Explainable Features,0.130801746102434,0.09278777838855404,9.286873271912559e-53,161,0.9244660331616854,0.861328125,feature value model-original; p-value is Welch t-test
+lexical_mattr_small,Explainable Features,0.10610260772796531,0.07902193655873098,7.304510964134011e-50,161,0.9230769230769228,0.8515625,feature value model-original; p-value is Welch t-test
+lexical_entropy,Explainable Features,1.6119160566593131,1.6293150035512423,6.442182872625248e-184,1151,0.8447979263201081,0.7768128528006948,feature value model-original; p-value is Welch t-test
+lexical_unique_words,Explainable Features,18.341020640264503,19.856744406336272,7.910165694435806e-179,1151,0.827569927116517,0.7624837168910117,feature value model-original; p-value is Welch t-test
+lexical_content_word_count,Explainable Features,10.837677381986678,13.14007734401921,1.3526341878372402e-148,1151,0.8176381950477846,0.7407729049066435,feature value model-original; p-value is Welch t-test
+lexical_total_words,Explainable Features,19.415277476107732,29.250210546773154,8.164647073133138e-101,1151,0.7909019331016507,0.7255753365175858,feature value model-original; p-value is Welch t-test
+temporal_speech_active_time_s,Explainable Features,6.465172875000949,11.752109117119918,4.314908518437558e-69,1082,0.7861515583170465,0.7227944469323779,feature value model-original; p-value is Welch t-test
+temporal_total_duration_s,Explainable Features,6.399285558969055,12.226349134144268,5.05155721015607e-63,1082,0.7850121488828328,0.7218987908643081,feature value model-original; p-value is Welch t-test
+lexical_function_word_count,Explainable Features,8.577600094121054,17.387092770881257,6.7924976451610095e-59,1151,0.7579885998889855,0.7042987407729049,feature value model-original; p-value is Welch t-test
+f0_mean_p10_p90,Explainable Features,-12.091572450849952,46.06409025779034,1.27043546002718e-18,1151,0.4147586036296939,0.4811115935735996,feature value model-original; p-value is Welch t-test
+f0_median_raw,Explainable Features,-12.143670089325468,46.21926645341807,1.2383635034994727e-18,1151,0.4169064943527367,0.4906643508467216,feature value model-original; p-value is Welch t-test
+f0_mean_p25_p75,Explainable Features,-11.959776514116697,45.75477123185526,1.804124868277277e-18,1151,0.4169321363065932,0.4893617021276595,feature value model-original; p-value is Welch t-test
+f0_p25,Explainable Features,-7.172024053185595,38.2939696185457,2.7132534345840327e-10,1151,0.473908557775847,0.5809813287016934,feature value model-original; p-value is Welch t-test
+question_end_time,Explainable Features,0.011607993351196555,10.323779649177283,0.9695674799145382,1151,0.5,0.4997828918801563,feature value model-original; p-value is Welch t-test
+f0_p10,Explainable Features,-4.943179530521249,33.8736327453558,8.070925013471034e-07,1151,0.5039194480644851,0.5688232739904473,feature value model-original; p-value is Welch t-test
+temporal_pause_total_duration_s,Explainable Features,-0.06588731603189557,1.1898664631235198,0.06724235476293408,1082,0.5115904196463413,0.5208240035826243,feature value model-original; p-value is Welch t-test
+temporal_pause_ratio,Explainable Features,-0.0032950872875779935,0.024699672270810356,1.1618109231946855e-05,1082,0.5115936315122588,0.5266457680250783,feature value model-original; p-value is Welch t-test
+temporal_pause_count,Explainable Features,-0.18644721057474734,3.7176778652767934,0.09600488836468977,1082,0.5115936315122588,0.5208240035826243,feature value model-original; p-value is Welch t-test
+temporal_pause_mean_duration_s,Explainable Features,-0.008012872665227032,0.0727783460827613,0.0002942933834839967,1082,0.5116024641435318,0.5266457680250783,feature value model-original; p-value is Welch t-test
