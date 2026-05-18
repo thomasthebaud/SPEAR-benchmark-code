@@ -1,0 +1,5 @@
+openai_keys.sh
+*.ipynb
+reports/*
+data/*/*
+models/*
