@@ -60,6 +60,7 @@ if [[ "$run_short" -eq 1 ]]; then
       --asr-model "$asr" \
       --stance-model "$stance_llm_model" \
       --sbert-model "${sbert_model:-sentence-transformers/all-MiniLM-L6-v2}" \
+      --statistical-test "${statistical_test:-Welch t-test}" \
       --selection-method "end_with_question" \
       --min-turns 1 \
       --min-speakers 1 \

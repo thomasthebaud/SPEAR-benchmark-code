@@ -7,13 +7,14 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
-from scipy.stats import ttest_ind, ttest_rel
+from scipy.stats import mannwhitneyu, ttest_ind, wilcoxon
 
 
 SUBSETS = ["improvised", "naturalistic"]
 SPLITS = ["dev", "test"]
 ORIGINAL = "original"
 EXCLUDED_REPORT_METRICS = {"question_end_time"}
+STATISTICAL_TESTS = {"Welch t-test", "Mann-Whitney U Test", "Wilcoxon Signed-Rank Test"}
 
 
 def safe_read_csv(path: Path) -> Optional[pd.DataFrame]:
@@ -86,24 +87,23 @@ def paired_values(
     return merged["original"], merged["model"], merged["model"] - merged["original"]
 
 
-def paired_ttest(original_values: pd.Series, model_values: pd.Series) -> float:
+def statistical_pvalue(original_values: pd.Series, model_values: pd.Series, test_name: str, paired: bool = False) -> float:
+    original_values = pd.Series(original_values).dropna()
+    model_values = pd.Series(model_values).dropna()
     if len(original_values) < 2 or len(model_values) < 2:
         return np.nan
     try:
-        return float(ttest_rel(model_values, original_values, nan_policy="omit").pvalue)
+        if test_name == "Welch t-test":
+            return float(ttest_ind(original_values, model_values, equal_var=False, nan_policy="omit").pvalue)
+        if test_name == "Mann-Whitney U Test":
+            return float(mannwhitneyu(original_values, model_values, alternative="two-sided").pvalue)
+        if test_name == "Wilcoxon Signed-Rank Test":
+            if len(original_values) != len(model_values):
+                return np.nan
+            return float(wilcoxon(model_values, original_values, alternative="two-sided", zero_method="wilcox").pvalue)
     except Exception:
         return np.nan
-
-
-def welch_pvalue(a: pd.Series, b: pd.Series) -> float:
-    a = a.dropna()
-    b = b.dropna()
-    if len(a) < 2 or len(b) < 2:
-        return np.nan
-    try:
-        return float(ttest_ind(a, b, equal_var=False, nan_policy="omit").pvalue)
-    except Exception:
-        return np.nan
+    return np.nan
 
 
 def feature_csv(args, model: str, split: str, subset: str) -> Path:
@@ -141,6 +141,7 @@ def setup_section(args, text_lines: List[str]) -> None:
         "evaluated_llm_model": args.model,
         "stance_llm_model": args.stance_model,
         "sbert_model_for_naturalness_context": args.sbert_model,
+        "statistical_test": args.statistical_test,
         "data_root": str(args.data_root),
         "results_root": str(args.results_root),
     }
@@ -200,9 +201,9 @@ def base_metrics_section(args, metrics_by_subset: Dict[str, List[Dict[str, Any]]
                 if not original_values.empty:
                     mean_value = model_values.mean() - original_values.mean()
                     std_value = np.sqrt(model_values.var(ddof=1) + original_values.var(ddof=1))
-                    pvalue = welch_pvalue(original_values, model_values)
+                    pvalue = statistical_pvalue(original_values, model_values, args.statistical_test)
                     n_value = min(len(original_values), len(model_values))
-                    detail = "model-original mean difference; p-value is Welch t-test"
+                    detail = f"model-original mean difference; p-value is {args.statistical_test}"
             row = metric_row(
                 metric,
                 mean_value,
@@ -230,7 +231,7 @@ def emotional_naturalness_section(args, metrics_by_subset: Dict[str, List[Dict[s
             continue
 
         original_values, model_values, diff = paired_values(original, model, "naturalness_logit")
-        pvalue = paired_ttest(original_values, model_values)
+        pvalue = statistical_pvalue(original_values, model_values, args.statistical_test, paired=True)
         row = metric_row(
             "Emotional naturalness",
             diff.mean(),
@@ -269,7 +270,7 @@ def stances_section(args, metrics_by_subset: Dict[str, List[Dict[str, Any]]], te
         original = original.loc[valid]
         model = model.loc[valid]
         diff = model - original
-        pvalue = paired_ttest(original, model)
+        pvalue = statistical_pvalue(original, model, args.statistical_test, paired=True)
         question = str(group["stance_question"].dropna().iloc[0]) if "stance_question" in group and group["stance_question"].notna().any() else ""
         row = metric_row(
             f"Q{qidx}",
@@ -293,7 +294,7 @@ def feature_stats(args, subset: str, feature: str) -> Tuple[float, float, float,
 
     original_values = numeric(original[feature]).dropna()
     model_values = numeric(model[feature]).dropna()
-    pvalue = welch_pvalue(original_values, model_values)
+    pvalue = statistical_pvalue(original_values, model_values, args.statistical_test)
     diff_mean = model_values.mean() - original_values.mean()
     diff_std = np.sqrt(model_values.var(ddof=1) + original_values.var(ddof=1))
     return diff_mean, diff_std, pvalue, int(min(len(original_values), len(model_values)))
@@ -317,7 +318,7 @@ def add_feature_metric(
         auroc=auroc,
         accuracy=accuracy,
         section="Explainable Features",
-        detail="feature value model-original; p-value is Welch t-test",
+        detail=f"feature value model-original; p-value is {args.statistical_test}",
     )
     metrics_by_subset[subset].append(row)
     return row
@@ -390,6 +391,7 @@ def main() -> int:
     parser.add_argument("--asr-model", required=True)
     parser.add_argument("--stance-model", required=True)
     parser.add_argument("--sbert-model", default="sentence-transformers/all-MiniLM-L6-v2")
+    parser.add_argument("--statistical-test", default="Welch t-test", choices=sorted(STATISTICAL_TESTS))
     parser.add_argument("--selection-method", default="end_with_question")
     parser.add_argument("--min-turns", type=int, default=1)
     parser.add_argument("--min-speakers", type=int, default=1)
