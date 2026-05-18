@@ -189,7 +189,7 @@ def basic_metric_gallery(report_dir: Path) -> str:
     for image in images:
         title = html.escape(image.stem)
         cards.append(
-            f'<figure class="thumb"><img src="{rel(image, report_dir)}" alt="{title}" loading="lazy"><figcaption>{title}</figcaption></figure>'
+            f'<figure class="thumb"><img src="{rel(image, report_dir)}" alt="{title}" loading="lazy"></figure>'
         )
     return '<details open><summary>Basic metric histogram gallery</summary><div class="gallery">' + "\n".join(cards) + "</div></details>"
 
@@ -276,11 +276,6 @@ def build_html(args, metrics: dict[str, Optional[pd.DataFrame]], report_text: st
     {summary_cards(metrics)}
   </section>
 
-  <section>
-    <h2>Stage 1 Summary</h2>
-    <p>The Stage 1 report is parsed below into readable HTML sections and tables.</p>
-    {render_stage1_report(report_text)}
-  </section>
 
   <section>
     <h2>Basic Metrics</h2>

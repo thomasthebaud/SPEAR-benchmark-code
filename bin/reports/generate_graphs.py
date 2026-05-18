@@ -145,7 +145,7 @@ def graph_basic_metric_histograms(results_root: Path, model: str, output_dir: Pa
         if data.empty:
             continue
         subsets = [subset for subset in SUBSETS if subset in set(data["subset"])]
-        fig, axes = plt.subplots(1, len(subsets), figsize=(6.5 * len(subsets), 4.8), sharex=True, sharey=True, squeeze=False)
+        fig, axes = plt.subplots(len(subsets), 1, figsize=(10, 5* len(subsets)), sharex=True, sharey=True, squeeze=False)
         for ax, subset in zip(axes[0], subsets):
             sub = data[data["subset"] == subset]
             sns.histplot(
@@ -160,9 +160,9 @@ def graph_basic_metric_histograms(results_root: Path, model: str, output_dir: Pa
                 alpha=0.35,
                 ax=ax,
             )
-            ax.set_title(subset.title())
+            ax.set_title("")
             ax.set_xlabel(metric)
-            ax.set_ylabel("Density" if ax is axes[0, 0] else "")
+            ax.set_ylabel(subset)
         fig.suptitle(f"{metric}: Original vs Model", y=1.03)
         fig.tight_layout()
         out_path = output_dir / f"{sanitize_filename(metric)}.png"
