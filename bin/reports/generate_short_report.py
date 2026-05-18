@@ -13,6 +13,7 @@ from scipy.stats import ttest_ind, ttest_rel
 SUBSETS = ["improvised", "naturalistic"]
 SPLITS = ["dev", "test"]
 ORIGINAL = "original"
+EXCLUDED_REPORT_METRICS = {"question_end_time"}
 
 
 def safe_read_csv(path: Path) -> Optional[pd.DataFrame]:
@@ -151,25 +152,19 @@ def setup_section(args, text_lines: List[str]) -> None:
 def data_statistics_section(args, text_lines: List[str]) -> None:
     text_lines.append("Data Statistics")
     text_lines.append("---------------")
-    text_lines.append("model\tsplit\tsubset\tutterances\ttotal_audio_hours\tanswer_audio_hours")
+    text_lines.append("model	split	subset	utterances	total_audio_hours")
     for model in [ORIGINAL, args.model]:
         for split in SPLITS:
             for subset in SUBSETS:
                 path = args.data_root / "outputs" / model / split / subset / f"{split}_{subset}_metadata.csv"
                 frame = safe_read_csv(path)
                 if frame is None:
-                    text_lines.append(f"{model}\t{split}\t{subset}\tmissing\tmissing\tmissing")
+                    text_lines.append(f"{model}	{split}	{subset}	missing	missing")
                     continue
 
                 n_rows = len(frame)
                 duration = numeric(frame["total_duration"]).sum() if "total_duration" in frame else np.nan
-                answer_duration = np.nan
-                if {"total_duration", "question_end_time"}.issubset(frame.columns):
-                    answer_duration = (numeric(frame["total_duration"]) - numeric(frame["question_end_time"])).clip(lower=0).sum()
-
-                text_lines.append(
-                    f"{model}\t{split}\t{subset}\t{n_rows}\t{duration / 3600.0:.2f}\t{answer_duration / 3600.0:.2f}"
-                )
+                text_lines.append(f"{model}	{split}	{subset}	{n_rows}	{duration / 3600.0:.2f}")
     text_lines.append("")
 
 
@@ -339,6 +334,7 @@ def explainable_features_section(args, metrics_by_subset: Dict[str, List[Dict[st
         return
 
     frame = frame.copy()
+    frame = frame[~frame["feature"].astype(str).isin(EXCLUDED_REPORT_METRICS)]
     frame["auroc"] = numeric(frame["auroc"])
     frame["accuracy"] = numeric(frame["accuracy"]) if "accuracy" in frame else np.nan
     frame = frame.dropna(subset=["auroc"])

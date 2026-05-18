@@ -18,6 +18,7 @@ import seaborn as sns
 ORIGINAL = "original"
 SUBSETS = ["improvised", "naturalistic"]
 DATASET_PALETTE = {"original": "#4C72B0", "model": "#DD8452"}
+EXCLUDED_REPORT_METRICS = {"question_end_time"}
 
 sns.set_theme(style="whitegrid", context="talk")
 
@@ -235,7 +236,11 @@ def graph_feature_histograms(results_root: Path, model: str, output_dir: Path) -
         print("[WARN] No explainable feature summary found; skipping per-feature histograms.")
         return
 
-    features = sorted(str(feature) for feature in summary["feature"].dropna().unique())
+    features = sorted(
+        str(feature)
+        for feature in summary["feature"].dropna().unique()
+        if str(feature) not in EXCLUDED_REPORT_METRICS
+    )
     output_dir.mkdir(parents=True, exist_ok=True)
 
     for feature in features:
@@ -274,6 +279,12 @@ def graph_feature_histograms(results_root: Path, model: str, output_dir: Path) -
     print(f"Wrote per-feature histograms to {output_dir}")
 
 
+def stance_polarity(score: float) -> Optional[str]:
+    if pd.isna(score) or score == 0:
+        return None
+    return "positive" if score > 0 else "negative"
+
+
 def graph_stances(results_root: Path, model: str, output_path: Path) -> None:
     frame = safe_read_csv(merged_stances_csv(results_root, model, "improvised"))
     if frame is None or not {"question_index", "score_original", "score_llm"}.issubset(frame.columns):
@@ -283,35 +294,35 @@ def graph_stances(results_root: Path, model: str, output_path: Path) -> None:
     frame = frame.copy()
     frame["score_original"] = numeric(frame["score_original"])
     frame["score_llm"] = numeric(frame["score_llm"])
+    frame["original_polarity"] = frame["score_original"].map(stance_polarity)
+    frame["model_polarity"] = frame["score_llm"].map(stance_polarity)
     questions = list(range(10))
+    labels = ["negative", "positive"]
 
-    fig, axes = plt.subplots(2, 5, figsize=(24, 9), sharex=True, sharey=True)
+    fig, axes = plt.subplots(2, 5, figsize=(21, 9), sharex=False, sharey=False)
     axes_flat = axes.ravel()
     for ax, qidx in zip(axes_flat, questions):
-        sub = frame[frame["question_index"] == qidx]
-        plot_rows = []
-        if not sub.empty:
-            plot_rows.append(pd.DataFrame({"score": sub["score_original"], "dataset": "original"}))
-            plot_rows.append(pd.DataFrame({"score": sub["score_llm"], "dataset": "model"}))
-        if plot_rows:
-            plot_data = pd.concat(plot_rows, ignore_index=True).dropna(subset=["score"])
-            if not plot_data.empty:
-                sns.histplot(
-                    data=plot_data,
-                    x="score",
-                    hue="dataset",
-                    bins=np.arange(-2.5, 3.6, 1.0),
-                    stat="probability",
-                    multiple="dodge",
-                    shrink=0.8,
-                    common_norm=False,
-                    ax=ax,
-                )
+        sub = frame[frame["question_index"] == qidx].dropna(subset=["original_polarity", "model_polarity"])
+        counts = pd.crosstab(sub["original_polarity"], sub["model_polarity"]).reindex(index=labels, columns=labels, fill_value=0)
+        sns.heatmap(
+            counts,
+            annot=True,
+            fmt="d",
+            cmap="Blues",
+            cbar=False,
+            linewidths=0.5,
+            linecolor="white",
+            square=True,
+            ax=ax,
+        )
         ax.set_title(f"Q{qidx}")
-        ax.set_xlabel("STANCE score")
-        ax.set_ylabel("Probability")
-    fig.suptitle("STANCE Score Distributions: Original vs Model", y=1.02)
-    fig.tight_layout()
+        ax.set_xlabel("Model")
+        ax.set_ylabel("Original")
+        ax.tick_params(axis="x", rotation=0)
+        ax.tick_params(axis="y", rotation=0)
+    fig.suptitle("STANCE Polarity Confusion Matrices: Original vs Model", y=1.02)
+    fig.text(0.5, 0.01, "Neutral scores (0) are excluded from the positive/negative polarity counts.", ha="center", fontsize=11)
+    fig.tight_layout(rect=(0, 0.03, 1, 0.98))
     output_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(output_path, dpi=180, bbox_inches="tight")
     plt.close(fig)
@@ -400,7 +411,11 @@ def graph_explainable_scatter(results_root: Path, model: str, output_path: Path)
         if "subset" in summary.columns:
             features = sorted(str(feature) for feature in summary.loc[summary["subset"] == subset, "feature"].dropna().unique())
         else:
-            features = sorted(str(feature) for feature in summary["feature"].dropna().unique())
+            features = sorted(
+        str(feature)
+        for feature in summary["feature"].dropna().unique()
+        if str(feature) not in EXCLUDED_REPORT_METRICS
+    )
 
         pvalues = {}
         if subset in metrics_by_subset:

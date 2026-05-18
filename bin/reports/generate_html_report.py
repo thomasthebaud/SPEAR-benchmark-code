@@ -10,6 +10,7 @@ import pandas as pd
 
 
 SUBSETS = ["improvised", "naturalistic"]
+EXCLUDED_REPORT_METRICS = {"question_end_time"}
 
 
 def safe_read_csv(path: Path) -> Optional[pd.DataFrame]:
@@ -46,6 +47,8 @@ def table_html(frame: Optional[pd.DataFrame], columns=None, max_rows: Optional[i
     if frame is None or frame.empty:
         return '<p class="muted">No data available.</p>'
     view = frame.copy()
+    if "metric" in view.columns:
+        view = view[~view["metric"].astype(str).isin(EXCLUDED_REPORT_METRICS)]
     if columns is not None:
         view = view[[col for col in columns if col in view.columns]]
     if max_rows is not None:
@@ -138,6 +141,8 @@ def metric_rows(metrics: dict[str, Optional[pd.DataFrame]], section: str) -> pd.
         if frame is None or frame.empty or "section" not in frame.columns:
             continue
         sub = frame[frame["section"] == section].copy()
+        if "metric" in sub.columns:
+            sub = sub[~sub["metric"].astype(str).isin(EXCLUDED_REPORT_METRICS)]
         if sub.empty:
             continue
         sub.insert(0, "subset", subset)
@@ -150,6 +155,8 @@ def top_bottom_explainables(metrics: dict[str, Optional[pd.DataFrame]], subset: 
     if frame is None or frame.empty or "section" not in frame.columns or "auroc" not in frame.columns:
         return pd.DataFrame()
     sub = frame[frame["section"] == "Explainable Features"].copy()
+    if "metric" in sub.columns:
+        sub = sub[~sub["metric"].astype(str).isin(EXCLUDED_REPORT_METRICS)]
     sub["auroc"] = pd.to_numeric(sub["auroc"], errors="coerce")
     sub = sub.dropna(subset=["auroc"])
     return sub.sort_values("auroc", ascending=not highest).head(10)
@@ -165,7 +172,7 @@ def feature_gallery(report_dir: Path) -> str:
     graph_dir = report_dir / "graphs" / "feat_graphs"
     if not graph_dir.exists():
         return '<p class="muted">No per-feature graph directory found.</p>'
-    images = sorted(graph_dir.glob("*.png"))
+    images = [image for image in sorted(graph_dir.glob("*.png")) if image.stem not in EXCLUDED_REPORT_METRICS]
     if not images:
         return '<p class="muted">No per-feature graphs found.</p>'
     cards = []

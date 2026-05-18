@@ -44,7 +44,7 @@
 <p><strong>Mean STANCE diff:</strong> 0.1914 across 10 stances</p>
 <p><strong>Best explainable AUROC:</strong> lexical_mtld (0.9426)</p></section>
 <section class="card"><h3>Naturalistic</h3>
-<p><strong>Basic metrics:</strong> 2 metrics summarized</p>
+<p><strong>Basic metrics:</strong> 3 metrics summarized</p>
 <p><strong>Best explainable AUROC:</strong> lexical_mattr_large (0.9233)</p></section></div>
   </section>
 
@@ -117,6 +117,15 @@
       <td>1.4719</td>
       <td>1.288e-59</td>
       <td>1893</td>
+      <td>model-original mean difference; p-value is Welch t-test</td>
+    </tr>
+    <tr>
+      <td>naturalistic</td>
+      <td>latency</td>
+      <td>-769.1915</td>
+      <td>1464.8823</td>
+      <td>5.656e-111</td>
+      <td>2055</td>
       <td>model-original mean difference; p-value is Welch t-test</td>
     </tr>
   </tbody>
@@ -424,15 +433,6 @@
       <td>0.5810</td>
     </tr>
     <tr>
-      <td>question_end_time</td>
-      <td>0.0116</td>
-      <td>10.3238</td>
-      <td>0.9696</td>
-      <td>1151</td>
-      <td>0.5000</td>
-      <td>0.4998</td>
-    </tr>
-    <tr>
       <td>f0_p10</td>
       <td>-4.9432</td>
       <td>33.8736</td>
@@ -476,6 +476,15 @@
       <td>1082</td>
       <td>0.5116</td>
       <td>0.5266</td>
+    </tr>
+    <tr>
+      <td>lexical_hapax_ratio</td>
+      <td>-2.236e-05</td>
+      <td>0.2631</td>
+      <td>0.9977</td>
+      <td>1151</td>
+      <td>0.5300</td>
+      <td>0.5367</td>
     </tr>
   </tbody>
 </table><h3>Naturalistic</h3><h4>Highest AUROC Features</h4><table class="dataframe metric-table">
@@ -632,15 +641,6 @@
       <td>0.4269</td>
     </tr>
     <tr>
-      <td>question_end_time</td>
-      <td>0.0074</td>
-      <td>12.8024</td>
-      <td>0.9791</td>
-      <td>2055</td>
-      <td>0.5002</td>
-      <td>0.5001</td>
-    </tr>
-    <tr>
       <td>f0_median_raw</td>
       <td>-6.0808</td>
       <td>48.6001</td>
@@ -685,6 +685,15 @@
       <td>0.5270</td>
       <td>0.5403</td>
     </tr>
+    <tr>
+      <td>temporal_pause_ratio</td>
+      <td>-0.0083</td>
+      <td>0.0376</td>
+      <td>5.523e-21</td>
+      <td>1856</td>
+      <td>0.5270</td>
+      <td>0.5510</td>
+    </tr>
   </tbody>
 </table>
     <img class="figure" src="graphs/explainables.png" alt="Explainable feature violin plots" loading="lazy">
@@ -722,7 +731,6 @@
 <figure class="thumb"><img src="graphs/feat_graphs/lexical_total_words.png" alt="lexical_total_words" loading="lazy"><figcaption>lexical_total_words</figcaption></figure>
 <figure class="thumb"><img src="graphs/feat_graphs/lexical_ttr.png" alt="lexical_ttr" loading="lazy"><figcaption>lexical_ttr</figcaption></figure>
 <figure class="thumb"><img src="graphs/feat_graphs/lexical_unique_words.png" alt="lexical_unique_words" loading="lazy"><figcaption>lexical_unique_words</figcaption></figure>
-<figure class="thumb"><img src="graphs/feat_graphs/question_end_time.png" alt="question_end_time" loading="lazy"><figcaption>question_end_time</figcaption></figure>
 <figure class="thumb"><img src="graphs/feat_graphs/temporal_articulation_rate_wpm.png" alt="temporal_articulation_rate_wpm" loading="lazy"><figcaption>temporal_articulation_rate_wpm</figcaption></figure>
 <figure class="thumb"><img src="graphs/feat_graphs/temporal_articulation_rate_wps.png" alt="temporal_articulation_rate_wps" loading="lazy"><figcaption>temporal_articulation_rate_wps</figcaption></figure>
 <figure class="thumb"><img src="graphs/feat_graphs/temporal_pause_count.png" alt="temporal_pause_count" loading="lazy"><figcaption>temporal_pause_count</figcaption></figure>

@@ -1,6 +1,7 @@
 metric,section,mean_diff,std_diff,p_value,n,auroc,accuracy,detail
 CER,Basic Metrics,-0.560372846455606,1.6686743087728158,6.772027037952221e-46,1893,,,model-original mean difference; p-value is Welch t-test
 WER,Basic Metrics,-0.5706916597145992,1.4719095079068782,1.2878429175110728e-59,1893,,,model-original mean difference; p-value is Welch t-test
+latency,Basic Metrics,-769.191470930728,1464.8823006147197,5.655851025367971e-111,2055,,,model-original mean difference; p-value is Welch t-test
 lexical_mattr_large,Explainable Features,0.13868570877262176,0.09719366576107445,7.36624582565472e-88,270,0.9232808541440464,0.8902714932126696,feature value model-original; p-value is Welch t-test
 lexical_mtld,Explainable Features,46.15160459983521,37.27259132014535,1.5346911203726679e-108,270,0.9205905416817468,0.8800904977375565,feature value model-original; p-value is Welch t-test
 lexical_mattr_small,Explainable Features,0.11120626038623238,0.08507678274348929,1.0201265174718595e-78,270,0.9128574013753168,0.8710407239819005,feature value model-original; p-value is Welch t-test
@@ -15,9 +16,9 @@ f0_n_voiced_frames,Explainable Features,123.06388873110109,917.0509116928255,1.2
 f0_voiced_duration_s,Explainable Features,1.2275119598091848,9.172821886922206,1.421811623800985e-09,2055,0.4090566332471811,0.4543906592070056,feature value model-original; p-value is Welch t-test
 lexical_ttr,Explainable Features,-0.011947343642466857,0.1567612071799246,0.000556669049898002,2055,0.413290635916953,0.4648504013621989,feature value model-original; p-value is Welch t-test
 f0_p25,Explainable Features,-3.4810718514162886,41.47616244203805,0.0001450057120300201,2055,0.4625569219991101,0.4269034298224276,feature value model-original; p-value is Welch t-test
-question_end_time,Explainable Features,0.007412089475227646,12.802414012207896,0.9790602595505983,2055,0.5002437823662511,0.5001216249087813,feature value model-original; p-value is Welch t-test
 f0_median_raw,Explainable Features,-6.080816444954138,48.60009979823857,1.5573319116855993e-08,2055,0.5076490859344676,0.5701775723668208,feature value model-original; p-value is Welch t-test
 f0_mean_p25_p75,Explainable Features,-6.282849953013709,48.29131444324028,4.1259472405178175e-09,2055,0.5113268861181328,0.5675018243736317,feature value model-original; p-value is Welch t-test
 f0_mean_p10_p90,Explainable Features,-6.475296785522261,48.33892934439147,1.4264975189511738e-09,2055,0.5180865214386473,0.5657990756506933,feature value model-original; p-value is Welch t-test
 lexical_discourse_marker_ratio,Explainable Features,-0.035930298489822245,0.23913403033414818,1.1437117490344217e-11,2055,0.5251720677478295,0.5242033568474823,feature value model-original; p-value is Welch t-test
 temporal_pause_total_duration_s,Explainable Features,-0.15942296562669322,1.3347314707703568,2.3462826663106857e-07,1856,0.5270240792012753,0.5402710304270008,feature value model-original; p-value is Welch t-test
+temporal_pause_ratio,Explainable Features,-0.00827461591494626,0.03762437970882953,5.5234083045001006e-21,1856,0.5270315515143887,0.551009971874201,feature value model-original; p-value is Welch t-test
