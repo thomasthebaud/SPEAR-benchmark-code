@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+cd "$(dirname "${BASH_SOURCE[0]}")"
+source config.sh
+
+echo "Preparing data from seamless interactions for SPEARBench"
+echo "Currently selects interactions with at least 1 turn, 1 speaker, ending by a question"
+echo "Input data directory: $seamless_data_dir"
+echo "Output data directory: $data_dir/'inputs' "
+
+for split in 'test' 'dev'; do
+    for subset in 'improvised' 'naturalistic'; do
+        srun -p cpu python3 bin/prepare_data_from_seamless.py \
+            --data_dir $seamless_data_dir \
+            --questions_output_dir $data_dir/'inputs' \
+            --answers_output_dir $data_dir/'outputs/original' \
+            --min_turns 1 \
+            --min_speakers 1 \
+            --method 'end_with_question' \
+            --split $split \
+            --subset $subset
+    done
+done

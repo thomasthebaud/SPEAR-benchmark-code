@@ -1,0 +1,37 @@
+name: spearbench
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.11
+  - pip
+  - ffmpeg
+  - libsndfile
+  - numpy
+  - pandas
+  - scipy
+  - scikit-learn
+  - tqdm
+  - librosa
+  - matplotlib
+  - seaborn
+  - spacy>=3.8,<3.9
+  - pip:
+      - --extra-index-url https://download.pytorch.org/whl/cu118
+      - torch==2.7.1+cu118
+      - torchaudio==2.7.1+cu118
+      - torchvision==0.22.1+cu118
+      - transformers
+      - soundfile
+      - accelerate
+      - safetensors
+      - sentence-transformers
+      - huggingface-hub
+      - openai
+      - jiwer
+      - silero-vad
+      - praat-parselmouth
+      - loralib
+      - sentencepiece
+      - einops
+      - https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl
