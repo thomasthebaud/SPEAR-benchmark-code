@@ -11,13 +11,25 @@ import os
 import re
 from silero_vad import load_silero_vad, read_audio, get_speech_timestamps
 
-utmos_model = torch.hub.load(
-    "tarepan/SpeechMOS:v1.2.0",
-    "utmos22_strong",
-    trust_repo=True
-)
+utmos_model = None
+vad_model = None
 
-model = load_silero_vad()
+def get_utmos_model():
+    global utmos_model
+    if utmos_model is None:
+        utmos_model = torch.hub.load(
+            "tarepan/SpeechMOS:v1.2.0",
+            "utmos22_strong",
+            trust_repo=True
+        )
+    return utmos_model
+
+
+def get_vad_model():
+    global vad_model
+    if vad_model is None:
+        vad_model = load_silero_vad()
+    return vad_model
 
 def load_answer(row):
     waveform, sample_rate = torchaudio.load(row['audio_path'])
@@ -65,7 +77,7 @@ def compute_latency(row):
     waveform_segment, sr = load_answer(row)
     speech_timestamps = get_speech_timestamps(
     waveform_segment,
-    model,
+    get_vad_model(),
     return_seconds=True,  # Return speech timestamps in seconds (default is samples)
     )
     if len(speech_timestamps)>0:return 1000*float(speech_timestamps[0]['start'])
@@ -73,10 +85,56 @@ def compute_latency(row):
 
 def compute_UTMOS(row):
     waveform_segment, sr = load_answer(row)
-
-    with torch.no_grad():
-        score = utmos_model(waveform_segment, sr)
+    try:
+        with torch.no_grad():
+            score = get_utmos_model()(waveform_segment, sr)
+    except:
+        print(f"Warning: file {row['audio_path']} failed UTMOS")
+        score = 'nan'
     return float(score)
+
+def load_or_initialize_outputs(metadata, output_path):
+    if output_path.exists():
+        metrics = pd.read_csv(output_path)
+        metrics = metrics.loc[:, ~metrics.columns.str.startswith("Unnamed:")]
+        if "audio_path" not in metrics.columns:
+            metrics = pd.DataFrame({"audio_path": metadata["audio_path"]})
+        else:
+            metrics = pd.DataFrame({"audio_path": metadata["audio_path"]}).merge(metrics, on="audio_path", how="left")
+    else:
+        metrics = pd.DataFrame({"audio_path": metadata["audio_path"]})
+    return metrics
+
+
+def save_outputs(metrics, output_path):
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    metrics.to_csv(output_path, index=False)
+    print(f"Saved {output_path}")
+
+
+def rows_missing_metric(metadata, metrics, metric_name):
+    if metric_name not in metrics.columns:
+        return metadata
+    metric_by_audio = metrics.set_index("audio_path")[metric_name]
+    values = metadata["audio_path"].map(metric_by_audio)
+    return metadata[values.isna()]
+
+
+def compute_and_save_metric(metadata, metrics, output_path, metric_name, fn, display_name=None):
+    missing = rows_missing_metric(metadata, metrics, metric_name)
+    if missing.empty:
+        print(f"Skipping {metric_name}: already computed.")
+        return metrics
+
+    values = get_metric(missing, fn, display_name or metric_name)
+    if metric_name not in metrics.columns:
+        metrics[metric_name] = np.nan
+
+    value_by_audio = pd.Series(values, index=missing["audio_path"])
+    metrics[metric_name] = metrics["audio_path"].map(value_by_audio).combine_first(metrics[metric_name])
+    save_outputs(metrics, output_path)
+    return metrics
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -87,19 +145,21 @@ if __name__ == "__main__":
     print(f"Evaluating metrics")
 
     metadata = pd.read_csv(args.metadata)
-    
-    if 'ASR_transcript' not in metadata.columns: print(f"Warning: no ASR outputs computed, WER/CER will not be measured.")
-    L = len(metadata)
-    metadata = metadata.dropna(subset='ASR_transcript')
-    print(f"Found {L-len(metadata)}/{L} lines without ASR transcripts.")
+    output_path = Path(args.outputs)
+    metrics = load_or_initialize_outputs(metadata, output_path)
+    save_outputs(metrics, output_path)
 
+    if 'ASR_transcript' not in metadata.columns:
+        print(f"Warning: no ASR outputs computed, WER/CER will not be measured.")
+        metadata_with_asr = metadata.iloc[0:0].copy()
+    else:
+        L = len(metadata)
+        metadata_with_asr = metadata.dropna(subset='ASR_transcript')
+        print(f"Found {L-len(metadata_with_asr)}/{L} lines without ASR transcripts.")
 
-    metrics = {'id':[], 'CER':[], 'WER':[], 'UTMOS':[],'latency':[]}
+    if not metadata_with_asr.empty:
+        metrics = compute_and_save_metric(metadata_with_asr, metrics, output_path, 'WER', compute_wer, 'WER')
+        metrics = compute_and_save_metric(metadata_with_asr, metrics, output_path, 'CER', compute_cer, 'CER')
 
-    WER = get_metric(metadata, compute_wer, 'WER')
-    CER = get_metric(metadata, compute_cer, 'CER')
-    latency = get_metric(metadata, compute_latency, 'latency (ms)')
-    UTMOS = get_metric(metadata, compute_UTMOS, 'UTMOS')
-
-    metrics = pd.DataFrame({'audio_path':metadata['audio_path'], 'CER':CER, 'WER':WER, 'UTMOS':UTMOS,'latency':latency})
-    metrics.to_csv(args.outputs)
+    metrics = compute_and_save_metric(metadata, metrics, output_path, 'latency', compute_latency, 'latency (ms)')
+    metrics = compute_and_save_metric(metadata, metrics, output_path, 'UTMOS', compute_UTMOS, 'UTMOS')

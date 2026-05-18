@@ -32,11 +32,12 @@ gpt-4o-audio-preview-2025-06-03	test	naturalistic	2055	17.33	8.59
 Basic Metrics
 -------------
 metric	n	mean_diff	std_diff	p_value	auroc	accuracy
-CER (improvised)	1151	0.0171	0.0407	nan	nan	nan
-WER (improvised)	1151	0.0679	0.0767	nan	nan	nan
+CER (improvised)	1056	-0.5826	2.5550	2.59e-13	nan	nan
+WER (improvised)	1056	-0.5649	2.0889	5.99e-18	nan	nan
 UTMOS (improvised)	1151	4.1496	0.2367	nan	nan	nan
-latency (improvised)	1151	38.7489	93.6775	nan	nan	nan
-Basic metrics (naturalistic)	missing	missing	missing	missing	missing	missing
+latency (improvised)	1151	-453.3518	907.9716	8.35e-58	nan	nan
+CER (naturalistic)	1893	-0.5604	1.6687	6.77e-46	nan	nan
+WER (naturalistic)	1893	-0.5707	1.4719	1.29e-59	nan	nan
 
 Emotional Naturalness
 ---------------------

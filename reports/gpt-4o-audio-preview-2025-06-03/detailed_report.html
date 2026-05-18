@@ -44,6 +44,7 @@
 <p><strong>Mean STANCE diff:</strong> 0.1914 across 10 stances</p>
 <p><strong>Best explainable AUROC:</strong> lexical_mtld (0.9426)</p></section>
 <section class="card"><h3>Naturalistic</h3>
+<p><strong>Basic metrics:</strong> 2 metrics summarized</p>
 <p><strong>Best explainable AUROC:</strong> lexical_mattr_large (0.9233)</p></section></div>
   </section>
 
@@ -56,7 +57,7 @@
 <h3>Data Statistics</h3>
 <table class="metric-table"><thead><tr><th>model</th><th>split</th><th>subset</th><th>utterances</th><th>total_audio_hours</th><th>answer_audio_hours</th></tr></thead><tbody><tr><td>original</td><td>dev</td><td>improvised</td><td>1395</td><td>8.06</td><td>2.56</td></tr><tr><td>original</td><td>dev</td><td>naturalistic</td><td>1805</td><td>13.15</td><td>5.35</td></tr><tr><td>original</td><td>test</td><td>improvised</td><td>1152</td><td>6.42</td><td>2.18</td></tr><tr><td>original</td><td>test</td><td>naturalistic</td><td>2056</td><td>13.02</td><td>4.36</td></tr><tr><td>gpt-4o-audio-preview-2025-06-03</td><td>dev</td><td>improvised</td><td>1395</td><td>11.58</td><td>6.02</td></tr><tr><td>gpt-4o-audio-preview-2025-06-03</td><td>dev</td><td>naturalistic</td><td>1803</td><td>15.99</td><td>8.09</td></tr><tr><td>gpt-4o-audio-preview-2025-06-03</td><td>test</td><td>improvised</td><td>1151</td><td>9.07</td><td>4.79</td></tr><tr><td>gpt-4o-audio-preview-2025-06-03</td><td>test</td><td>naturalistic</td><td>2055</td><td>17.33</td><td>8.59</td></tr></tbody></table>
 <h3>Basic Metrics</h3>
-<table class="metric-table"><thead><tr><th>metric</th><th>n</th><th>mean_diff</th><th>std_diff</th><th>p_value</th><th>auroc</th><th>accuracy</th></tr></thead><tbody><tr><td>CER (improvised)</td><td>1151</td><td>0.0171</td><td>0.0407</td><td>nan</td><td>nan</td><td>nan</td></tr><tr><td>WER (improvised)</td><td>1151</td><td>0.0679</td><td>0.0767</td><td>nan</td><td>nan</td><td>nan</td></tr><tr><td>UTMOS (improvised)</td><td>1151</td><td>4.1496</td><td>0.2367</td><td>nan</td><td>nan</td><td>nan</td></tr><tr><td>latency (improvised)</td><td>1151</td><td>38.7489</td><td>93.6775</td><td>nan</td><td>nan</td><td>nan</td></tr><tr><td>Basic metrics (naturalistic)</td><td>missing</td><td>missing</td><td>missing</td><td>missing</td><td>missing</td><td>missing</td></tr></tbody></table>
+<table class="metric-table"><thead><tr><th>metric</th><th>n</th><th>mean_diff</th><th>std_diff</th><th>p_value</th><th>auroc</th><th>accuracy</th></tr></thead><tbody><tr><td>CER (improvised)</td><td>1056</td><td>-0.5826</td><td>2.5550</td><td>2.59e-13</td><td>nan</td><td>nan</td></tr><tr><td>WER (improvised)</td><td>1056</td><td>-0.5649</td><td>2.0889</td><td>5.99e-18</td><td>nan</td><td>nan</td></tr><tr><td>UTMOS (improvised)</td><td>1151</td><td>4.1496</td><td>0.2367</td><td>nan</td><td>nan</td><td>nan</td></tr><tr><td>latency (improvised)</td><td>1151</td><td>-453.3518</td><td>907.9716</td><td>8.35e-58</td><td>nan</td><td>nan</td></tr><tr><td>CER (naturalistic)</td><td>1893</td><td>-0.5604</td><td>1.6687</td><td>6.77e-46</td><td>nan</td><td>nan</td></tr><tr><td>WER (naturalistic)</td><td>1893</td><td>-0.5707</td><td>1.4719</td><td>1.29e-59</td><td>nan</td><td>nan</td></tr></tbody></table>
 <h3>Emotional Naturalness</h3>
 <table class="metric-table"><thead><tr><th>metric</th><th>n</th><th>mean_diff</th><th>std_diff</th><th>p_value</th><th>auroc</th><th>accuracy</th></tr></thead><tbody><tr><td>Emotional naturalness (improvised)</td><td>1151</td><td>0.0015</td><td>0.0060</td><td>2.45e-16</td><td>nan</td><td>nan</td></tr><tr><td>Emotional naturalness (naturalistic)</td><td>missing</td><td>missing</td><td>missing</td><td>missing</td><td>missing</td><td>missing</td></tr></tbody></table>
 <h3>STANCEs</h3>
@@ -89,20 +90,20 @@
     <tr>
       <td>improvised</td>
       <td>CER</td>
-      <td>0.0171</td>
-      <td>0.0407</td>
-      <td></td>
-      <td>1151</td>
-      <td>model mean/std; original base_metrics.csv unavailable</td>
+      <td>-0.5826</td>
+      <td>2.5550</td>
+      <td>2.590e-13</td>
+      <td>1056</td>
+      <td>model-original mean difference; p-value is Welch t-test</td>
     </tr>
     <tr>
       <td>improvised</td>
       <td>WER</td>
-      <td>0.0679</td>
-      <td>0.0767</td>
-      <td></td>
-      <td>1151</td>
-      <td>model mean/std; original base_metrics.csv unavailable</td>
+      <td>-0.5649</td>
+      <td>2.0889</td>
+      <td>5.991e-18</td>
+      <td>1056</td>
+      <td>model-original mean difference; p-value is Welch t-test</td>
     </tr>
     <tr>
       <td>improvised</td>
@@ -116,11 +117,29 @@
     <tr>
       <td>improvised</td>
       <td>latency</td>
-      <td>38.7489</td>
-      <td>93.6775</td>
-      <td></td>
+      <td>-453.3518</td>
+      <td>907.9716</td>
+      <td>8.353e-58</td>
       <td>1151</td>
-      <td>model mean/std; original base_metrics.csv unavailable</td>
+      <td>model-original mean difference; p-value is Welch t-test</td>
+    </tr>
+    <tr>
+      <td>naturalistic</td>
+      <td>CER</td>
+      <td>-0.5604</td>
+      <td>1.6687</td>
+      <td>6.772e-46</td>
+      <td>1893</td>
+      <td>model-original mean difference; p-value is Welch t-test</td>
+    </tr>
+    <tr>
+      <td>naturalistic</td>
+      <td>WER</td>
+      <td>-0.5707</td>
+      <td>1.4719</td>
+      <td>1.288e-59</td>
+      <td>1893</td>
+      <td>model-original mean difference; p-value is Welch t-test</td>
     </tr>
   </tbody>
 </table>

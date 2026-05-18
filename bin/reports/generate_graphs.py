@@ -9,6 +9,7 @@ from typing import Dict, Iterable, List, Optional, Tuple
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+from matplotlib.patches import Patch
 import numpy as np
 import pandas as pd
 import seaborn as sns
@@ -16,6 +17,7 @@ import seaborn as sns
 
 ORIGINAL = "original"
 SUBSETS = ["improvised", "naturalistic"]
+DATASET_PALETTE = {"original": "#4C72B0", "model": "#DD8452"}
 
 sns.set_theme(style="whitegrid", context="talk")
 
@@ -107,12 +109,40 @@ def add_normalized_values(data: pd.DataFrame, group_cols: List[str], value_col: 
     return data
 
 
+def remove_iqr_outliers(data: pd.DataFrame, group_cols: List[str], value_col: str = "value") -> pd.DataFrame:
+    kept = []
+    for _, group in data.groupby(group_cols, dropna=False):
+        values = group[value_col].dropna()
+        if len(values) < 4:
+            kept.append(group)
+            continue
+        q1 = values.quantile(0.25)
+        q3 = values.quantile(0.75)
+        iqr = q3 - q1
+        if pd.isna(iqr) or iqr == 0:
+            kept.append(group)
+            continue
+        lower = q1 - 1.5 * iqr
+        upper = q3 + 1.5 * iqr
+        kept.append(group[group[value_col].between(lower, upper) | group[value_col].isna()])
+    if not kept:
+        return data.iloc[0:0].copy()
+    filtered = pd.concat(kept, ignore_index=True)
+    removed = len(data) - len(filtered)
+    if removed:
+        print(f"Removed {removed} basic metric outlier rows before plotting.")
+    return filtered
+
+
 
 def graph_basic_metric_histograms(results_root: Path, model: str, output_dir: Path) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
     for metric in ["CER", "WER", "UTMOS", "latency"]:
         data = load_base_metric_values(results_root, model, metric)
         if data is None or data.empty:
+            continue
+        data = remove_iqr_outliers(data, ["subset", "metric"])
+        if data.empty:
             continue
         subsets = [subset for subset in SUBSETS if subset in set(data["subset"])]
         fig, axes = plt.subplots(1, len(subsets), figsize=(6.5 * len(subsets), 4.8), sharex=True, sharey=True, squeeze=False)
@@ -151,12 +181,13 @@ def graph_basic_metrics_violin(results_root: Path, model: str, output_path: Path
         print("[WARN] No base metrics found; skipping basic_metrics.png.")
         return
     data = pd.concat(frames, ignore_index=True)
+    data = remove_iqr_outliers(data, ["subset", "metric"])
+    if data.empty:
+        print("[WARN] All base metric rows were filtered as outliers; skipping basic_metrics.png.")
+        return
     available_subsets = [subset for subset in SUBSETS if subset in set(data["subset"])]
     metrics = [metric for metric in ["CER", "WER", "UTMOS", "latency"] if metric in set(data["metric"])]
     fig, axes = plt.subplots(len(metrics), len(available_subsets), figsize=(8 * len(available_subsets), 3.2 * len(metrics)), squeeze=False)
-    legend_handles = None
-    legend_labels = None
-
     for row_idx, metric in enumerate(metrics):
         for col_idx, subset in enumerate(available_subsets):
             ax = axes[row_idx, col_idx]
@@ -169,6 +200,8 @@ def graph_basic_metrics_violin(results_root: Path, model: str, output_path: Path
                 x="value",
                 y="dataset",
                 hue="dataset",
+                hue_order=["original", "model"],
+                palette=DATASET_PALETTE,
                 orient="h",
                 inner="quartile",
                 cut=0,
@@ -176,21 +209,21 @@ def graph_basic_metrics_violin(results_root: Path, model: str, output_path: Path
                 density_norm="width",
                 ax=ax,
             )
-            handles, labels = ax.get_legend_handles_labels()
-            if handles and legend_handles is None:
-                legend_handles, legend_labels = handles, labels
             if ax.get_legend() is not None:
                 ax.get_legend().remove()
-            ax.set_title("")
+            if row_idx == 0:
+                ax.set_title(subset.title())
+            else:
+                ax.set_title("")
             ax.set_xlabel("")
             ax.set_ylabel(metric if col_idx == 0 else "")
             ax.set_yticks([])
             ax.tick_params(axis="y", left=False, labelleft=False)
 
-    if legend_handles:
-        fig.legend(legend_handles, legend_labels, title="Dataset", loc="upper center", ncol=2, bbox_to_anchor=(0.5, 1.01))
-    fig.suptitle("Basic Metric Distributions: Original vs Model", y=1.025)
-    fig.tight_layout(rect=(0, 0, 1, 0.98))
+    legend_handles = [Patch(facecolor=DATASET_PALETTE[label], label=label) for label in ["original", "model"]]
+    fig.legend(legend_handles, ["original", "model"], title="Dataset", loc="upper center", ncol=2, bbox_to_anchor=(0.5, 1.02), frameon=True)
+    fig.suptitle("Basic Metric Distributions: Original vs Model", y=1.04)
+    fig.tight_layout(rect=(0, 0, 1, 0.96))
     output_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(output_path, dpi=180, bbox_inches="tight")
     plt.close(fig)

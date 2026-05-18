@@ -1,4 +1,6 @@
 metric,section,mean_diff,std_diff,p_value,n,auroc,accuracy,detail
+CER,Basic Metrics,-0.560372846455606,1.6686743087728158,6.772027037952221e-46,1893,,,model-original mean difference; p-value is Welch t-test
+WER,Basic Metrics,-0.5706916597145992,1.4719095079068782,1.2878429175110728e-59,1893,,,model-original mean difference; p-value is Welch t-test
 lexical_mattr_large,Explainable Features,0.13868570877262176,0.09719366576107445,7.36624582565472e-88,270,0.9232808541440464,0.8902714932126696,feature value model-original; p-value is Welch t-test
 lexical_mtld,Explainable Features,46.15160459983521,37.27259132014535,1.5346911203726679e-108,270,0.9205905416817468,0.8800904977375565,feature value model-original; p-value is Welch t-test
 lexical_mattr_small,Explainable Features,0.11120626038623238,0.08507678274348929,1.0201265174718595e-78,270,0.9128574013753168,0.8710407239819005,feature value model-original; p-value is Welch t-test

@@ -1,8 +1,8 @@
 metric,section,mean_diff,std_diff,p_value,n,auroc,accuracy,detail
-CER,Basic Metrics,0.01711851297385002,0.04067547150291852,,1151,,,model mean/std; original base_metrics.csv unavailable
-WER,Basic Metrics,0.06789232111040477,0.07672204173800205,,1151,,,model mean/std; original base_metrics.csv unavailable
+CER,Basic Metrics,-0.5825816792086843,2.5550391703966566,2.589956713084395e-13,1056,,,model-original mean difference; p-value is Welch t-test
+WER,Basic Metrics,-0.5649490628918312,2.088896971281733,5.991398210336865e-18,1056,,,model-original mean difference; p-value is Welch t-test
 UTMOS,Basic Metrics,4.1495944063731836,0.2367483103179512,,1151,,,model mean/std; original base_metrics.csv unavailable
-latency,Basic Metrics,38.748913987836666,93.67751545057898,,1151,,,model mean/std; original base_metrics.csv unavailable
+latency,Basic Metrics,-453.3517804566078,907.9715939901638,8.35261584928983e-58,1151,,,model-original mean difference; p-value is Welch t-test
 Emotional naturalness,Emotional Naturalness,0.00147078453614132,0.005996836920621619,2.45024497426242e-16,1151,,,naturalness_logit model-original
 Q0,STANCEs,0.024390243902439025,0.15520673239323957,0.15856910317504727,82,,,"Based on the audio, does the TARGET speaker sound warm and affiliative, or cold and detached?"
 Q1,STANCEs,0.17272727272727273,0.8970807999476386,0.04589791328966286,110,,,"Based on the audio, does the TARGET speaker sound compassionate and supportive, or callous and unsympathetic?"
