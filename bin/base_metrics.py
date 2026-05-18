@@ -33,7 +33,8 @@ def get_vad_model():
 
 def load_answer(row):
     waveform, sample_rate = torchaudio.load(row['audio_path'])
-    waveform_segment = waveform[:, int(row['question_end_time'] * sample_rate):]
+    start = min(int(row['question_end_time'] * sample_rate), int(row['total_duration'] * sample_rate))
+    waveform_segment = waveform[:, start:]
     if waveform_segment.shape[0]>1: waveform_segment = waveform_segment.mean(dim=0).unsqueeze(0)
     return waveform_segment, sample_rate
 
