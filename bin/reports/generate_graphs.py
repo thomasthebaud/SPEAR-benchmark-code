@@ -181,13 +181,11 @@ def graph_basic_metrics_violin(results_root: Path, model: str, output_path: Path
                 legend_handles, legend_labels = handles, labels
             if ax.get_legend() is not None:
                 ax.get_legend().remove()
-            if row_idx == 0:
-                ax.set_title(subset.title())
-            ax.set_xlabel(metric)
+            ax.set_title("")
+            ax.set_xlabel("")
             ax.set_ylabel(metric if col_idx == 0 else "")
-            if col_idx != 0:
-                ax.set_yticks([])
-                ax.tick_params(axis="y", left=False, labelleft=False)
+            ax.set_yticks([])
+            ax.tick_params(axis="y", left=False, labelleft=False)
 
     if legend_handles:
         fig.legend(legend_handles, legend_labels, title="Dataset", loc="upper center", ncol=2, bbox_to_anchor=(0.5, 1.01))
@@ -254,10 +252,8 @@ def graph_stances(results_root: Path, model: str, output_path: Path) -> None:
     frame["score_llm"] = numeric(frame["score_llm"])
     questions = list(range(10))
 
-    fig, axes = plt.subplots(2, 5, figsize=(24, 10), sharex=True, sharey=True)
+    fig, axes = plt.subplots(2, 5, figsize=(24, 9), sharex=True, sharey=True)
     axes_flat = axes.ravel()
-    legend_handles = None
-    legend_labels = None
     for ax, qidx in zip(axes_flat, questions):
         sub = frame[frame["question_index"] == qidx]
         plot_rows = []
@@ -267,31 +263,22 @@ def graph_stances(results_root: Path, model: str, output_path: Path) -> None:
         if plot_rows:
             plot_data = pd.concat(plot_rows, ignore_index=True).dropna(subset=["score"])
             if not plot_data.empty:
-                sns.violinplot(
+                sns.histplot(
                     data=plot_data,
                     x="score",
-                    y="dataset",
                     hue="dataset",
-                    orient="h",
-                    inner="quartile",
-                    cut=0,
-                    linewidth=0.8,
-                    density_norm="width",
+                    bins=np.arange(-2.5, 3.6, 1.0),
+                    stat="probability",
+                    multiple="dodge",
+                    shrink=0.8,
+                    common_norm=False,
                     ax=ax,
                 )
-                handles, labels = ax.get_legend_handles_labels()
-                if handles and legend_handles is None:
-                    legend_handles, legend_labels = handles, labels
-                if ax.get_legend() is not None:
-                    ax.get_legend().remove()
         ax.set_title(f"Q{qidx}")
         ax.set_xlabel("STANCE score")
-        ax.set_ylabel("")
-        ax.set_xlim(-2.2, 2.2)
-    if legend_handles:
-        fig.legend(legend_handles, legend_labels, title="Dataset", loc="upper center", ncol=2, bbox_to_anchor=(0.5, 1.01))
-    fig.suptitle("STANCE Score Distributions: Original vs Model", y=1.04)
-    fig.tight_layout(rect=(0, 0, 1, 0.98))
+        ax.set_ylabel("Probability")
+    fig.suptitle("STANCE Score Distributions: Original vs Model", y=1.02)
+    fig.tight_layout()
     output_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(output_path, dpi=180, bbox_inches="tight")
     plt.close(fig)

@@ -1,6 +1,6 @@
 openai_keys.sh
 *.ipynb
-reports/*
 data/*/*
+!data/seamless_assets
 models/*/*
 results/*
