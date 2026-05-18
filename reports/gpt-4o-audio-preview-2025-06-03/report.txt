@@ -39,6 +39,7 @@ UTMOS (improvised)	1055	1.6335	0.7218	0	nan	nan
 latency (improvised)	1151	-453.3518	907.9716	3.46e-120	nan	nan
 CER (naturalistic)	1893	-0.5604	1.6687	9.69e-254	nan	nan
 WER (naturalistic)	1893	-0.5707	1.4719	9.62e-168	nan	nan
+UTMOS (naturalistic)	1887	1.8816	0.7179	0	nan	nan
 latency (naturalistic)	2055	-769.1915	1464.8823	4.52e-275	nan	nan
 
 Emotional Naturalness

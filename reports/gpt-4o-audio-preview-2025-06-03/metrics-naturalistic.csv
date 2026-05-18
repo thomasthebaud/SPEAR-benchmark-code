@@ -1,6 +1,7 @@
 metric,section,mean_diff,std_diff,p_value,n,auroc,accuracy,detail
 CER,Basic Metrics,-0.560372846455606,1.6686743087728158,9.69158128558787e-254,1893,,,model-original mean difference; p-value is Mann-Whitney U Test
 WER,Basic Metrics,-0.5706916597145992,1.4719095079068782,9.616670948120845e-168,1893,,,model-original mean difference; p-value is Mann-Whitney U Test
+UTMOS,Basic Metrics,1.8815598215719893,0.7178569121455316,0.0,1887,,,model-original mean difference; p-value is Mann-Whitney U Test
 latency,Basic Metrics,-769.191470930728,1464.8823006147197,4.52253547834578e-275,2055,,,model-original mean difference; p-value is Mann-Whitney U Test
 lexical_mattr_large,Explainable Features,0.13868570877262176,0.09719366576107445,1.3854933915758225e-89,270,0.9232808541440464,0.8902714932126696,feature value model-original; p-value is Mann-Whitney U Test
 lexical_mtld,Explainable Features,46.15160459983521,37.27259132014535,1.7963520547067827e-88,270,0.9205905416817468,0.8800904977375565,feature value model-original; p-value is Mann-Whitney U Test
