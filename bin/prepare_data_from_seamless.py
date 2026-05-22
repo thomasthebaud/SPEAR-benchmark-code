@@ -112,29 +112,8 @@ def load_transcripts(split_name: str, data_dir: Path, SET: str) -> int:
 
     return transcripts, audios
 
-def keep_questions(transcripts: dict[str, list[dict]], audios: dict[str, dict], N_max=5) -> tuple[dict[str, list[dict]], dict[str, dict]]:
-    filtered_transcripts = {}
-    filtered_audios = {}
-    for key, turns in transcripts.items():
-        idx=0
-        for row, turn in enumerate(turns[:-1]):
-            if turn["text"].strip().endswith("?") and turn["speaker_id"] != turns[row+1]["speaker_id"]:
-                start_row = max(0, row - N_max + 1)
-                selected_turns = turns[start_row:row + 1]
-                filtered_transcripts[key+f'_{idx}'] = selected_turns
 
-                selected_audio = audios[key].copy()
-                selected_audio['start'] = selected_turns[0]["start"]
-                selected_audio['end'] = selected_turns[-1]["end"]
-                selected_audio['question_end_time'] = ""
-                filtered_audios[key+f'_{idx}'] = selected_audio
-                idx += 1
-
-    print(f"After selecting for sub-dialogues ending with a question of maximum {N_max} turns, {len(filtered_transcripts)} were extracted from {len(transcripts)} dialogues.")
-    return filtered_transcripts, filtered_audios
-
-
-def keep_answers(transcripts: dict[str, list[dict]], audios: dict[str, dict], N_max=5) -> tuple[dict[str, list[dict]], dict[str, dict]]:
+def get_end_with_question(transcripts: dict[str, list[dict]], audios: dict[str, dict], N_max=5) -> tuple[dict[str, list[dict]], dict[str, dict]]:
     filtered_transcripts = {}
     filtered_audios = {}
     for key, turns in transcripts.items():
@@ -146,18 +125,39 @@ def keep_answers(transcripts: dict[str, list[dict]], audios: dict[str, dict], N_
                     K+=1
                 start_row = max(0, row - N_max + 1)
                 selected_turns = turns[start_row:row + K]
-                filtered_transcripts[key+f'_{idx}'] = selected_turns
+                # [start_row, row-1] : context turns, [row] : question turn, [row+1, row+K-1] : answer turns
+                filtered_transcripts[key+f'_{idx}'] = (turns[start_row:row+1], turns[row+1:row + K])
 
                 selected_audio = audios[key].copy()
-                selected_audio['start'] = selected_turns[0]["start"]
-                selected_audio['end'] = selected_turns[-1]["end"]
-                selected_audio['question_end_time'] = turn["end"] - selected_turns[0]["start"]
+                start_audio, end_audio = selected_turns[0]["start"], selected_turns[-1]["end"]
+                selected_audio['start_audio'] = start_audio
+                selected_audio['end_audio'] = end_audio
+                selected_audio['context_end_time'] = turns[row]["start"] - start_audio
+                selected_audio['question_end_time'] = turns[row]["end"] - start_audio
+                selected_audio['total_duration'] = end_audio - start_audio
                 filtered_audios[key+f'_{idx}'] = selected_audio
                 idx += 1
 
     print(f"Keeping the answers as well: {len(filtered_transcripts)} answers kept.")
     return filtered_transcripts, filtered_audios
 
+def extract_questions(transcripts: dict[str, list[dict]], audios: dict[str, dict]) -> tuple[dict[str, list[dict]], dict[str, dict]]:
+    filtered_transcripts = {}
+    filtered_audios = {}
+    for key, transcript in transcripts.items():
+        filtered_transcripts[key] = {'question':transcript[0], 'answer':[{'speaker_id':'', 'text': '' }]} # keeping the context and question turns
+        selected_audio = audios[key].copy()
+        selected_audio['total_duration'] = selected_audio['question_end_time'] # question end time is the total duration for the question-only audio
+        filtered_audios[key] = selected_audio
+
+    return filtered_transcripts, filtered_audios
+
+def extract_answers(transcripts: dict[str, list[dict]], audios: dict[str, dict]) -> tuple[dict[str, list[dict]], dict[str, dict]]:
+    filtered_transcripts = {}
+    for key, transcript in transcripts.items():
+        filtered_transcripts[key] = {'question':transcript[0], 'answer':transcript[1]} # keeping the context and question turns as single list
+
+    return filtered_transcripts, audios
 
 def read_wav_segment_mono(audio_path: Path, start_time: float, end_time: float) -> tuple[list[float], int]:
     """Read one source channel from PCM or IEEE-float WAV without optional audio deps."""
@@ -260,8 +260,8 @@ def write_stereo_wav(audio_path: Path, channel_a: list[float], channel_b: list[f
 
 
 def export_segment_audio(audio_path: Path, audio_info: dict) -> tuple[Path, float]:
-    start_time = float(audio_info["start"])
-    end_time = float(audio_info["end"])
+    start_time = float(audio_info["start_audio"])
+    end_time = float(audio_info["end_audio"])
     target_frames = max(1, round((end_time - start_time) * TARGET_SAMPLE_RATE))
 
     if not os.path.exists(audio_path):
@@ -288,22 +288,16 @@ def save_processed_dataset(
 ) -> tuple[Path, Path, Path]:
     output_path.mkdir(parents=True, exist_ok=True)
 
-    transcript_output_path = output_path / f"{split}_{subset}_transcripts_processed.json"
-    with transcript_output_path.open("w", encoding="utf-8") as outfile:
-        json.dump(transcripts, outfile, indent=2)
-
-    audios_output_path = output_path / f"{split}_{subset}_audios_processed.json"
-    with audios_output_path.open("w", encoding="utf-8") as outfile:
-        json.dump(audios, outfile, indent=2)
-
-    metadata_output_path = output_path / f"{split}_{subset}_metadata.csv"
+    metadata_output_path = output_path / f"metadata.csv"
     fieldnames = [
         "audio_path",
+        "context_end_time",
+        "question_end_time",
         "total_duration",
         "speakers",
         "initial_conversation",
-        "transcript",
-        "question_end_time",
+        "transcript_question",
+        "transcript_answer",
     ]
     with metadata_output_path.open("w", encoding="utf-8", newline="") as outfile:
         writer = csv.DictWriter(outfile, fieldnames=fieldnames)
@@ -317,8 +311,10 @@ def save_processed_dataset(
                     "total_duration": f"{duration:.3f}",
                     "speakers": f"{audio_info['spk1']}|{audio_info['spk2']}",
                     "initial_conversation": audio_info["conversation_id"],
-                    "transcript": format_transcript(transcripts[audio_id]),
+                    "transcript_question": format_transcript(transcripts[audio_id]['question']),
+                    "transcript_answer": format_transcript(transcripts[audio_id]['answer']),
                     "question_end_time": audio_info.get("question_end_time", ""),
+                    "context_end_time": audio_info.get("context_end_time", ""),
                 }
             )
 
@@ -367,11 +363,13 @@ if __name__ == "__main__":
     assert L>0, f"No dialogues remain in {split} {subset} after filtering. Please adjust the min_turns and min_speakers parameters."
 
     if args.method == 'end_with_question':
-        questions_transcripts, questions_audios = keep_questions(transcripts, audios)
-        answers_transcripts, answers_audios = keep_answers(transcripts, audios)
+        transcripts, audios = get_end_with_question(transcripts, audios)
     else:
         raise ValueError(f"Unsupported method: {args.method}. Supported methods: 'end_with_question'.")
     
+    questions_transcripts, questions_audios = extract_questions(transcripts, audios)
+    answers_transcripts, answers_audios = extract_answers(transcripts, audios)
+
     # Save the processed data
     transcript_output_path, audios_output_path, metadata_output_path = save_processed_dataset(
         questions_output_path,

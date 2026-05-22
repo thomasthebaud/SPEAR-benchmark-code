@@ -20,7 +20,7 @@ for split in 'dev'; do
             --split $split \
             --subset $subset \
             --openai-api-key "$openai_api_key" \
-            --org "$org"
+            --org "$org" 
 
     done
     exit

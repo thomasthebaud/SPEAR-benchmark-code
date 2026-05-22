@@ -2,7 +2,7 @@ seamless_data_dir="/home/tthebau1/SPEAR/SPEARBench/data/seamless_interaction/dat
 seamless_assets_dir="data/seamless_assets"
 
 
-protocol="seamless_1t_1s_questions"
+protocol="seamless_2t_2s_questions"
 data_dir="data/$protocol"
 llm_model="gpt-4o-audio-preview-2025-06-03"
 language_id_model=facebook/mms-lid-126

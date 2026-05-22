@@ -15,10 +15,21 @@ for split in 'test' 'dev'; do
             --data_dir $seamless_data_dir \
             --questions_output_dir $data_dir/'inputs' \
             --answers_output_dir $data_dir/'outputs/original' \
-            --min_turns 1 \
-            --min_speakers 1 \
+            --min_turns 2 \
+            --min_speakers 2 \
             --method 'end_with_question' \
             --split $split \
-            --subset $subset
+            --subset $subset &
     done
 done
+
+wait
+exit
+
+# for split in 'test' 'dev'; do
+#     for subset in 'improvised' 'naturalistic'; do
+#         srun -p cpu python3 bin/data_prep_summary.py \
+#             --answers_output_dir $data_dir/'outputs/original'
+            
+#     done
+# done
