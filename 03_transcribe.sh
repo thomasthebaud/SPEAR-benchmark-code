@@ -3,20 +3,26 @@ set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")"
 source config.sh
-echo "Transcribing outputs of model $llm_model using $asr"
+echo "Transcribing outputs of model $llm_model"
 echo "data directory: $data_dir"
 
-for split in 'dev'; do
+
+for split in 'test' 'dev'; do
     for subset in 'improvised' 'naturalistic'; do
         for model in 'original' $llm_model; do
-            echo "running analysis for $model $split $subset"
-            data_dir="data/$protocol/outputs/$model"
-            srun -p gpu --gpus 1 python3 bin/transcribe.py \
-                --data_dir $data_dir \
-                --model $asr \
-                --split $split \
-                --subset $subset
+            for asr in 'Qwen3-ASR-0.6B' 'whisper-large-v3'; do
+                echo "running analysis for $model $split $subset ASR model=$asr"
+                data_dir="data/$protocol/outputs/$model"
+                srun -p gpu --gpus 1 python3 bin/transcribe.py \
+                    --data_dir "$data_dir" \
+                    --model "$asr" \
+                    --split "$split" \
+                    --subset "$subset" \
+                    --output_dir "data/$protocol/outputs/$model/$split/$subset" &
+            done
+
+            wait
+            exit
         done
     done
-    exit
 done

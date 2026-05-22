@@ -147,7 +147,18 @@ Runs speech-to-speech LLM inference on the prepared input audio clips. It sends 
 
 ### `03_transcribe.sh`
 
-Runs ASR over generated and original answer audio. It uses the configured `asr` model and writes `ASR_transcript` fields back into the metadata files.
+Runs ASR over generated and original answer audio with Whisper and Qwen ASR models. It writes model-specific transcript CSV files next to each metadata file instead of modifying the original metadata, for example:
+
+```text
+data/$protocol/outputs/$model/$split/$subset/whisper-large-v3_transcripts.csv
+data/$protocol/outputs/$model/$split/$subset/Qwen3-ASR-0.6B_transcripts.csv
+```
+
+If you need to pre-download the Qwen ASR model weights, run:
+
+```bash
+huggingface-cli download Qwen/Qwen3-ASR-0.6B --local-dir models/Qwen3-ASR-0.6B
+```
 
 ### `10_compute_base_metrics.sh`
 
