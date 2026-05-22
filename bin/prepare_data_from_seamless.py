@@ -318,7 +318,7 @@ def save_processed_dataset(
                 }
             )
 
-    return transcript_output_path, audios_output_path, metadata_output_path
+    return metadata_output_path
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -371,7 +371,7 @@ if __name__ == "__main__":
     answers_transcripts, answers_audios = extract_answers(transcripts, audios)
 
     # Save the processed data
-    transcript_output_path, audios_output_path, metadata_output_path = save_processed_dataset(
+    metadata_output_path = save_processed_dataset(
         questions_output_path,
         split,
         subset,
@@ -379,7 +379,7 @@ if __name__ == "__main__":
         questions_audios,
         'questions'
     )
-    answers_transcript_output_path, answers_audios_output_path, answers_metadata_output_path = save_processed_dataset(
+    answers_metadata_output_path = save_processed_dataset(
         answers_output_path,
         split,
         subset,
@@ -387,4 +387,4 @@ if __name__ == "__main__":
         answers_audios,
         'answers'
     )
-    print(f"Saved processed data for {split} {subset} to {transcript_output_path}, {audios_output_path}, {metadata_output_path}, {answers_transcript_output_path}, {answers_audios_output_path}, and {answers_metadata_output_path}.")
+    print(f"Saved processed data for {split} {subset} to {metadata_output_path} and {answers_metadata_output_path}.")

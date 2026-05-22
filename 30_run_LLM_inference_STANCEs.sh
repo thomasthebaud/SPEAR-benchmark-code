@@ -9,7 +9,7 @@ INDICES=(0 1 2 3 4 5 6 7 8 9)
 for split in 'test'; do
     for subset in 'improvised'; do
         for model in 'original' $llm_model; do
-            metadata="data/$protocol/outputs/$model/$split/$subset/${split}_${subset}_metadata.csv"
+            metadata="data/$protocol/outputs/$model/$split/$subset/metadata.csv"
             metrics="results/$protocol/$model/$split/$subset"
             for idx in "${INDICES[@]}"; do
             # ----- Roles-of-interest for THIS question index -----

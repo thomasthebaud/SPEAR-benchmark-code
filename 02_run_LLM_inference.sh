@@ -9,10 +9,11 @@ echo "Running inference with model $llm_model on seamless interactions"
 echo "Input data directory: $data_dir/inputs"
 echo "Output data directory: $data_dir/outputs/$llm_model"
 
-for split in 'dev'; do
+for split in 'test' 'dev'; do
     for subset in 'improvised' 'naturalistic'; do
         echo "on split $split and subset $subset"
-        srun -p cpu python3 bin/run_LLM_inference.py \
+        # srun -p cpu 
+        python3 bin/run_LLM_inference.py \
             --audio_dir $data_dir/inputs \
             --output_dir $data_dir/outputs/$llm_model \
             --model $llm_model \
@@ -22,6 +23,7 @@ for split in 'dev'; do
             --openai-api-key "$openai_api_key" \
             --org "$org" 
 
+        exit
+
     done
-    exit
 done

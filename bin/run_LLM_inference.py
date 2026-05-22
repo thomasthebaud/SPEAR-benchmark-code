@@ -1,9 +1,10 @@
 import argparse
 import io
+import importlib.util
+import sys
 from tqdm import tqdm
 from pathlib import Path
 import pandas as pd
-from openai import OpenAI
 import base64
 import numpy as np
 import soundfile as sf
@@ -21,49 +22,28 @@ def resample_audio(audio, source_sr, target_sr):
     return np.stack(resampled_channels, axis=1).astype(np.float32)
 
 
-def get_reply_with_audio(audio_path, instruction, model_name, org, api_key, temp=0.7):
-    try:
-        client = OpenAI(api_key=api_key, organization=org)
+def load_proxy_module(model_name: str):
+    model_name_lower = model_name.lower()
+    proxy_dir = Path(__file__).resolve().parent / "llm_proxies"
 
-        with open(audio_path, "rb") as infile:
-            audio_b64 = base64.b64encode(infile.read()).decode("utf-8")
+    proxy_path = proxy_dir / f"{model_name_lower}.py"
 
-        # Build the user message with audio input
-        user_content = []
-        if instruction != 'None':
-            user_content.append({"type": "text", "text": instruction})
-        user_content.append({
-                "type": "input_audio",
-                "input_audio": {
-                    "data": audio_b64,
-                    "format": audio_path.suffix.lstrip(".")
-                }
-            })
-        # Send to the model
-        response = client.chat.completions.create(
-            model=model_name,
-            temperature=temp,
-            modalities=["text", "audio"],
-            audio={"voice": "alloy", "format": "wav"},
-            messages=[
-                {"role": "system", "content": "You are a helpful assistant that can understand and respond to speech."},
-                {"role": "user", "content": user_content}
-            ]
+    if not proxy_path.exists():
+        raise FileNotFoundError(f"Proxy implementation not found at {proxy_path}")
+
+    spec = importlib.util.spec_from_file_location(f"llm_proxies.{proxy_path.stem}", proxy_path)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"Could not import proxy module from {proxy_path}")
+
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+
+    if not hasattr(module, "get_reply_with_audio"):
+        raise AttributeError(
+            f"Proxy module '{proxy_path}' must define get_reply_with_audio(...)"
         )
-
-        message = response.choices[0].message
-        if message.audio is None or message.audio.data is None:
-            print(f"Warning: model failed to return audio for {audio_path}")
-            return None, None, None, False
-
-        audio_bytes = base64.b64decode(message.audio.data)
-        transcript = message.audio.transcript
-
-        return audio_bytes, transcript, response.choices[0].finish_reason, True
-    except Exception as exc:
-        print(f"Warning: model failed for {audio_path}: {exc}")
-        return None, None, None, False
-
+    return module
 
 
 if __name__ == "__main__":
@@ -78,20 +58,20 @@ if __name__ == "__main__":
     parser.add_argument("--org",type=str, help="")
 
     args = parser.parse_args()
+    model_proxy = load_proxy_module(args.model)
 
-    
     input_dir = Path(args.audio_dir) / args.split / args.subset
     output_dir = Path(args.output_dir) / args.split / args.subset
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    if os.path.exists(output_dir / f"{args.split}_{args.subset}_metadata.csv"):
+    if os.path.exists(output_dir / f"metadata.csv"):
         print(f"### Subset {args.split}/{args.subset} already processed, moving on. ###")
         exit()
 
     if args.prompt=='None':print("Warning: No prompt provided, only feeding the audios.")
 
-    metadata = pd.read_csv(input_dir / f"{args.split}_{args.subset}_metadata.csv")
-    print(f"found {len(metadata)} rows in {input_dir}/{args.split}_{args.subset}_metadata.csv")
+    metadata = pd.read_csv(input_dir / f"metadata.csv")
+    print(f"found {len(metadata)} rows in {input_dir}/metadata.csv")
     output_metadata = metadata.copy()
     output_metadata['question_end_time'] = output_metadata['total_duration']
     failed_indices = []
@@ -105,7 +85,13 @@ if __name__ == "__main__":
             if audio.shape[1] > 2: audio = np.sum(audio, axis=1, keepdims=True) # Convert to mono if more than 2 channels
             # print(f"audio shape: {audio.shape}")
             # get answer
-            audio_answer_bytes, transcript_answer, finish_reason, success = get_reply_with_audio(audio_path=input_audio_path, instruction=args.prompt, model_name=args.model, org=args.org, api_key=args.openai_api_key)
+            audio_answer_bytes, transcript_answer, finish_reason, success = model_proxy.get_reply_with_audio(
+                audio_path=input_audio_path,
+                instruction=args.prompt,
+                model_name=args.model,
+                org=args.org,
+                api_key=args.openai_api_key,
+            )
             if not success:
                 failed_indices.append(idx)
                 print(f"Warning: failed to process {input_audio_path}")
@@ -132,5 +118,5 @@ if __name__ == "__main__":
     if failed_indices:
         output_metadata = output_metadata.drop(index=failed_indices)
 
-    output_metadata.to_csv(output_dir / f"{args.split}_{args.subset}_metadata.csv", index=False)
+    output_metadata.to_csv(output_dir / f"metadata.csv", index=False)
     print(f"Failed audios = {len(failed_indices)}/{len(output_metadata)+len(failed_indices)}")

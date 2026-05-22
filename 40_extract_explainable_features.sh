@@ -7,7 +7,7 @@ source config.sh
 for split in 'test' 'dev'; do
   for subset in 'improvised' 'naturalistic'; do
     for model in 'original' $llm_model; do
-      metadata=data/$protocol/outputs/$model/$split/$subset/${split}_${subset}_metadata.csv
+      metadata=data/$protocol/outputs/$model/$split/$subset/metadata.csv
       output=results/$protocol/$model/$split/$subset/distrib_baselines_features.csv
 
       echo "Extract explainable features for split:$split subset:$subset model:$model"

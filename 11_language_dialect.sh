@@ -60,7 +60,7 @@ if [[ "$run_LID" -eq 1 ]];then
         for subset in 'improvised' 'naturalistic'; do
             for model in 'original' $llm_model; do
                 echo "### Running language ID for $model $split $subset ###"
-                metadata=data/$protocol/outputs/$model/$split/$subset/${split}_${subset}_metadata.csv
+                metadata=data/$protocol/outputs/$model/$split/$subset/metadata.csv
                 output_dir=results/$protocol/$model/$split/$subset
                 output=$output_dir/language_id.csv
 
@@ -86,7 +86,7 @@ if [[ "$run_DialectID" -eq 1 ]];then
         for subset in 'improvised' 'naturalistic'; do
             for model in 'original' $llm_model; do
                 echo "### Running dialect ID for $model $split $subset ###"
-                metadata=data/$protocol/outputs/$model/$split/$subset/${split}_${subset}_metadata.csv
+                metadata=data/$protocol/outputs/$model/$split/$subset/metadata.csv
                 output_dir=results/$protocol/$model/$split/$subset
                 output=$output_dir/dialect_id.csv
 

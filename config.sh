@@ -5,6 +5,7 @@ seamless_assets_dir="data/seamless_assets"
 protocol="seamless_2t_2s_questions"
 data_dir="data/$protocol"
 llm_model="gpt-4o-audio-preview-2025-06-03"
+llm_model="gpt-realtime-2"
 language_id_model=facebook/mms-lid-126
 dialect_id_model=tiantiaf/voxlect-english-dialect-whisper-large-v3
 asr="whisper-large-v3"
