@@ -21,12 +21,13 @@ dependencies:
       - torch==2.7.1+cu118
       - torchaudio==2.7.1+cu118
       - torchvision==0.22.1+cu118
-      - transformers
+      # VoxLect's custom Whisper layer matches the Transformers 4.x Whisper API.
+      - transformers==4.46.3
       - soundfile
-      - accelerate
-      - safetensors
+      - safetensors==0.7.0
       - sentence-transformers
-      - huggingface-hub
+      - huggingface-hub==0.36.2
+      - tokenizers==0.20.3
       - openai
       - jiwer
       - silero-vad
