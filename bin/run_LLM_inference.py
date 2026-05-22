@@ -73,7 +73,6 @@ if __name__ == "__main__":
     metadata = pd.read_csv(input_dir / f"metadata.csv")
     print(f"found {len(metadata)} rows in {input_dir}/metadata.csv")
     output_metadata = metadata.copy()
-    output_metadata['question_end_time'] = output_metadata['total_duration']
     failed_indices = []
 
     for idx, row in tqdm(metadata.iterrows(), total=metadata.shape[0]):
@@ -94,7 +93,8 @@ if __name__ == "__main__":
             )
             if not success:
                 failed_indices.append(idx)
-                print(f"Warning: failed to process {input_audio_path}")
+                print(f"Warning: failed to process {input_audio_path} because {finish_reason}")
+                exit("Exiting after first failure for testing purposes") # --- IGNORE ---
                 continue
             # print("finish reason", finish_reason, "transcript:", transcript_answer)
             # save the answer
@@ -107,13 +107,14 @@ if __name__ == "__main__":
             audio_output = np.concatenate([audio, audio_answer], axis=0) 
             sf.write(output_path, audio_output, sr)
 
-            trancript_output = row['transcript'] + '<...>' + transcript_answer
-            output_metadata.at[idx, 'transcript'] = trancript_output
+            output_metadata.at[idx, 'transcript_answer'] = transcript_answer
             output_metadata.at[idx, 'audio_path'] = output_path
             output_metadata.at[idx, 'total_duration'] = len(audio_output) / sr
         except Exception as exc:
             print(f"Warning: failed to process {input_audio_path}: {exc}")
             failed_indices.append(idx)
+
+        exit("Exiting after first iteration for testing purposes") # --- IGNORE ---
 
     if failed_indices:
         output_metadata = output_metadata.drop(index=failed_indices)

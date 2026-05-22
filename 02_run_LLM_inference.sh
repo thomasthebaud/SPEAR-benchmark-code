@@ -8,6 +8,10 @@ source openai_keys.sh
 echo "Running inference with model $llm_model on seamless interactions"
 echo "Input data directory: $data_dir/inputs"
 echo "Output data directory: $data_dir/outputs/$llm_model"
+prompt="You are participating in a natural spoken conversation.\
+    Answer when it feels natural, not only at the very end.\
+    Keep responses conversational and concise.\
+    If the user interrupts, stop and respond to the latest user speech."
 
 for split in 'test' 'dev'; do
     for subset in 'improvised' 'naturalistic'; do
@@ -17,7 +21,7 @@ for split in 'test' 'dev'; do
             --audio_dir $data_dir/inputs \
             --output_dir $data_dir/outputs/$llm_model \
             --model $llm_model \
-            --prompt "None" \
+            --prompt "$prompt" \
             --split $split \
             --subset $subset \
             --openai-api-key "$openai_api_key" \
