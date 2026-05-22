@@ -122,6 +122,7 @@ Important fields:
 - `data_dir`: derived output data directory for the selected protocol.
 - `llm_model`: speech-to-speech LLM used to generate answers.
 - `asr`: ASR model used to transcribe generated audio.
+  - Supported values: `whisper-large-v3` and `Qwen3.0-ASR-0.6B`.
 - `stance_llm_model`: LLM used to score STANCE outputs.
 
 OpenAI-based scripts also read credentials from `openai_keys.sh`. Create or edit that file with your API credentials before running inference or STANCE scoring.
@@ -133,6 +134,17 @@ openai_api_key="YOUR_API_KEY"
 org="YOUR_ORG_ID"
 ```
 
+### Model proxy configuration
+
+The `02_run_LLM_inference.sh` runner now selects a model proxy based on the configured `llm_model` name.
+Each model should have a corresponding proxy module at `benchmark/bin/llm_proxies/${llm_model}.py`.
+For example:
+
+- `llm_model=gpt-4o-audio` → `benchmark/bin/llm_proxies/gpt-4o-audio.py`
+- `llm_model=gpt-realtime-2` → `benchmark/bin/llm_proxies/gpt-realtime-2.py`
+
+This proxy file must implement the inference interface used by the runner, so new speech-to-speech backend models can be added without changing the main script.
+
 ## Pipeline Scripts
 
 Run scripts from the `benchmark` directory. The scripts are numbered in the intended pipeline order.
@@ -143,7 +155,9 @@ Creates the benchmark data from the Seamless Interaction dataset. It selects con
 
 ### `02_run_LLM_inference.sh`
 
-Runs speech-to-speech LLM inference on the prepared input audio clips. It sends each input audio file to the configured `llm_model`, saves the generated audio response, and writes output metadata.
+Runs speech-to-speech LLM inference on the prepared input audio clips. It sends each input audio file to the configured `llm_model`, loads the corresponding proxy module from `benchmark/bin/llm_proxies/${llm_model}.py`, saves the generated audio response, and writes output metadata.
+
+The data preparation script now generates question and answer clips from conversations ending in a question, so the inference stage receives inputs that are already framed as question prompts with metadata for response alignment.
 
 ### `03_transcribe.sh`
 
