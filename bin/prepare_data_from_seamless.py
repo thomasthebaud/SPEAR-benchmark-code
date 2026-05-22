@@ -7,6 +7,7 @@ import struct
 import wave
 from pathlib import Path
 from tqdm import tqdm
+import numpy as np
 
 TARGET_SAMPLE_RATE = 16000
 
@@ -126,16 +127,21 @@ def get_end_with_question(transcripts: dict[str, list[dict]], audios: dict[str, 
                 start_row = max(0, row - N_max + 1)
                 selected_turns = turns[start_row:row + K]
                 # [start_row, row-1] : context turns, [row] : question turn, [row+1, row+K-1] : answer turns
-                filtered_transcripts[key+f'_{idx}'] = (turns[start_row:row+1], turns[row+1:row + K])
+                
 
                 selected_audio = audios[key].copy()
-                start_audio, end_audio = selected_turns[0]["start"], selected_turns[-1]["end"]
+                start_audio, end_audio = selected_turns[0]["start"], np.max([t["end"] for t in selected_turns])
                 selected_audio['start_audio'] = start_audio
                 selected_audio['end_audio'] = end_audio
                 selected_audio['context_end_time'] = turns[row]["start"] - start_audio
                 selected_audio['question_end_time'] = turns[row]["end"] - start_audio
                 selected_audio['total_duration'] = end_audio - start_audio
+                if selected_audio['total_duration'] <= selected_audio['question_end_time']:continue # sanity check to make sure the question end time is within the total duration of the selected audio
+                # assert selected_audio['total_duration']>selected_audio['question_end_time'],f"Total duration {selected_audio['total_duration']:<.2f} \
+                #     must be greater than question end time {selected_audio['question_end_time']:<.2f}, \
+                #     K={K}, row={row}, start turn {turns[row]['start']:<.2f}, end turn {turns[row]['end']:<.2f}, start_audio {start_audio:<.2f}, end_audio {end_audio:<.2f}"
                 filtered_audios[key+f'_{idx}'] = selected_audio
+                filtered_transcripts[key+f'_{idx}'] = (turns[start_row:row+1], turns[row+1:row + K])
                 idx += 1
 
     print(f"Keeping the answers as well: {len(filtered_transcripts)} answers kept.")
