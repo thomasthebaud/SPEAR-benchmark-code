@@ -135,8 +135,9 @@ def get_end_with_question(transcripts: dict[str, list[dict]], audios: dict[str, 
                 selected_audio['end_audio'] = end_audio
                 selected_audio['context_end_time'] = turns[row]["start"] - start_audio
                 selected_audio['question_end_time'] = turns[row]["end"] - start_audio
+                selected_audio['answer_duration'] = end_audio - turns[row]["end"]
                 selected_audio['total_duration'] = end_audio - start_audio
-                if selected_audio['total_duration'] <= selected_audio['question_end_time']:continue # sanity check to make sure the question end time is within the total duration of the selected audio
+                # if selected_audio['total_duration'] <= selected_audio['question_end_time']:continue # sanity check to make sure the question end time is within the total duration of the selected audio
                 # assert selected_audio['total_duration']>selected_audio['question_end_time'],f"Total duration {selected_audio['total_duration']:<.2f} \
                 #     must be greater than question end time {selected_audio['question_end_time']:<.2f}, \
                 #     K={K}, row={row}, start turn {turns[row]['start']:<.2f}, end turn {turns[row]['end']:<.2f}, start_audio {start_audio:<.2f}, end_audio {end_audio:<.2f}"
@@ -153,7 +154,7 @@ def extract_questions(transcripts: dict[str, list[dict]], audios: dict[str, dict
     for key, transcript in transcripts.items():
         filtered_transcripts[key] = {'question':transcript[0], 'answer':[{'speaker_id':'', 'text': '' }]} # keeping the context and question turns
         selected_audio = audios[key].copy()
-        selected_audio['total_duration'] = selected_audio['question_end_time'] # question end time is the total duration for the question-only audio
+        # selected_audio['total_duration'] = selected_audio['question_end_time'] # question end time is the total duration for the question-only audio
         filtered_audios[key] = selected_audio
 
     return filtered_transcripts, filtered_audios
@@ -265,9 +266,9 @@ def write_stereo_wav(audio_path: Path, channel_a: list[float], channel_b: list[f
         outfile.writeframes(frames)
 
 
-def export_segment_audio(audio_path: Path, audio_info: dict) -> tuple[Path, float]:
-    start_time = float(audio_info["start_audio"])
-    end_time = float(audio_info["end_audio"])
+def export_segment_audio(audio_path: Path, audio_info: dict, question_only: bool = True) -> tuple[Path, float]:
+    start_time = float(audio_info["start_audio"]) if question_only else float(audio_info["question_end_time"])
+    end_time = float(audio_info["question_end_time"]) if question_only else float(audio_info["answer_duration"])+float(audio_info["question_end_time"])
     target_frames = max(1, round((end_time - start_time) * TARGET_SAMPLE_RATE))
 
     if not os.path.exists(audio_path):
@@ -297,30 +298,40 @@ def save_processed_dataset(
     metadata_output_path = output_path / f"metadata.csv"
     fieldnames = [
         "audio_path",
+        "answer_audio_path",
         "context_end_time",
         "question_end_time",
-        "total_duration",
+        "answer_duration",
+        # "total_duration",
         "speakers",
-        "initial_conversation",
+        "conversation_id",
         "transcript_question",
-        "transcript_answer",
+        "transcript_answer"
     ]
     with metadata_output_path.open("w", encoding="utf-8", newline="") as outfile:
         writer = csv.DictWriter(outfile, fieldnames=fieldnames)
         writer.writeheader()
         for audio_id, audio_info in tqdm(audios.items(), desc=f"Saving audio {label} for {split} {subset}"):
-            audio_path = output_path / "audios" / f"{audio_id}.wav"
-            duration = export_segment_audio(audio_path, audio_info)
+            Q_audio_path = output_path / "audios" / f"{audio_id}.wav"
+            duration = export_segment_audio(Q_audio_path, audio_info, question_only=True)
+            if label == "answers": 
+                A_audio_path = output_path / "audios" / f"answer_{audio_id}.wav"
+                export_segment_audio(A_audio_path, audio_info, question_only=False)
+            else:
+                audio_info.pop("answer_duration", None)
+                audio_info.pop("transcript_answer", None)
             writer.writerow(
                 {
-                    "audio_path": str(audio_path),
-                    "total_duration": f"{duration:.3f}",
+                    "audio_path": str(Q_audio_path),
+                    "answer_audio_path": str(A_audio_path) if label == "answers" else "",
+                    # "total_duration": f"{audio_info['answer_duration']:.3f}" if label == "answers" else f"{audio_info['question_end_time']:.3f}",
                     "speakers": f"{audio_info['spk1']}|{audio_info['spk2']}",
-                    "initial_conversation": audio_info["conversation_id"],
+                    "conversation_id": audio_info["conversation_id"],
                     "transcript_question": format_transcript(transcripts[audio_id]['question']),
                     "transcript_answer": format_transcript(transcripts[audio_id]['answer']),
                     "question_end_time": audio_info.get("question_end_time", ""),
                     "context_end_time": audio_info.get("context_end_time", ""),
+                    "answer_duration": audio_info.get("answer_duration", "")
                 }
             )
 
