@@ -268,7 +268,8 @@ def write_stereo_wav(audio_path: Path, channel_a: list[float], channel_b: list[f
 
 def export_segment_audio(audio_path: Path, audio_info: dict, question_only: bool = True) -> tuple[Path, float]:
     start_time = float(audio_info["start_audio"]) if question_only else float(audio_info["question_end_time"])
-    end_time = float(audio_info["question_end_time"]) if question_only else float(audio_info["answer_duration"])+float(audio_info["question_end_time"])
+    end_delta = float(audio_info["question_end_time"]) if question_only else float(audio_info["answer_duration"])+float(audio_info["question_end_time"])
+    end_time = end_delta + start_time
     target_frames = max(1, round((end_time - start_time) * TARGET_SAMPLE_RATE))
 
     if not os.path.exists(audio_path):
