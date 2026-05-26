@@ -173,7 +173,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     print(f"Starting transcription for {args.split} {args.subset}")
     input_dir = Path(args.data_dir) / args.split / args.subset
-    metadata_path = input_dir / f"{args.split}_{args.subset}_metadata.csv"
+    metadata_path = input_dir / f"metadata.csv"
 
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -185,22 +185,22 @@ if __name__ == "__main__":
         print(f"{output_path} already computed, recomputing")
 
     metadata = pd.read_csv(metadata_path)
-    metadata['ASR_transcript'] = ''
+    # metadata['ASR_transcript_question'] = ''
+    metadata['ASR_transcript_answer'] = ''
 
     asr_model = build_asr_model(args.model)
 
     no_answer=0
-    for idx, row in tqdm(metadata.iterrows(), total=metadata.shape[0], desc=f'transcribing with {args.model}', mininterval=64):
+    for idx, row in tqdm(metadata.iterrows(), total=metadata.shape[0], desc=f'transcribing answers with {args.model}', mininterval=64):
         if row['question_end_time']==row['total_duration']:#file not computed
             no_answer+=1
             continue
-        audio_path = resolve_audio_path(row['audio_path'], input_dir)
-        metadata.at[idx, 'ASR_transcript'] = transcribe_audio(
+        audio_path = resolve_audio_path(row['answer_audio_path'], input_dir)
+        metadata.at[idx, 'ASR_transcript_answer'] = transcribe_audio(
             asr_model,
             audio_path,
-            start_time=float(row['question_end_time']),
         )
 
     metadata.to_csv(output_path, index=False)
     print(f"Saved transcripts to {output_path}")
-    print(f"{no_answer}/{len(metadata)} had no answers from the LLM")
+    print(f"{no_answer}/{len(metadata)} had no answers available for transcription")
