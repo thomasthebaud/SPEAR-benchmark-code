@@ -29,7 +29,7 @@ wait
 for split in 'test' 'dev'; do
     for subset in 'improvised' 'naturalistic'; do
         python3 bin/data_prep_summary.py \
-            --answers_output_dir $data_dir/'outputs/original'
+            --answers_output_dir $data_dir/outputs/original/${split}/${subset}
             
     done
 done
