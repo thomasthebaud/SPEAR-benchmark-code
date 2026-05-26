@@ -2,6 +2,9 @@ import base64
 from pathlib import Path
 from openai import OpenAI
 
+"""
+model version deprecated, please use gpt-audio-1.5 instead.
+"""
 
 def get_reply_with_audio(audio_path: Path, instruction: str, model_name: str, org: str, api_key: str, temp: float = 0.7):
     """Send audio and instruction to the gpt-4o-audio model and return the response audio and transcript."""
@@ -35,8 +38,8 @@ def get_reply_with_audio(audio_path: Path, instruction: str, model_name: str, or
     message = response.choices[0].message
     if message.audio is None or message.audio.data is None:
         print(f"Warning: model failed to return audio for {audio_path}")
-        return None, None, None, False
+        return None, None, None, False, None
 
     audio_bytes = base64.b64decode(message.audio.data)
     transcript = message.audio.transcript
-    return audio_bytes, transcript, response.choices[0].finish_reason, True
+    return audio_bytes, transcript, response.choices[0].finish_reason, True, None
