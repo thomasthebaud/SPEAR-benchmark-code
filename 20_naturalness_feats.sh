@@ -12,10 +12,13 @@ for split in 'test' 'dev'; do
 
           srun -p gpu --gpus 1 \
             python3 bin/naturalness/extract_features.py \
-              --metadata $metadata
+              --metadata $metadata \
+              --min-len-question 3.0 &
 
         done
     done
 done
 
-  
+wait
+echo "All naturalness features extracted for original and $llm_model outputs."
+exit

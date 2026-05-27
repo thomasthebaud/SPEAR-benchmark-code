@@ -95,9 +95,7 @@ if [[ "$run_DialectID" -eq 1 ]];then
                     --metadatafile "$metadata" \
                     --output "$output" \
                     --language "english" \
-                    --languagefile $output_dir/language_id.csv \
-                    --force-recompute &
-
+                    --languagefile $output_dir/language_id.csv &
             done
         done
     done

@@ -8,7 +8,7 @@ echo "data directory: $data_dir"
 
 for split in 'test' 'dev'; do
     for subset in 'improvised' 'naturalistic'; do
-        for model in 'original' $llm_model; do
+        for model in $llm_model 'original'; do
             echo "### Running base metrics for $model $split $subset ###"
             metadata=data/$protocol/outputs/$model/$split/$subset/metadata.csv
             outputs=results/$protocol/$model/$split/$subset/base_metrics.csv
@@ -17,7 +17,6 @@ for split in 'test' 'dev'; do
                 --outputs $outputs
 
         done
-        exit
     done
 done
 

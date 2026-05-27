@@ -7,11 +7,15 @@ import csv
 import json
 import os
 import re
+import tempfile
 import time
+import wave
 from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
+
+import audioop
 
 
 TAU0_DEFAULT = 0.45
@@ -90,6 +94,79 @@ def audio_part(audio_path: Path) -> dict[str, Any]:
     with audio_path.open("rb") as infile:
         audio_b64 = base64.b64encode(infile.read()).decode("ascii")
     return {"type": "input_audio", "input_audio": {"data": audio_b64, "format": fmt}}
+
+
+def load_wav_mono(path: Path) -> tuple[bytes, int, int]:
+    with wave.open(str(path), "rb") as infile:
+        channels = infile.getnchannels()
+        sample_width = infile.getsampwidth()
+        sample_rate = infile.getframerate()
+        frames = infile.readframes(infile.getnframes())
+
+    if sample_width not in {1, 2, 3, 4}:
+        raise ValueError(f"Unsupported WAV sample width {sample_width} for {path}")
+    if channels == 2:
+        frames = audioop.tomono(frames, sample_width, 0.5, 0.5)
+    elif channels != 1:
+        raise ValueError(f"Unsupported WAV channel count {channels} for {path}")
+    return frames, int(sample_rate), int(sample_width)
+
+
+def convert_wav_audio(audio: bytes, sr_in: int, sample_width_in: int, sr_out: int, sample_width_out: int) -> bytes:
+    if sample_width_in != sample_width_out:
+        audio = audioop.lin2lin(audio, sample_width_in, sample_width_out)
+    if sr_in != sr_out and audio:
+        audio, _state = audioop.ratecv(audio, sample_width_out, 1, sr_in, sr_out, None)
+    return audio
+
+
+def silence(num_samples: int, sample_width: int) -> bytes:
+    return b"\x00" * max(0, int(num_samples)) * sample_width
+
+
+def overlay_audio(dst: bytearray, src: bytes, start_sample: int, sample_width: int) -> None:
+    start_byte = start_sample * sample_width
+    end_byte = start_byte + len(src)
+    mixed = audioop.add(bytes(dst[start_byte:end_byte]), src, sample_width)
+    dst[start_byte:end_byte] = mixed
+
+
+def patch_question_answer_audio(question_path: Path, answer_path: Path, answer_start_time: float) -> tuple[bytes, int, int]:
+    question, question_sr, sample_width = load_wav_mono(question_path)
+    answer, answer_sr, answer_sample_width = load_wav_mono(answer_path)
+    answer = convert_wav_audio(answer, answer_sr, answer_sample_width, question_sr, sample_width)
+
+    question_samples = len(question) // sample_width
+    answer_samples = len(answer) // sample_width
+    answer_start = question_samples + int(round(float(answer_start_time) * question_sr))
+
+    if answer_start < 0:
+        question = silence(-answer_start, sample_width) + question
+        question_samples = len(question) // sample_width
+        answer_start = 0
+
+    total_samples = max(question_samples, answer_start + answer_samples)
+    patched = bytearray(silence(total_samples, sample_width))
+    overlay_audio(patched, question, 0, sample_width)
+    overlay_audio(patched, answer, answer_start, sample_width)
+    return bytes(patched), question_sr, sample_width
+
+
+def write_patched_audio(row: dict[str, str]) -> Path:
+    question_path = Path(safe_str(row.get("audio_path")))
+    answer_path = Path(safe_str(row.get("answer_audio_path")))
+    answer_start_time = float(safe_str(row.get("answer_start_time")) or 0.0)
+    patched_audio, sr, sample_width = patch_question_answer_audio(question_path, answer_path, answer_start_time)
+
+    tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
+    tmp_path = Path(tmp.name)
+    tmp.close()
+    with wave.open(str(tmp_path), "wb") as outfile:
+        outfile.setnchannels(1)
+        outfile.setsampwidth(sample_width)
+        outfile.setframerate(sr)
+        outfile.writeframes(patched_audio)
+    return tmp_path
 
 
 def build_prompt(row: dict[str, str]) -> str:
@@ -224,18 +301,37 @@ class OpenAIChatClient:
 
 
 def score_row(row: dict[str, str], client: OpenAIChatClient, temperature: float, max_tokens: int) -> dict[str, Any]:
-    audio_path = Path(safe_str(row.get("audio_path")))
-    if not audio_path.exists():
+    question_path = Path(safe_str(row.get("audio_path")))
+    answer_path = Path(safe_str(row.get("answer_audio_path")))
+    if not question_path.exists():
         return {
             "stance_choice": "",
             "stance_probability": "",
             "stance_score": "",
             "stance_evidence": "[]",
             "stance_raw_response": "",
-            "stance_error": f"missing audio: {audio_path}",
+            "stance_error": f"missing question audio: {question_path}",
+        }
+    if not answer_path.exists():
+        return {
+            "stance_choice": "",
+            "stance_probability": "",
+            "stance_score": "",
+            "stance_evidence": "[]",
+            "stance_raw_response": "",
+            "stance_error": f"missing answer audio: {answer_path}",
         }
 
-    raw = client.complete(audio_path=audio_path, prompt=build_prompt(row), temperature=temperature, max_tokens=max_tokens)
+    patched_path = None
+    try:
+        patched_path = write_patched_audio(row)
+        raw = client.complete(audio_path=patched_path, prompt=build_prompt(row), temperature=temperature, max_tokens=max_tokens)
+    finally:
+        if patched_path is not None:
+            try:
+                patched_path.unlink()
+            except FileNotFoundError:
+                pass
     obj = extract_json_object(raw)
     if obj is None:
         return {

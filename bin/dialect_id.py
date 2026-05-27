@@ -100,20 +100,8 @@ def build_dialect_id_model(model_name: str) -> dict:
     }
 
 
-def resolve_audio_path(audio_path: str, metadata_path: Path) -> Path:
-    path = Path(audio_path)
-    if path.exists():
-        return path
 
-    metadata_relative = metadata_path.parent / path.name
-    if metadata_relative.exists():
-        return metadata_relative
-
-    return path
-
-
-def load_answer_audio(row: pd.Series, metadata_path: Path, target_sr: int = 16000) -> torch.Tensor:
-    audio_path = resolve_audio_path(row["answer_audio_path"], metadata_path)
+def load_audio(audio_path: Path, target_sr: int = 16000) -> torch.Tensor:
     audio, sr = sf.read(audio_path, dtype="float32", always_2d=True)
 
     if audio.shape[1] > 1:
@@ -282,17 +270,16 @@ if __name__ == "__main__":
             outputs.loc[row_mask, "dialect_model"] = ""
             continue
 
-        waveform = load_answer_audio(row, metadata_path)
+        waveform = load_audio(Path(row["audio_path"]))
         dialect, score = predict_dialect(model, waveform, volume=args.volume)
-        # try:
-        #     waveform = load_answer_audio(row, metadata_path)
-        #     dialect, score = predict_dialect(model, waveform, volume=args.volume)
-        # except Exception as exc:
-        #     print(f"Warning: dialect ID failed for {row['audio_path']}: {exc}")
-        #     dialect, score = "unknown", float("nan")
-
         outputs.loc[row_mask, "dialect"] = dialect
         outputs.loc[row_mask, "dialect_score"] = score
         outputs.loc[row_mask, "dialect_model"] = model_name
+
+        waveform = load_audio(Path(row["answer_audio_path"]))
+        dialect, score = predict_dialect(model, waveform, volume=args.volume)
+        outputs.loc[row_mask, "answer_dialect"] = dialect
+        outputs.loc[row_mask, "answer_dialect_score"] = score
+        outputs.loc[row_mask, "answer_dialect_model"] = model_name
 
     save_outputs(outputs, output_path)

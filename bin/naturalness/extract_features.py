@@ -48,7 +48,12 @@ def waveform_to_mono_np(waveform):
     else:
         y = np.asarray(waveform)
     if y.ndim == 2:
-        y = y.mean(axis=0)
+        # soundfile returns (frames, channels); torchaudio-style tensors are
+        # often (channels, frames). Support both layouts.
+        if y.shape[0] <= 8 and y.shape[1] > y.shape[0]:
+            y = y.mean(axis=0)
+        else:
+            y = y.mean(axis=1)
     return y.astype(np.float32, copy=False)
 
 
@@ -73,15 +78,158 @@ def expected_num_chunks(audio_info, args):
 
 
 
-def process_audio(audio_path, model, device, args, key, output_dir):
+def load_audio(audio_path, start_time=0.0):
     waveform, sr = sf.read(audio_path, dtype="float32", always_2d=True)
     y = waveform_to_mono_np(waveform)
-    
-    y, sr = to_16k(y, sr, TARGET_SR)
+    start_sample = max(0, int(round(float(start_time) * sr)))
+    y = y[start_sample:]
+    return to_16k(y, sr, TARGET_SR)
 
+
+def chunk_audio(y, sr, args, turn_name, start_offset=0.0):
+    win_n = int(round(args.win_sec * sr))
+    chunks = []
+
+    spans = chunk_sliding_pad(y, sr, args.win_sec, args.hop_sec, pad_last=args.pad_last)
+    for ci, (i0, i1_true, t0, t1_true, padded) in enumerate(spans):
+        ch = y[i0:i1_true]
+        if padded:
+            ch = pad_to_len(ch, win_n)
+            t1 = t0 + args.win_sec
+        else:
+            t1 = t1_true
+
+        chunks.append(
+            {
+                "audio": ch.astype(np.float32, copy=False),
+                "turn_name": turn_name,
+                "turn_chunk_index": ci,
+                "start": float(start_offset + t0),
+                "end": float(start_offset + t1),
+                "true_end": float(start_offset + t1_true),
+                "padded": bool(padded),
+            }
+        )
+
+    return chunks, len(y) / sr
+
+
+def compute_chunks(chunks, model, device, args):
+    computed = []
+    pending_audio = []
+    pending_chunks = []
+
+    def flush_compute():
+        if not pending_audio:
+            return
+        val, aro, dom, pooled_vec, last_btd = forward_fast(
+            model=model,
+            device=device,
+            batch_audio_np=pending_audio,
+            pool=args.pool,
+            amp=args.amp,
+        )
+        for i, chunk in enumerate(pending_chunks):
+            computed.append(
+                {
+                    **chunk,
+                    "valence": float(val[i]),
+                    "arousal": float(aro[i]),
+                    "dominance": float(dom[i]),
+                    "pooled_vec": pooled_vec[i],
+                    "last_btd": last_btd[i],
+                }
+            )
+        pending_audio.clear()
+        pending_chunks.clear()
+
+    for chunk in chunks:
+        pending_audio.append(chunk["audio"])
+        pending_chunks.append(chunk)
+        if len(pending_audio) >= args.batch_size:
+            flush_compute()
+
+    flush_compute()
+    return computed
+
+
+def num_chunks_for_duration(duration, args):
+    n_samples = int(round(max(0.0, float(duration)) * TARGET_SR))
+    win = int(round(args.win_sec * TARGET_SR))
+    hop = int(round(args.hop_sec * TARGET_SR))
+    if win <= 0 or hop <= 0 or n_samples <= 0:
+        return 0
+    if args.pad_last:
+        return (n_samples + hop - 1) // hop
+    if n_samples < win:
+        return 0
+    return 1 + (n_samples - win) // hop
+
+
+def audio_duration(path):
+    info = sf.info(path)
+    return float(info.frames) / float(info.samplerate)
+
+
+def combined_embeddings_exist(row, args, output_dir):
+    question_path = Path(row["audio_path"])
+    answer_path = Path(row["answer_audio_path"])
+    key = question_path.stem.lower()
+
+    question_duration = max(0.0, audio_duration(question_path) - float(row["context_end_time"]))
+    answer_duration = audio_duration(answer_path)
+    expected_chunks = (
+        num_chunks_for_duration(question_duration, args)
+        + num_chunks_for_duration(answer_duration, args)
+    )
+    if expected_chunks <= 0:
+        return False
+
+    emb_vec_root = output_dir / "embeds_vec"
+    emb_seq_root = output_dir / "embeds_seq"
+    for ci in range(expected_chunks):
+        seg_stem = f"{key}__ch{ci:05d}"
+        vec_path, seq_path = embedding_paths(
+            emb_vec_root, emb_seq_root, key, seg_stem, args.save_full_seq
+        )
+        if not embeddings_exist(vec_path, seq_path):
+            return False
+    return True
+
+
+def write_embedding_row(writer, chunk, key, ci, vec_path, seq_path, segment_path, args):
+    writer.writerow(
+        {
+            "dyad_id": key.lower(),
+            "pair_stem": key.lower(),
+            "speaker_id": key,
+            "seg_stem": f"{key.lower()}__ch{ci:05d}",
+            "chunk_index": ci,
+            "start": f"{chunk['start']:.3f}",
+            "end": f"{chunk['end']:.3f}",
+            "true_end": f"{chunk['true_end']:.3f}",
+            "duration": f"{(chunk['end'] - chunk['start']):.3f}",
+            "true_duration": f"{(chunk['true_end'] - chunk['start']):.3f}",
+            "padded": "1" if chunk["padded"] else "0",
+            "valence": f"{chunk['valence']:.6f}",
+            "arousal": f"{chunk['arousal']:.6f}",
+            "dominance": f"{chunk['dominance']:.6f}",
+            "vad_source": chunk["turn_name"],
+            "emb_vec_path": str(vec_path),
+            "emb_vec_shape": str(tuple(chunk["pooled_vec"].shape)),
+            "emb_seq_path": str(seq_path) if seq_path is not None else "",
+            "emb_seq_shape": str(tuple(chunk["last_btd"].shape)) if seq_path is not None else "",
+            "segment_path": segment_path,
+            "win_sec": str(args.win_sec),
+            "hop_sec": str(args.hop_sec),
+            "pool": args.pool,
+        }
+    )
+
+
+def save_computed_chunks(computed_chunks, sr, args, key, output_dir):
     dyad_id = key.lower()
     seg_base = key.lower()
-    win_n = int(round(args.win_sec * sr))
 
     seg_root = output_dir / "segments"
     emb_vec_root = output_dir / "embeds_vec"
@@ -94,157 +242,108 @@ def process_audio(audio_path, model, device, args, key, output_dir):
     if seg_dir is not None:
         seg_dir.mkdir(parents=True, exist_ok=True)
 
-    # csv_path = output_dir / f"{dyad_id}.csv"
     csv_path = output_dir / "metadata.csv"
     csv_exists = csv_path.exists() and csv_path.stat().st_size > 0
-    csv_file = csv_path.open("a", newline="", encoding="utf-8")
-    writer = csv.DictWriter(csv_file, fieldnames=CSV_FIELDS)
-    if not csv_exists:
-        writer.writeheader()
+    with csv_path.open("a", newline="", encoding="utf-8") as csv_file:
+        writer = csv.DictWriter(csv_file, fieldnames=CSV_FIELDS)
+        if not csv_exists:
+            writer.writeheader()
 
-    pending_audio = []
-    pending_meta = []
-
-    def write_row(meta, v, a, d, vad_source, vec_path, vec_shape, seq_path, seq_shape):
-        writer.writerow(
-            {
-                "dyad_id": meta["dyad_id"],
-                "pair_stem": meta["pair_stem"],
-                "speaker_id": meta["speaker_id"],
-                "seg_stem": meta["seg_stem"],
-                "chunk_index": meta["chunk_index"],
-                "start": f"{meta['start']:.3f}",
-                "end": f"{meta['end']:.3f}",
-                "true_end": f"{meta['true_end']:.3f}",
-                "duration": f"{(meta['end'] - meta['start']):.3f}",
-                "true_duration": f"{(meta['true_end'] - meta['start']):.3f}",
-                "padded": "1" if meta["padded"] else "0",
-                "valence": v,
-                "arousal": a,
-                "dominance": d,
-                "vad_source": vad_source,
-                "emb_vec_path": vec_path,
-                "emb_vec_shape": vec_shape,
-                "emb_seq_path": seq_path,
-                "emb_seq_shape": seq_shape,
-                "segment_path": meta["segment_path"],
-                "win_sec": str(args.win_sec),
-                "hop_sec": str(args.hop_sec),
-                "pool": args.pool,
-            }
-        )
-
-    def save_and_write(meta, v, a, d, pooled_vec_i, last_btd_i):
-        vec_path, seq_path = embedding_paths(
-            emb_vec_root, emb_seq_root, meta["dyad_id"], meta["seg_stem"], args.save_full_seq
-        )
-        vec_path.parent.mkdir(parents=True, exist_ok=True)
-        if seq_path is not None:
-            seq_path.parent.mkdir(parents=True, exist_ok=True)
-
-        if not vec_path.exists():
-            np.save(vec_path, pooled_vec_i)
-        if seq_path is not None and not seq_path.exists():
-            np.save(seq_path, last_btd_i)
-
-        write_row(
-            meta=meta,
-            v=f"{v:.6f}",
-            a=f"{a:.6f}",
-            d=f"{d:.6f}",
-            vad_source="computed",
-            vec_path=str(vec_path),
-            vec_shape=str(tuple(pooled_vec_i.shape)),
-            seq_path=str(seq_path) if seq_path is not None else "",
-            seq_shape=str(tuple(last_btd_i.shape)) if seq_path is not None else "",
-        )
-
-    def flush_compute():
-        if not pending_audio:
-            return
-        val, aro, dom, pooled_vec, last_btd = forward_fast(
-            model=model,
-            device=device,
-            batch_audio_np=pending_audio,
-            pool=args.pool,
-            amp=args.amp,
-        )
-        for i, meta in enumerate(pending_meta):
-            save_and_write(
-                meta,
-                float(val[i]),
-                float(aro[i]),
-                float(dom[i]),
-                pooled_vec[i],
-                last_btd[i],
+        for ci, chunk in enumerate(computed_chunks):
+            seg_stem = f"{seg_base}__ch{ci:05d}"
+            vec_path, seq_path = embedding_paths(
+                emb_vec_root, emb_seq_root, dyad_id, seg_stem, args.save_full_seq
             )
-        pending_audio.clear()
-        pending_meta.clear()
+            vec_path.parent.mkdir(parents=True, exist_ok=True)
+            if seq_path is not None:
+                seq_path.parent.mkdir(parents=True, exist_ok=True)
 
-    spans = chunk_sliding_pad(y, sr, args.win_sec, args.hop_sec, pad_last=args.pad_last)
-    # print(
-    #     f"Audio chunked into {len(spans)} segments with window size "
-    #     f"{args.win_sec} sec and hop size {args.hop_sec} sec."
-    # )
+            segment_path = ""
+            if seg_dir is not None:
+                seg_file = seg_dir / f"{seg_stem}.{args.seg_format}"
+                segment_path = str(seg_file)
+                if not seg_file.exists():
+                    sf.write(segment_path, chunk["audio"], sr)
 
-    for ci, (i0, i1_true, t0, t1_true, padded) in enumerate(spans):
-        ch = y[i0:i1_true]
-        if padded:
-            ch = pad_to_len(ch, win_n)
-            t1 = t0 + args.win_sec
-        else:
-            t1 = t1_true
+            if embeddings_exist(vec_path, seq_path):
+                try:
+                    vshape = str(npy_shape_header_only(vec_path))
+                except Exception:
+                    vshape = ""
+                try:
+                    sshape = str(npy_shape_header_only(seq_path)) if seq_path is not None else ""
+                except Exception:
+                    sshape = ""
+                writer.writerow(
+                    {
+                        "dyad_id": dyad_id,
+                        "pair_stem": seg_base,
+                        "speaker_id": key,
+                        "seg_stem": seg_stem,
+                        "chunk_index": ci,
+                        "start": f"{chunk['start']:.3f}",
+                        "end": f"{chunk['end']:.3f}",
+                        "true_end": f"{chunk['true_end']:.3f}",
+                        "duration": f"{(chunk['end'] - chunk['start']):.3f}",
+                        "true_duration": f"{(chunk['true_end'] - chunk['start']):.3f}",
+                        "padded": "1" if chunk["padded"] else "0",
+                        "valence": "",
+                        "arousal": "",
+                        "dominance": "",
+                        "vad_source": f"existing_{chunk['turn_name']}",
+                        "emb_vec_path": str(vec_path),
+                        "emb_vec_shape": vshape,
+                        "emb_seq_path": str(seq_path) if seq_path is not None else "",
+                        "emb_seq_shape": sshape,
+                        "segment_path": segment_path,
+                        "win_sec": str(args.win_sec),
+                        "hop_sec": str(args.hop_sec),
+                        "pool": args.pool,
+                    }
+                )
+                continue
 
-        seg_stem = f"{seg_base}__ch{ci:05d}"
-        vec_path, seq_path = embedding_paths(
-            emb_vec_root, emb_seq_root, dyad_id, seg_stem, args.save_full_seq
-        )
+            np.save(vec_path, chunk["pooled_vec"])
+            if seq_path is not None:
+                np.save(seq_path, chunk["last_btd"])
+            write_embedding_row(writer, chunk, key, ci, vec_path, seq_path, segment_path, args)
 
-        segment_path = ""
-        if seg_dir is not None:
-            seg_file = seg_dir / f"{seg_stem}.{args.seg_format}"
-            segment_path = str(seg_file)
-            if not seg_file.exists():
-                sf.write(segment_path, ch, sr)
 
-        meta = {
-            "dyad_id": dyad_id,
-            "pair_stem": seg_base,
-            "speaker_id": key,
-            "seg_stem": seg_stem,
-            "chunk_index": ci,
-            "start": float(t0),
-            "end": float(t1),
-            "true_end": float(t1_true),
-            "padded": bool(padded),
-            "segment_path": segment_path,
-        }
+def process_audio(audio_path, model, device, args, key, output_dir, start_time=0.0):
+    y, sr = load_audio(audio_path, start_time=start_time)
+    chunks, _duration = chunk_audio(y, sr, args, "audio", start_offset=0.0)
+    computed = compute_chunks(chunks, model, device, args)
+    save_computed_chunks(computed, sr, args, key, output_dir)
 
-        if embeddings_exist(vec_path, seq_path):
-            try:
-                vshape = str(npy_shape_header_only(vec_path))
-            except Exception:
-                vshape = ""
-            try:
-                sshape = str(npy_shape_header_only(seq_path)) if seq_path is not None else ""
-            except Exception:
-                sshape = ""
-            write_row(meta, "", "", "", "missing", str(vec_path), vshape, str(seq_path) if seq_path else "", sshape)
-            continue
 
-        pending_audio.append(ch.astype(np.float32, copy=False))
-        pending_meta.append(meta)
-        if len(pending_audio) >= args.batch_size:
-            flush_compute()
+def process_question_answer(row, model, device, args, output_dir):
+    question_path = Path(row["audio_path"])
+    answer_path = Path(row["answer_audio_path"])
+    base_key = question_path.stem
 
-    flush_compute()
-    csv_file.close()
+    question_audio, question_sr = load_audio(question_path, start_time=row["context_end_time"])
+    answer_audio, answer_sr = load_audio(answer_path, start_time=0.0)
+    if question_sr != answer_sr:
+        raise ValueError(f"Question and answer sample rates differ after resampling: {question_sr} != {answer_sr}")
+
+    question_chunks, question_duration = chunk_audio(
+        question_audio, question_sr, args, "question", start_offset=0.0
+    )
+    answer_chunks, _answer_duration = chunk_audio(
+        answer_audio, answer_sr, args, "answer", start_offset=question_duration
+    )
+
+    question_embeddings = compute_chunks(question_chunks, model, device, args)
+    answer_embeddings = compute_chunks(answer_chunks, model, device, args)
+    save_computed_chunks(question_embeddings + answer_embeddings, question_sr, args, base_key, output_dir)
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--metadata", type=Path, help="metadata file")
 
     parser.add_argument("--win-sec", type=float, default=3.0, help="Window size seconds.")
+    parser.add_argument("--min-len-question", type=float, default=0.5, help="Minimum question duration in seconds to process (default 0.5s).")
     parser.add_argument("--hop-sec", type=float, default=1.0, help="Hop size seconds (hop < win => sliding window).")
     parser.add_argument("--pad-last", action="store_true", help="Pad last short window to full length (default ON).")
     parser.add_argument("--no-pad-last", dest="pad_last", action="store_false", help="Drop trailing short window.")
@@ -274,7 +373,17 @@ if __name__ == "__main__":
     print("Model Loaded. Starting feature extraction...")
 
     metadata = pd.read_csv(args.metadata)
-
+    too_short = 0
+    already_computed = 0
     for idx, row in tqdm(metadata.iterrows(), desc=f"Processing file {args.metadata.stem}", total=len(metadata)):
-        process_audio(row['audio_path'], model, device, args, Path(row['audio_path']).stem, output_dir)
-
+        if float(row['question_end_time'] - row["context_end_time"]) < args.min_len_question:
+            too_short += 1
+            continue
+        if combined_embeddings_exist(row, args, output_dir):
+            already_computed += 1
+            continue
+        process_question_answer(row, model, device, args, output_dir)
+    print(
+        f"Finished processing. {already_computed}/{len(metadata)} pairs skipped because embeddings already exist; "
+        f"{too_short}/{len(metadata)} pairs skipped due to short question length (< {args.min_len_question} seconds)."
+    )
