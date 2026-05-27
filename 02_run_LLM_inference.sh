@@ -24,9 +24,6 @@ for split in 'test' 'dev'; do
             --split $split \
             --subset $subset \
             --openai-api-key "$openai_api_key" \
-            --org "$org" 
-
-        exit
-
+            --org "$org" &
     done
 done

@@ -20,9 +20,6 @@ for split in 'test' 'dev'; do
                     --subset "$subset" \
                     --output_dir "data/$protocol/outputs/$model/$split/$subset" &
             done
-
-            wait
-            exit
         done
     done
 done

@@ -14,10 +14,10 @@ for split in 'test' 'dev'; do
             outputs=results/$protocol/$model/$split/$subset/base_metrics.csv
             srun -p cpu python3 bin/base_metrics.py \
                 --metadata $metadata \
-                --outputs $outputs &
-
+                --outputs $outputs
 
         done
+        exit
     done
 done
 

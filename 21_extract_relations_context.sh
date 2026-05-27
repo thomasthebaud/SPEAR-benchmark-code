@@ -5,7 +5,7 @@ cd "$(dirname "${BASH_SOURCE[0]}")"
 source config.sh
 for split in 'test' 'dev'; do
   for subset in 'improvised' 'naturalistic'; do
-    metadata=data/$protocol/inputs/$split/$subset/${split}_${subset}_metadata.csv
+    metadata=data/$protocol/inputs/$split/$subset/metadata.csv
     output_dir=data/$protocol/inputs/$split/$subset
 
     echo "Extract and pickle context and relationship for split:$split subset:$subset"

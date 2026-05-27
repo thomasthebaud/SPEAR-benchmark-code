@@ -6,7 +6,7 @@ source config.sh
 for split in 'dev'; do
     for subset in 'improvised' 'naturalistic'; do
         for model in 'original' $llm_model; do
-          metadata=data/$protocol/outputs/$model/$split/$subset/${split}_${subset}_metadata.csv
+          metadata=data/$protocol/outputs/$model/$split/$subset/metadata.csv
           metrics=results/$protocol/$model/$split/$subset
           pickle_dir=data/$protocol/inputs/$split/$subset
 
