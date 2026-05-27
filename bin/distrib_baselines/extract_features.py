@@ -333,8 +333,8 @@ def main() -> int:
     rows: List[Dict[str, Any]] = []
     base_dir = Path.cwd()
 
-    for _, meta_row in tqdm(metadata.iterrows(), total=len(metadata), desc=args.metadata.stem):
-        audio_path = resolve_path(meta_row["audio_path"], base_dir)
+    for _, meta_row in tqdm(metadata.iterrows(), total=len(metadata), desc=f"extracting explainable feats from {args.metadata.parent}"):
+        audio_path = resolve_path(meta_row["answer_audio_path"], base_dir)
         orig_id = audio_path.stem
         ids = parse_ids(orig_id)
         relationship, relationship_detail = relationships.get(
