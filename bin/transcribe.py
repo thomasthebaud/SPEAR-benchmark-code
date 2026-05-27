@@ -190,11 +190,7 @@ if __name__ == "__main__":
 
     asr_model = build_asr_model(args.model)
 
-    no_answer=0
     for idx, row in tqdm(metadata.iterrows(), total=metadata.shape[0], desc=f'transcribing answers with {args.model}', mininterval=64):
-        if row['question_end_time']==row['total_duration']:#file not computed
-            no_answer+=1
-            continue
         audio_path = resolve_audio_path(row['answer_audio_path'], input_dir)
         metadata.at[idx, 'ASR_transcript_answer'] = transcribe_audio(
             asr_model,
@@ -203,4 +199,3 @@ if __name__ == "__main__":
 
     metadata.to_csv(output_path, index=False)
     print(f"Saved transcripts to {output_path}")
-    print(f"{no_answer}/{len(metadata)} had no answers available for transcription")

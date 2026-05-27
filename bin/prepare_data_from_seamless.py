@@ -137,6 +137,7 @@ def get_end_with_question(transcripts: dict[str, list[dict]], audios: dict[str, 
                 selected_audio['question_end_time'] = turns[row]["end"] - start_audio
                 selected_audio['answer_duration'] = end_audio - turns[row]["end"]
                 selected_audio['total_duration'] = end_audio - start_audio
+                selected_audio['answer_start_time'] = turns[row+1]["start"] - turns[row]["end"] #for potential interruptions
                 # if selected_audio['total_duration'] <= selected_audio['question_end_time']:continue # sanity check to make sure the question end time is within the total duration of the selected audio
                 # assert selected_audio['total_duration']>selected_audio['question_end_time'],f"Total duration {selected_audio['total_duration']:<.2f} \
                 #     must be greater than question end time {selected_audio['question_end_time']:<.2f}, \
@@ -307,7 +308,8 @@ def save_processed_dataset(
         "speakers",
         "conversation_id",
         "transcript_question",
-        "transcript_answer"
+        "transcript_answer",
+        "answer_start_time"
     ]
     with metadata_output_path.open("w", encoding="utf-8", newline="") as outfile:
         writer = csv.DictWriter(outfile, fieldnames=fieldnames)
@@ -332,7 +334,8 @@ def save_processed_dataset(
                     "transcript_answer": format_transcript(transcripts[audio_id]['answer']),
                     "question_end_time": audio_info.get("question_end_time", ""),
                     "context_end_time": audio_info.get("context_end_time", ""),
-                    "answer_duration": audio_info.get("answer_duration", "")
+                    "answer_duration": audio_info.get("answer_duration", ""),
+                    "answer_start_time": audio_info.get("answer_start_time", "")
                 }
             )
 

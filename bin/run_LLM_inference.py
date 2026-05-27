@@ -98,10 +98,10 @@ if __name__ == "__main__":
                 if finish_reason not in failed_indices:
                     failed_indices[finish_reason] = []
                 failed_indices[finish_reason].append(idx)
-                # print(f"Warning: failed to process {input_audio_path} because {finish_reason}")
+                print(f"Warning: failed to process {input_audio_path} because {finish_reason}" , flush=True)
                 continue
         except Exception as exc:
-            print(f"Warning: failed to process {input_audio_path}: {exc}")
+            print(f"Warning: failed to process {input_audio_path}: {exc}", flush=True)
             finish_reason = str(exc)
             if finish_reason not in failed_indices:
                 failed_indices[finish_reason] = []
@@ -132,9 +132,9 @@ if __name__ == "__main__":
 
     total_failed = 0
     for reason in failed_indices:
-        print(f"Failed due to {reason}: {failed_indices[reason]}")
+        print(f"Failed due to {reason}: {len(failed_indices[reason])}")
         output_metadata = output_metadata.drop(index=failed_indices[reason])
         total_failed += len(failed_indices[reason])
 
     output_metadata.to_csv(output_dir / f"metadata.csv", index=False)
-    print(f"Failed audios = {len(total_failed)}/{len(output_metadata)+len(total_failed)}")
+    print(f"Failed audios = {total_failed}/{len(output_metadata)+total_failed}")
