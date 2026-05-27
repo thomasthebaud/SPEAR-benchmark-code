@@ -13,10 +13,13 @@ for split in 'test' 'dev'; do
             python3 bin/STANCE/merge_outputs.py \
             --stances-original "results/$protocol/original/$split/$subset" \
             --stances-llm "results/$protocol/$llm_model/$split/$subset" \
-            --output-csv "$metrics/merged_stances.csv"
+            --output-csv "$metrics/merged_stances.csv" &
             
 
     done
 done
 
+wait
+echo "All STANCE metrics computed for original and $llm_model outputs."
+exit
   

@@ -7,6 +7,7 @@ source openai_keys.sh
 
 run_question=0
 run_inference=0
+force_recompute=0
 
 if [[ $# -eq 0 ]]; then
   run_question=1
@@ -25,14 +26,18 @@ while [[ $# -gt 0 ]]; do
       run_question=1
       run_inference=1
       ;;
+    --force-recompute)
+      force_recompute=1
+      ;;
     -h|--help)
       cat <<EOF
-Usage: bash 30_run_LLM_inference_STANCEs.sh [--question] [--inference] [--all]
+Usage: bash 30_run_LLM_inference_STANCEs.sh [--question] [--inference] [--all] [--force-recompute]
 
 Stages:
-  --question   Stage 1: create STANCE question CSVs
-  --inference  Stage 2: score STANCE question CSVs with the LLM judge
-  --all        Run both stages
+  --question         Stage 1: create STANCE question CSVs
+  --inference        Stage 2: score STANCE question CSVs with the LLM judge
+  --all              Run both stages
+  --force-recompute  Stage 2 recomputes all valid rows instead of only failed/missing rows
 
 If no stage is passed, both stages are run.
 EOF
@@ -47,6 +52,10 @@ EOF
 done
 
 INDICES=(0 1 2 3 4 5 6 7 8 9)
+force_args=()
+if [[ "$force_recompute" -eq 1 ]]; then
+  force_args+=(--force-recompute)
+fi
 
 if [[ "$run_question" -eq 1 ]]; then
 for split in 'test' 'dev'; do
@@ -107,14 +116,14 @@ for split in 'test' 'dev'; do
 
             echo "Predict STANCE Q$idx outputs for split:$split subset:$subset model:$model"
             questions_csv="data/$protocol/outputs/$model/$split/$subset/stance_questions_Q${idx}.csv"
-            srun -p cpu  --job-name 'SB30-S1.${idx}'\
-                python3 bin/STANCE/make_questions.py \
-                --metadata "$metadata" \
-                --questions-csv "$questions_csv" \
-                --roles "${ROLES[@]}" \
-                --input-mode "$INPUT_MODE" \
-                --assets_dir "$seamless_assets_dir" \
-                --question-index "$idx" &
+            
+            python3 bin/STANCE/make_questions.py \
+            --metadata "$metadata" \
+            --questions-csv "$questions_csv" \
+            --roles "${ROLES[@]}" \
+            --input-mode "$INPUT_MODE" \
+            --assets_dir "$seamless_assets_dir" \
+            --question-index "$idx" &
 
             done
         done
@@ -181,16 +190,22 @@ for split in 'test' 'dev'; do
                 ;;
             esac
 
-            echo "Predict STANCE Q$idx outputs for split:$split subset:$subset model:$model"
+            
             questions_csv="data/$protocol/outputs/$model/$split/$subset/stance_questions_Q${idx}.csv"
-            srun -p cpu  --job-name 'SB30-S2.${idx}'\
+            job_name="SB30-id$idx"
+            if [[ -f "$metrics/stance_metrics_Q${idx}.csv" ]]; then #ignore existing non-empty files unless --force-recompute is set
+              continue
+            fi
+            echo "Predict STANCE Q$idx outputs for split:$split subset:$subset model:$model"
+            srun -p cpu  --job-name $job_name \
                 python3 bin/STANCE/score.py \
                 --metadata "$metadata" \
                 --questions-csv "$questions_csv" \
                 --outputs_dir "$metrics" \
                 --eval_model "$stance_llm_model" \
                 --openai-api-key "$openai_api_key" \
-                --openai-org "$org" &
+                --openai-org "$org" \
+                "${force_args[@]}" &
 
             done
         done

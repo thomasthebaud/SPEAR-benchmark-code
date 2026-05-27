@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
+from tqdm import tqdm
 
 import audioop
 
@@ -300,32 +301,71 @@ class OpenAIChatClient:
         raise RuntimeError(f"OpenAI request failed after retries: {last_error}")
 
 
+METRIC_FIELDS = [
+    "stance_choice",
+    "stance_probability",
+    "stance_score",
+    "stance_evidence",
+    "stance_raw_response",
+    "stance_error",
+]
+
+
+def stance_row_key(row: dict[str, Any]) -> str:
+    row_idx = safe_str(row.get("row_idx"))
+    if row_idx:
+        return row_idx
+    return safe_str(row.get("audio_path"))
+
+
+def successful_score(row: dict[str, Any]) -> bool:
+    if safe_str(row.get("stance_error")):
+        return False
+    return all(safe_str(row.get(field)) for field in ("stance_choice", "stance_probability", "stance_score"))
+
+
+def load_previous_scores(output_path: Path) -> dict[str, dict[str, str]]:
+    if not output_path.exists():
+        return {}
+    return {
+        stance_row_key(row): row
+        for row in read_csv_rows(output_path)
+        if stance_row_key(row)
+    }
+
+
+def merge_previous_score(row: dict[str, str], previous: dict[str, str]) -> dict[str, Any]:
+    out = dict(row)
+    for field in METRIC_FIELDS:
+        out[field] = previous.get(field, "")
+    return out
+
+
+def failed_score(error: str, raw: str = "") -> dict[str, Any]:
+    return {
+        "stance_choice": "",
+        "stance_probability": "",
+        "stance_score": "",
+        "stance_evidence": "[]",
+        "stance_raw_response": raw,
+        "stance_error": safe_str(error)[:2000],
+    }
+
+
 def score_row(row: dict[str, str], client: OpenAIChatClient, temperature: float, max_tokens: int) -> dict[str, Any]:
     question_path = Path(safe_str(row.get("audio_path")))
     answer_path = Path(safe_str(row.get("answer_audio_path")))
     if not question_path.exists():
-        return {
-            "stance_choice": "",
-            "stance_probability": "",
-            "stance_score": "",
-            "stance_evidence": "[]",
-            "stance_raw_response": "",
-            "stance_error": f"missing question audio: {question_path}",
-        }
+        return failed_score(f"missing question audio: {question_path}")
     if not answer_path.exists():
-        return {
-            "stance_choice": "",
-            "stance_probability": "",
-            "stance_score": "",
-            "stance_evidence": "[]",
-            "stance_raw_response": "",
-            "stance_error": f"missing answer audio: {answer_path}",
-        }
+        return failed_score(f"missing answer audio: {answer_path}")
 
     patched_path = None
     try:
         patched_path = write_patched_audio(row)
         raw = client.complete(audio_path=patched_path, prompt=build_prompt(row), temperature=temperature, max_tokens=max_tokens)
+    except Exception as exc:
+        return failed_score(f"request_failed: {exc}")
     finally:
         if patched_path is not None:
             try:
@@ -334,19 +374,16 @@ def score_row(row: dict[str, str], client: OpenAIChatClient, temperature: float,
                 pass
     obj = extract_json_object(raw)
     if obj is None:
-        return {
-            "stance_choice": "",
-            "stance_probability": "",
-            "stance_score": "",
-            "stance_evidence": "[]",
-            "stance_raw_response": raw,
-            "stance_error": "invalid_json",
-        }
+        return failed_score("invalid_json", raw=raw)
 
-    choice = safe_str(obj.get("choice")).upper()
-    probability = float(obj.get("probability"))
-    score = map_choice_probability_to_score(choice, probability)
-    evidence = coerce_evidence(obj.get("evidence"))[:4]
+    try:
+        choice = safe_str(obj.get("choice")).upper()
+        probability = float(obj.get("probability"))
+        score = map_choice_probability_to_score(choice, probability)
+        evidence = coerce_evidence(obj.get("evidence"))[:4]
+    except Exception as exc:
+        return failed_score(f"invalid_response_fields: {exc}", raw=raw)
+
     return {
         "stance_choice": choice,
         "stance_probability": probability,
@@ -372,6 +409,7 @@ def main() -> None:
     parser.add_argument("--openai-max-retries", type=int, default=int(os.environ.get("OPENAI_MAX_RETRIES", 6)))
     parser.add_argument("--temperature", type=float, default=0.0)
     parser.add_argument("--max-tokens", type=int, default=128)
+    parser.add_argument("--force-recompute", action="store_true", help="Recompute all valid rows instead of only failed/missing rows.")
     args = parser.parse_args()
 
     rows = read_csv_rows(args.questions_csv)
@@ -385,51 +423,63 @@ def main() -> None:
         output_name = args.metrics_name or f"stance_metrics_Q{safe_str(rows[0].get('question_index')) if rows else 'NA'}.csv"
         output_path = args.outputs_dir / output_name
         original_fields = list(rows[0].keys()) if rows else []
-        metric_fields = [
-            "stance_choice",
-            "stance_probability",
-            "stance_score",
-            "stance_evidence",
-            "stance_raw_response",
-            "stance_error",
-        ]
-        write_csv_rows(output_path, [], original_fields + metric_fields)
+        write_csv_rows(output_path, [], original_fields + METRIC_FIELDS)
         print(f"Wrote STANCE metrics to {output_path}")
         return
 
-    if not args.openai_api_key:
-        raise SystemExit("Missing OPENAI_API_KEY. Export it or pass --openai-api-key.")
-
-    client = OpenAIChatClient(
-        api_key=args.openai_api_key,
-        model=args.eval_model,
-        base_url=args.openai_base_url,
-        timeout_s=args.openai_timeout_s,
-        max_retries=args.openai_max_retries,
-        organization=args.openai_org,
-        project=args.openai_project,
-    )
-
-    scored_rows: list[dict[str, Any]] = []
-    for idx, row in enumerate(valid_rows):
-        print(f"[{idx + 1}/{len(valid_rows)}] scoring row_idx={safe_str(row.get('row_idx'))}", flush=True)
-        result = score_row(row, client, args.temperature, args.max_tokens)
-        out = dict(row)
-        out.update(result)
-        scored_rows.append(out)
-
     output_name = args.metrics_name or f"stance_metrics_Q{safe_str(valid_rows[0].get('question_index'))}.csv"
     output_path = args.outputs_dir / output_name
+    previous_scores = {} if args.force_recompute else load_previous_scores(output_path)
+
+    rows_to_score: list[dict[str, str]] = []
+    reused_count = 0
+    for row in valid_rows:
+        previous = previous_scores.get(stance_row_key(row), {})
+        if previous and successful_score(previous):
+            reused_count += 1
+        else:
+            rows_to_score.append(row)
+
+    if reused_count:
+        print(f"Reusing {reused_count}/{len(valid_rows)} previously successful STANCE rows.", flush=True)
+    if rows_to_score:
+        print(f"Scoring {len(rows_to_score)}/{len(valid_rows)} STANCE rows.", flush=True)
+    else:
+        print("No STANCE rows need scoring.", flush=True)
+
+    newly_scored: dict[str, dict[str, Any]] = {}
+    if rows_to_score:
+        if not args.openai_api_key:
+            raise SystemExit("Missing OPENAI_API_KEY. Export it or pass --openai-api-key.")
+
+        client = OpenAIChatClient(
+            api_key=args.openai_api_key,
+            model=args.eval_model,
+            base_url=args.openai_base_url,
+            timeout_s=args.openai_timeout_s,
+            max_retries=args.openai_max_retries,
+            organization=args.openai_org,
+            project=args.openai_project,
+        )
+
+        for row in tqdm(rows_to_score, total=len(rows_to_score), desc="scoring STANCE rows"):
+            result = score_row(row, client, args.temperature, args.max_tokens)
+            out = dict(row)
+            out.update(result)
+            newly_scored[stance_row_key(row)] = out
+
+    scored_rows: list[dict[str, Any]] = []
+    for row in valid_rows:
+        key = stance_row_key(row)
+        if key in newly_scored:
+            scored_rows.append(newly_scored[key])
+        elif key in previous_scores and successful_score(previous_scores[key]):
+            scored_rows.append(merge_previous_score(row, previous_scores[key]))
+        else:
+            scored_rows.append(dict(row))
+
     original_fields = list(valid_rows[0].keys())
-    metric_fields = [
-        "stance_choice",
-        "stance_probability",
-        "stance_score",
-        "stance_evidence",
-        "stance_raw_response",
-        "stance_error",
-    ]
-    write_csv_rows(output_path, scored_rows, original_fields + metric_fields)
+    write_csv_rows(output_path, scored_rows, original_fields + METRIC_FIELDS)
     print(f"Wrote STANCE metrics to {output_path}")
 
 
