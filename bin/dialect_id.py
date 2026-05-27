@@ -113,18 +113,9 @@ def resolve_audio_path(audio_path: str, metadata_path: Path) -> Path:
 
 
 def load_answer_audio(row: pd.Series, metadata_path: Path, target_sr: int = 16000) -> torch.Tensor:
-    audio_path = resolve_audio_path(row["audio_path"], metadata_path)
+    audio_path = resolve_audio_path(row["answer_audio_path"], metadata_path)
     audio, sr = sf.read(audio_path, dtype="float32", always_2d=True)
 
-    start_time = float(row.get("question_end_time", 0.0) or 0.0)
-    total_duration = float(row.get("total_duration", 0.0) or 0.0)
-    if total_duration > 0 and start_time > total_duration:
-        start_time, total_duration = total_duration, start_time
-    if total_duration > 0:
-        start_time = min(start_time, total_duration)
-
-    start_sample = min(len(audio), int(start_time * sr))
-    audio = audio[start_sample:]
     if audio.shape[1] > 1:
         audio = audio.mean(axis=1)
     else:

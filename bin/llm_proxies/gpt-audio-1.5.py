@@ -46,8 +46,6 @@ def get_reply_with_audio(
 
     wav_path = convert_to_wav_strict(audio_path)
 
-    if not is_wav_long_enough(wav_path):
-        return None, None, "File too short", False, None
 
 
     audio_bytes_in = wav_path.read_bytes()
