@@ -234,10 +234,10 @@ def main() -> None:
     embed_index = build_embed_index(embed_root)
     print(f"  base_ids={len(embed_index)} total_chunks={sum(len(v) for v in embed_index.values())}")
 
-    pickle_dir = args.pickle_dir or infer_pickle_dir(args.metadata)
-    context_metadata = args.context_metadata or find_context_metadata(pickle_dir)
-    context_cache = args.context_cache or (pickle_dir / "context_hf_cache.pkl")
-    rel_cache = args.rel_cache or (pickle_dir / "relationship_hf_cache.pkl")
+    pickle_dir = args.pickle_dir
+    context_metadata = args.metadata
+    context_cache = pickle_dir / "context_hf_cache.pkl"
+    rel_cache = pickle_dir / "relationship_hf_cache.pkl"
 
     context_embed_map: Dict[str, np.ndarray] = {}
     rel_embed_map: Dict[str, np.ndarray] = {}

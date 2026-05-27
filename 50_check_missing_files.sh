@@ -9,7 +9,7 @@ subsets=(improvised naturalistic)
 models=(original "$llm_model")
 asr_models=(Qwen3-ASR-0.6B whisper-large-v3)
 stance_indices=(0) #(0 1 2 3 4 5 6 7 8 9), reduced for readability
-
+stance_indices=(0 1 2 3 4 5 6 7 8 9)
 missing_any=0
 
 check_files() {
@@ -27,10 +27,10 @@ check_files() {
   done
 
   if [[ ${#missing[@]} -eq 0 ]]; then
-    echo "script $script_id - model $model - subset $subset_label - all computed"
+    echo -e "[X] script $script_id\t- model $model\t- subset $subset_label \t- all computed"
   else
-    echo "script $script_id - model $model - subset $subset_label - file missing"
-    printf '  missing: %s\n' "${missing[@]}"
+    echo -e "[ ] script $script_id\t- model $model\t- subset $subset_label \t- file missing"
+    printf '  missing: %s\n' "${missing[@]}" 
     missing_any=1
   fi
 }

@@ -16,7 +16,9 @@ import torch.nn.functional as F
 from tqdm import tqdm
 
 
-FILE_ID_RE = re.compile(r"(V\d+_S\d+_I\d+_P\d+A?)")
+FILE_ID_RE = re.compile(r"(V\d+_S\d+_I\d+_P[^_./\\]+)")
+CONVERSATION_ID_RE = re.compile(r"(V\d+_S\d+_I\d+)")
+INTERACTION_ID_RE = re.compile(r"_I(\d+)")
 
 
 def safe_str(value: Any) -> str:
@@ -69,16 +71,63 @@ def read_csv_rows(path: Path) -> list[dict]:
         return list(csv.DictReader(infile))
 
 
+def conversation_id_from_file_id(file_id: str) -> str:
+    match = CONVERSATION_ID_RE.search(safe_str(file_id))
+    return match.group(1) if match else ""
+
+
+def interaction_key(value: str) -> str:
+    match = INTERACTION_ID_RE.search(safe_str(value))
+    if not match:
+        return ""
+    return f"interaction:{int(match.group(1))}"
+
+
+def row_index_key(row: dict) -> str:
+    for key in ("", "Unnamed: 0"):
+        value = safe_str(row.get(key))
+        if value:
+            try:
+                return f"interaction:{int(float(value))}"
+            except ValueError:
+                return ""
+    return ""
+
+
+def load_indexed_interaction_assets(assets_dir: Path, filename: str) -> dict[str, dict]:
+    path = assets_dir / filename
+    if not path.exists():
+        return {}
+    out: dict[str, dict] = {}
+    for row in read_csv_rows(path):
+        key = row_index_key(row)
+        if key and key not in out:
+            out[key] = row
+    return out
+
+
 def load_abmapped_assets(assets_dir: Path) -> dict[str, dict]:
+    by_file_id: dict[str, dict] = {}
+
+    for filename in ("interactions.csv", "interactions_role.csv"):
+        for key, row in load_indexed_interaction_assets(assets_dir, filename).items():
+            by_file_id.setdefault(key, row)
+
     path = assets_dir / "interactions_role_ABmapped.csv"
     rows = read_csv_rows(path)
-    by_file_id: dict[str, dict] = {}
     for row in rows:
         for side in ("a", "b"):
             file_id = safe_str(row.get(f"{side}_id"))
             if not file_id:
                 continue
             by_file_id[file_id] = row
+
+            conversation_id = conversation_id_from_file_id(file_id)
+            if conversation_id:
+                by_file_id[conversation_id] = row
+                key = interaction_key(conversation_id)
+                if key:
+                    by_file_id[key] = row
     return by_file_id
 
 
@@ -98,13 +147,27 @@ def load_relationship_assets(assets_dir: Path) -> dict[tuple[str, str], str]:
 def extract_file_ids(row: dict) -> list[str]:
     candidates = [
         safe_str(row.get("audio_path")),
+        safe_str(row.get("answer_audio_path")),
         safe_str(row.get("initial_conversation")),
+        safe_str(row.get("conversation_id")),
     ]
+
+    conversation_id = safe_str(row.get("conversation_id"))
+    speakers = [speaker.strip() for speaker in safe_str(row.get("speakers")).split("|") if speaker.strip()]
+    if conversation_id:
+        candidates.extend(f"{conversation_id}_{speaker}" for speaker in speakers)
+
     found: list[str] = []
     for text in candidates:
         for match in FILE_ID_RE.findall(text):
             if match not in found:
                 found.append(match)
+        for match in CONVERSATION_ID_RE.findall(text):
+            if match not in found:
+                found.append(match)
+            key = interaction_key(match)
+            if key and key not in found:
+                found.append(key)
     return found
 
 
@@ -116,15 +179,16 @@ def get_asset_row(row: dict, by_file_id: dict[str, dict]) -> dict:
 
 
 def relationship_detail(row: dict, asset_row: dict, relationship_assets: dict[tuple[str, str], str]) -> str:
-    vendor = safe_str(row.get("initial_conversation")).split("_", maxsplit=1)[0]
+    conversation_id = safe_str(row.get("initial_conversation")) or safe_str(row.get("conversation_id"))
+    vendor = conversation_id.split("_", maxsplit=1)[0]
     session = ""
-    if "_S" in safe_str(row.get("initial_conversation")):
-        session = safe_str(row.get("initial_conversation")).split("_S", maxsplit=1)[1].split("_", maxsplit=1)[0]
+    if "_S" in conversation_id:
+        session = conversation_id.split("_S", maxsplit=1)[1].split("_", maxsplit=1)[0]
 
     return (
         relationship_assets.get((vendor, session), "")
         or safe_str(asset_row.get("interaction_type"))
-        or safe_str(row.get("initial_conversation"))
+        or conversation_id
     )
 
 
@@ -133,7 +197,7 @@ def context_text(asset_row: dict, row: dict) -> str:
     prompt_b = safe_str(asset_row.get("participant_b_prompt_text"))
     if prompt_a or prompt_b:
         return f"{prompt_a} [SEP] {prompt_b}".strip()
-    return safe_str(row.get("transcript"))
+    return safe_str(row.get("transcript_question")) or safe_str(row.get("transcript"))
 
 
 def rel_text(row: dict, asset_row: dict, relationship_assets: dict[tuple[str, str], str], template: str) -> str:
@@ -214,8 +278,8 @@ if __name__ == "__main__":
     parser.add_argument("--assets-dir", type=Path, required=True, help="Absolute path to seamless assets directory.")
     parser.add_argument("--text-model", type=str, default="sentence-transformers/all-MiniLM-L6-v2")
     parser.add_argument("--rel-text-template", type=str, default="{speaker_a_role} [SEP] {speaker_b_role} [SEP] {rel_detail}")
-    parser.add_argument("--context-cache-name", type=str, default="context_hf_cache.pkl")
-    parser.add_argument("--rel-cache-name", type=str, default="relationship_hf_cache.pkl")
+    parser.add_argument("--context-cache-name", type=Path, default="context_hf_cache.pkl")
+    parser.add_argument("--rel-cache-name", type=Path, default="relationship_hf_cache.pkl")
     parser.add_argument("--batch-size", type=int, default=256)
     parser.add_argument("--max-len", type=int, default=256)
     parser.add_argument("--text-fp16", action="store_true")
@@ -242,7 +306,7 @@ if __name__ == "__main__":
     output_dir = args.metadata.parent
     build_cache(
         context_texts,
-        output_dir / args.context_cache_name,
+        args.context_cache_name,
         args.text_model,
         args.batch_size,
         args.max_len,
@@ -251,7 +315,7 @@ if __name__ == "__main__":
     )
     build_cache(
         relationship_texts,
-        output_dir / args.rel_cache_name,
+        args.rel_cache_name,
         args.text_model,
         args.batch_size,
         args.max_len,
