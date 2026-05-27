@@ -341,15 +341,34 @@ results/$protocol/$model/$split/$subset/distrib_baselines_features.csv
 
 Trains dev-set explainable-feature baselines and scores test utterances for `$llm_model`. It reads feature CSVs from `results/$protocol`, trains per-feature classifiers for `improvised` and `naturalistic`, and writes per-utterance scores and summaries under `results/$protocol/$llm_model/`.
 
-### `50_generate_report.sh`
+### `50_check_missing_files.sh`
+
+Checks whether the expected output files from scripts `01` through `41` have been produced. It sources `config.sh`, then verifies the expected metadata, transcript, metric, language/dialect, naturalness, STANCE, and explainable-feature files for every relevant split, subset, and model.
+
+Run it from the benchmark directory with:
+
+```bash
+bash 50_check_missing_files.sh
+```
+
+It prints one status line per checked combination, for example:
+
+```text
+script 10 - model original - subset test/improvised - all computed
+script 11 - model $llm_model - subset dev/naturalistic - file missing
+```
+
+When files are missing, it prints the missing paths below the status line. The script exits with status `0` if all expected files exist and `1` if any file is missing.
+
+### `51_generate_report.sh`
 
 Generates human-readable reports from pipeline outputs. It has three optional stages:
 
 ```bash
-bash 50_generate_report.sh --short
-bash 50_generate_report.sh --graphs
-bash 50_generate_report.sh --long
-bash 50_generate_report.sh --all
+bash 51_generate_report.sh --short
+bash 51_generate_report.sh --graphs
+bash 51_generate_report.sh --long
+bash 51_generate_report.sh --all
 ```
 
 If no option is passed, the script runs `--short`.
