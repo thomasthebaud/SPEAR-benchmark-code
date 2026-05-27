@@ -6,8 +6,8 @@ source config.sh
 source openai_keys.sh
 
 INDICES=(0 1 2 3 4 5 6 7 8 9)
-for split in 'test'; do
-    for subset in 'improvised'; do
+for split in 'test' 'dev'; do
+    for subset in 'improvised'; do #never run on naturalistic, original paper needs ground truth stances, only available for the improvised subset
         for model in 'original' $llm_model; do
             metadata="data/$protocol/outputs/$model/$split/$subset/metadata.csv"
             metrics="results/$protocol/$model/$split/$subset"
@@ -64,7 +64,7 @@ for split in 'test'; do
 
             echo "Predict STANCE Q$idx outputs for split:$split subset:$subset model:$model"
             questions_csv="data/$protocol/outputs/$model/$split/$subset/stance_questions_Q${idx}.csv"
-            srun -p cpu \
+            srun -p cpu  --job-name 'SB30-S1.${idx}'\
                 python3 bin/STANCE/make_questions.py \
                 --metadata "$metadata" \
                 --questions-csv "$questions_csv" \
@@ -73,7 +73,7 @@ for split in 'test'; do
                 --assets_dir "$seamless_assets_dir" \
                 --question-index "$idx" 
 
-            srun -p cpu \
+            srun -p cpu  --job-name 'SB30-S2.${idx}'\
                 python3 bin/STANCE/score.py \
                 --metadata "$metadata" \
                 --questions-csv "$questions_csv" \

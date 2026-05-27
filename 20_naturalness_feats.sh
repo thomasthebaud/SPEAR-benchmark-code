@@ -10,7 +10,7 @@ for split in 'test' 'dev'; do
 
           echo "Extract features for split $split subset $subset model $model"
 
-          srun -p gpu --gpus 1 \
+          srun -p gpu --gpus 1 --job-name 'SB20' \
             python3 bin/naturalness/extract_features.py \
               --metadata $metadata \
               --min-len-question 3.0 &

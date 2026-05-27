@@ -13,7 +13,7 @@ for split in 'test' 'dev'; do
             for asr in 'Qwen3-ASR-0.6B' 'whisper-large-v3'; do
                 echo "running analysis for $model $split $subset ASR model=$asr"
                 data_dir="data/$protocol/outputs/$model"
-                srun -p gpu --gpus 1 python3 bin/transcribe.py \
+                srun -p gpu  --job-name 'SB03' --gpus 1 python3 bin/transcribe.py \
                     --data_dir "$data_dir" \
                     --model "$asr" \
                     --split "$split" \

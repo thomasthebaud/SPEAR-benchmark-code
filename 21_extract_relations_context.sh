@@ -9,7 +9,7 @@ for split in 'test' 'dev'; do
     output_dir=data/$protocol/inputs/$split/$subset
 
     echo "Extract and pickle context and relationship for split:$split subset:$subset"
-    srun -p cpu \
+    srun -p cpu  --job-name 'SB21' \
       python3 bin/naturalness/extract_pickles.py \
         --metadata $metadata \
         --assets-dir $seamless_assets_dir \

@@ -11,7 +11,7 @@ for split in 'test' 'dev'; do
       output=results/$protocol/$model/$split/$subset/distrib_baselines_features.csv
 
       echo "Extract explainable features for split:$split subset:$subset model:$model"
-      srun -p cpu \
+      srun -p cpu  --job-name 'SB40' \
         python3 bin/distrib_baselines/extract_features.py \
           --metadata "$metadata" \
           --relationships-csv "$seamless_assets_dir/relationships.csv" \

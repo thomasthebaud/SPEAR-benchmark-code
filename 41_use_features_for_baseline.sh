@@ -6,7 +6,7 @@ source config.sh
 
 echo "Train dev-set explainable-feature baselines and score test utterances for model:$llm_model"
 
-srun -p cpu \
+srun -p cpu --job-name 'SB41' \
   python3 bin/distrib_baselines/compute_results.py \
     --results-root "results/$protocol" \
     --model "$llm_model" \

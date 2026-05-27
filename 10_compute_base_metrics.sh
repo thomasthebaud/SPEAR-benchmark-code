@@ -12,9 +12,9 @@ for split in 'test' 'dev'; do
             echo "### Running base metrics for $model $split $subset ###"
             metadata=data/$protocol/outputs/$model/$split/$subset/metadata.csv
             outputs=results/$protocol/$model/$split/$subset/base_metrics.csv
-            srun -p cpu python3 bin/base_metrics.py \
+            srun -p gpu --gpus 1 --job-name 'SB10' python3 bin/base_metrics.py \
                 --metadata $metadata \
-                --outputs $outputs
+                --outputs $outputs &
 
         done
     done

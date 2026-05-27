@@ -11,7 +11,7 @@ echo "Output data directory: $data_dir/'inputs' "
 
 for split in 'test' 'dev'; do
     for subset in 'improvised' 'naturalistic'; do
-        srun -p cpu python3 bin/prepare_data_from_seamless.py \
+        srun -p cpu --job-name 'SB01' python3 bin/prepare_data_from_seamless.py \
             --data_dir $seamless_data_dir \
             --questions_output_dir $data_dir/'inputs' \
             --answers_output_dir $data_dir/'outputs/original' \
