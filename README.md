@@ -2,11 +2,11 @@
 
 SPEARBench is a benchmark repository created for the SPEAR project, funded by Amazon and developed at Johns Hopkins University.
 
-The goal of the project is to evaluate the naturalness of speech-to-speech large language models in conversational settings. This repository contains code to create an evaluation dataset, simulate conversations with an LLM, analyze the generated answers, and produce evaluation reports.
+The benchmark evaluates speech-to-speech language models in conversational settings. It prepares question-answer dialogue clips from Seamless Interaction, runs speech-to-speech LLM inference, transcribes answers, computes audio/text metrics, scores naturalness and STANCE behavior, extracts explainable baseline features, and generates reports.
 
 ## Data Setup
 
-SPEARBench builds its evaluation clips from the Seamless Interaction dataset. Download the `dev` and `test` splits for both labels used by the benchmark:
+SPEARBench builds evaluation clips from the Seamless Interaction dataset. Download the `dev` and `test` splits for both labels used by the benchmark:
 
 - `improvised/dev`
 - `improvised/test`
@@ -76,17 +76,11 @@ seamless_data_dir="/path/to/seamless_interaction/datasets/"
 seamless_assets_dir="data/seamless_assets"
 ```
 
-If your data lives outside this repository, either point `seamless_data_dir` to that location or create a symlink:
-
-```bash
-ln -s /path/to/seamless_interaction SPEARBench/data/seamless_interaction
-```
-
-The preparation script `01_prepare_data_from_seamless.sh` will then convert the downloaded Seamless Interaction files into the SPEARBench metadata and audio layout under `benchmark/data/$protocol`.
+If your data lives outside this repository, either point `seamless_data_dir` to that location or create a symlink.
 
 ## Installation
 
-The benchmark uses a conda environment defined in `environment.yml`.
+The benchmark uses the conda environment defined in `environment.yml`.
 
 From this directory:
 
@@ -101,14 +95,15 @@ If you update `environment.yml` later, refresh the environment with:
 conda env update -f environment.yml --prune
 ```
 
-The environment installs PyTorch with CUDA 11.8 wheels through pip, including:
+The environment currently uses Python 3.11 and CUDA 11.8 PyTorch wheels, including:
 
 ```text
 torch==2.7.1+cu118
 torchaudio==2.7.1+cu118
+torchvision==0.22.1+cu118
 ```
 
-It also includes the analysis and plotting packages used by the reporting pipeline, including `pandas`, `scipy`, `scikit-learn`, `matplotlib`, and `seaborn`.
+It also installs packages used by the benchmark pipeline, including `pandas`, `scipy`, `scikit-learn`, `librosa`, `matplotlib`, `seaborn`, `soundfile`, `qwen-asr`, `silero-vad`, `sentence-transformers`, and the VoxLect/Whisper dependencies.
 
 ## Configuration
 
@@ -118,32 +113,69 @@ Important fields:
 
 - `seamless_data_dir`: path to the Seamless Interaction dataset directory.
 - `seamless_assets_dir`: path to the benchmark assets directory, usually `data/seamless_assets`.
-- `protocol`: name of the benchmark protocol to create and evaluate.
+- `protocol`: name of the benchmark protocol to create and evaluate. The current default is `seamless_2t_2s_questions`.
 - `data_dir`: derived output data directory for the selected protocol.
-- `llm_model`: speech-to-speech LLM used to generate answers.
-- `asr`: ASR model used to transcribe generated audio.
-  - Supported values: `whisper-large-v3` and `Qwen3.0-ASR-0.6B`.
-- `stance_llm_model`: LLM used to score STANCE outputs.
+- `llm_model`: speech-to-speech LLM used to generate answers. Current proxy files include `gpt-audio-1.5`, `gpt-realtime-2`, and the older `gpt-4o-audio-preview-2025-06-03`.
+- `language_id_model`: Hugging Face audio language ID model, currently `facebook/mms-lid-126`.
+- `dialect_id_model`: VoxLect dialect model used by the language/dialect stage.
+- `asr`: ASR model name used in report labels. Transcription currently runs both `Qwen3-ASR-0.6B` and `whisper-large-v3`.
+- `stance_llm_model`: LLM used as the STANCE judge.
+- `statistical_test`: statistical test used by report p-values.
 
-OpenAI-based scripts also read credentials from `openai_keys.sh`. Create or edit that file with your API credentials before running inference or STANCE scoring.
-
-Example:
+OpenAI-based scripts read credentials from `openai_keys.sh`. Create or edit that file before running LLM inference or STANCE scoring:
 
 ```bash
 openai_api_key="YOUR_API_KEY"
 org="YOUR_ORG_ID"
 ```
 
-### Model proxy configuration
+## Model Proxies
 
-The `02_run_LLM_inference.sh` runner now selects a model proxy based on the configured `llm_model` name.
-Each model should have a corresponding proxy module at `benchmark/bin/llm_proxies/${llm_model}.py`.
-For example:
+`02_run_LLM_inference.sh` selects a model proxy based on `llm_model`. Each speech-to-speech backend should have a module at:
 
-- `llm_model=gpt-4o-audio` → `benchmark/bin/llm_proxies/gpt-4o-audio.py`
-- `llm_model=gpt-realtime-2` → `benchmark/bin/llm_proxies/gpt-realtime-2.py`
+```text
+benchmark/bin/llm_proxies/${llm_model}.py
+```
 
-This proxy file must implement the inference interface used by the runner, so new speech-to-speech backend models can be added without changing the main script.
+The proxy must define `get_reply_with_audio(...)` and return the answer audio bytes, answer transcript, finish reason, success flag, and answer start time. `run_LLM_inference.py` saves only the answer audio, not the full question+answer conversation.
+
+## Data Layout
+
+`01_prepare_data_from_seamless.sh` writes question clips under:
+
+```text
+data/$protocol/inputs/$split/$subset/
+```
+
+and original answer clips under:
+
+```text
+data/$protocol/outputs/original/$split/$subset/
+```
+
+LLM-generated answer clips are written under:
+
+```text
+data/$protocol/outputs/$llm_model/$split/$subset/
+```
+
+Each metadata CSV uses the current question-answer schema. The diagram below illustrates how the fields created by `01_prepare_data_from_seamless.sh` relate to the question and answer audio:
+
+![Metadata fields created by script 01](metadata_fields.png)
+
+- `audio_path`: question/context audio clip.
+- `answer_audio_path`: answer-only audio clip.
+- `context_end_time`: time in `audio_path` where the final context ends and the question turn begins.
+- `question_end_time`: time in `audio_path` where the question ends.
+- `answer_duration`: duration of the answer-only audio.
+- `speakers`: pipe-separated speaker IDs.
+- `conversation_id`: source Seamless conversation ID.
+- `transcript_question`: text for the context and question.
+- `transcript_answer`: text for the answer.
+- `answer_start_time`: answer onset relative to the end of the question. `0` means immediate answer, positive values mean a pause, and negative values mean the answer starts before the question audio has fully ended.
+- `finish_reason`: LLM proxy finish status, present for generated outputs.
+
+This split question/answer layout is important: most metric scripts analyze `answer_audio_path`, while naturalness and STANCE reconstruct the two-turn interaction when they need the question and answer together.
 
 ## Pipeline Scripts
 
@@ -151,82 +183,167 @@ Run scripts from the `benchmark` directory. The scripts are numbered in the inte
 
 ### `01_prepare_data_from_seamless.sh`
 
-Creates the benchmark data from the Seamless Interaction dataset. It selects conversations ending in a question, writes input question clips, writes original answer clips, and saves metadata for `test` and `dev` splits across `improvised` and `naturalistic` subsets.
+Creates the benchmark data from Seamless Interaction. It selects two-speaker dialogues with at least two turns where a speaker asks a question and the next speaker answers. It exports:
+
+- question/context stereo clips to `data/$protocol/inputs/$split/$subset/audios/`;
+- original answer-only stereo clips to `data/$protocol/outputs/original/$split/$subset/audios/`;
+- metadata with `context_end_time`, `question_end_time`, `answer_start_time`, and answer transcript fields.
+
+After preparation, `bin/data_prep_summary.py` prints a compact summary for the original-answer outputs.
 
 ### `02_run_LLM_inference.sh`
 
-Runs speech-to-speech LLM inference on the prepared input audio clips. It sends each input audio file to the configured `llm_model`, loads the corresponding proxy module from `benchmark/bin/llm_proxies/${llm_model}.py`, saves the generated audio response, and writes output metadata.
+Runs speech-to-speech LLM inference on the prepared question clips. It sends each `audio_path` from the input metadata to the configured proxy and writes generated answer-only audio to `data/$protocol/outputs/$llm_model/$split/$subset/audio/`.
 
-The data preparation script now generates question and answer clips from conversations ending in a question, so the inference stage receives inputs that are already framed as question prompts with metadata for response alignment.
+The runner keeps the original question metadata and adds or updates:
+
+- `answer_audio_path`
+- `transcript_answer`
+- `answer_start_time`, stored relative to `question_end_time`
+- `answer_duration`
+- `finish_reason`
+
+Existing output metadata causes the script to skip that split/subset.
 
 ### `03_transcribe.sh`
 
-Runs ASR over generated and original answer audio with Whisper and Qwen ASR models. It writes model-specific transcript CSV files next to each metadata file instead of modifying the original metadata, for example:
+Runs ASR over original and generated answer audio for both `dev` and `test`, both subsets, and both models. It currently runs:
+
+- `Qwen3-ASR-0.6B`
+- `whisper-large-v3`
+
+Transcript CSVs are written next to each metadata file, for example:
 
 ```text
-data/$protocol/outputs/$model/$split/$subset/whisper-large-v3_transcripts.csv
 data/$protocol/outputs/$model/$split/$subset/Qwen3-ASR-0.6B_transcripts.csv
-```
-
-If you need to pre-download the Qwen ASR model weights, run:
-
-```bash
-huggingface-cli download Qwen/Qwen3-ASR-0.6B --local-dir models/Qwen3-ASR-0.6B
+data/$protocol/outputs/$model/$split/$subset/whisper-large-v3_transcripts.csv
 ```
 
 ### `10_compute_base_metrics.sh`
 
-Computes base answer metrics for the test set, including ASR text error metrics, response latency, and UTMOS-style speech quality scores.
+Computes answer-level base metrics for every split/subset/model combination and writes:
+
+```text
+results/$protocol/$model/$split/$subset/base_metrics.csv
+```
+
+Current metrics include WER/CER when ASR transcripts are present, response latency from VAD, interruption count, interrupted time in milliseconds, and UTMOS speech quality. These metrics operate on `answer_audio_path` and use `answer_start_time` for interruption-related measures.
+
+### `11_language_dialect.sh`
+
+Runs language and dialect analysis on answer audio. With no arguments it runs all stages:
+
+```bash
+bash 11_language_dialect.sh
+```
+
+Optional stages:
+
+```bash
+bash 11_language_dialect.sh --language
+bash 11_language_dialect.sh --dialect
+bash 11_language_dialect.sh --summary
+bash 11_language_dialect.sh --all
+```
+
+Stage 1 writes language predictions to:
+
+```text
+results/$protocol/$model/$split/$subset/language_id.csv
+```
+
+Stage 2 writes dialect predictions to:
+
+```text
+results/$protocol/$model/$split/$subset/dialect_id.csv
+```
+
+Dialect prediction uses language predictions to decide whether an utterance should be sent to the English VoxLect model. The summary stage prints language and dialect aggregate counts for `original` and `$llm_model`.
 
 ### `20_naturalness_feats.sh`
 
-Extracts audio features used by the naturalness model. It processes each utterance with the VoxProfile-style Whisper emotion feature extractor and saves features under each metadata directory.
+Extracts VoxProfile-style Whisper emotion features used by the naturalness model for `dev` and `test`, both subsets, and both `original` and `$llm_model` outputs.
+
+`bin/naturalness/extract_features.py` now handles the split question/answer layout. For each metadata row it:
+
+- loads the question from `audio_path`, using only `context_end_time` through the end of the question file;
+- loads the full answer from `answer_audio_path`;
+- chunks each turn separately with the configured sliding 3 second windows;
+- computes question embeddings and answer embeddings separately;
+- concatenates the resulting embeddings and saves them under a single base key, so downstream scoring sees one sequence for the row;
+- skips rows where all expected embedding chunks already exist;
+- skips questions shorter than `--min-len-question`, currently set to `3.0` by the shell script.
+
+Features are saved under:
+
+```text
+data/$protocol/outputs/$model/$split/$subset/naturalness/voxprofile_features/
+```
 
 ### `21_extract_relations_context.sh`
 
-Builds context and relationship text embedding caches for naturalness scoring. These caches are created from the input metadata and Seamless asset files.
+Builds text embedding caches used by naturalness scoring from input metadata and Seamless asset files. It writes:
+
+```text
+data/$protocol/inputs/$split/$subset/context_hf_cache.pkl
+data/$protocol/inputs/$split/$subset/relationship_hf_cache.pkl
+```
 
 ### `22_score_naturalness.sh`
 
-Scores each utterance with the trained naturalness model. It combines extracted audio features with cached context and relationship embeddings, then writes naturalness predictions and scores to `results/`.
+Scores utterances with the trained naturalness model. It combines precomputed audio embeddings with cached context and relationship embeddings and writes outputs under:
+
+```text
+results/$protocol/$model/$split/$subset/
+```
+
+The current shell script runs this scoring stage for both `test` and `dev`, across both subsets and both `original` and `$llm_model`.
 
 ### `30_run_LLM_inference_STANCEs.sh`
 
-Builds STANCE question CSVs and uses an LLM judge to score conversational stance dimensions. The script runs across the configured STANCE question indices and role sets.
+Builds STANCE question CSVs and uses an LLM judge to score stance/tone/style dimensions. It currently runs STANCE question indices `0` through `9` for `dev` and `test`, only on the `improvised` subset, for both `original` and `$llm_model`. The naturalistic subset is intentionally skipped because the STANCE setup depends on ground-truth stance role metadata available for improvised interactions.
+
+For each question index, `bin/STANCE/make_questions.py` filters rows by role/category and writes:
+
+```text
+data/$protocol/outputs/$model/$split/improvised/stance_questions_Q<idx>.csv
+```
+
+`bin/STANCE/score.py` then sends a patched two-turn audio file to the judge model. It loads the question from `audio_path`, the answer from `answer_audio_path`, and reconstructs their timing using `answer_start_time`:
+
+- `answer_start_time == 0`: answer starts immediately after the question.
+- `answer_start_time > 0`: silence is inserted before the answer.
+- `answer_start_time < 0`: the answer overlaps the end of the question, representing an interruption.
+
+The temporary patched WAV is deleted after the request. STANCE metrics are written under:
+
+```text
+results/$protocol/$model/$split/improvised/
+```
 
 ### `31_compute_STANCE_metrics.sh`
 
-Merges STANCE outputs from original and LLM-generated answers into a combined CSV for comparison.
+Merges STANCE outputs from `original` and `$llm_model` for `dev` and `test`, improvised only. The merged output is:
+
+```text
+results/$protocol/$llm_model/$split/improvised/merged_stances.csv
+```
 
 ### `40_extract_explainable_features.sh`
 
-Extracts explainable distributional baseline features for each utterance. It computes prosodic/F0, lexical, and temporal-style features from metadata and audio, then writes:
+Extracts explainable distributional baseline features for every split/subset/model combination. It computes prosodic, lexical, temporal, and relationship-aware features from metadata and audio, then writes:
 
 ```text
 results/$protocol/$model/$split/$subset/distrib_baselines_features.csv
 ```
 
-The script processes the `dev` and `test` splits, both `improvised` and `naturalistic` subsets, and both `original` and the configured `$llm_model`.
-
 ### `41_use_features_for_baseline.sh`
 
-Uses the explainable features extracted by `40_extract_explainable_features.sh` to build per-feature distributional baselines. For each subset, it trains a linear discriminant classifier on the `dev` split to distinguish `original` utterances from `$llm_model` utterances, then scores every test utterance.
-
-It writes per-utterance scores under:
-
-```text
-results/$protocol/$llm_model/test/$subset/distrib_baselines_feature_scores.csv
-```
-
-It also writes a summary of per-feature classification accuracy and AUROC:
-
-```text
-results/$protocol/$llm_model/distrib_baselines_summary.csv
-```
+Trains dev-set explainable-feature baselines and scores test utterances for `$llm_model`. It reads feature CSVs from `results/$protocol`, trains per-feature classifiers for `improvised` and `naturalistic`, and writes per-utterance scores and summaries under `results/$protocol/$llm_model/`.
 
 ### `50_generate_report.sh`
 
-Generates human-readable reports from the outputs of the benchmark pipeline. The script has three optional stages:
+Generates human-readable reports from pipeline outputs. It has three optional stages:
 
 ```bash
 bash 50_generate_report.sh --short
@@ -237,9 +354,7 @@ bash 50_generate_report.sh --all
 
 If no option is passed, the script runs `--short`.
 
-#### Stage 1: Short Report
-
-Reads the outputs of `10_compute_base_metrics.sh`, `22_score_naturalness.sh`, `31_compute_STANCE_metrics.sh`, and `41_use_features_for_baseline.sh`. It writes:
+The short report reads base metrics, naturalness scores, merged STANCE metrics, and explainable baseline outputs. It writes:
 
 ```text
 reports/$llm_model/report.txt
@@ -247,46 +362,19 @@ reports/$llm_model/metrics-improvised.csv
 reports/$llm_model/metrics-naturalistic.csv
 ```
 
-The text report contains sections for:
-
-- setup information, including the protocol, ASR model, evaluated LLM, STANCE inference LLM, and SBERT model used for naturalness prediction;
-- data statistics;
-- basic metrics from script `10`, such as WER/CER, UTMOS, and latency when available;
-- emotional naturalness comparisons from `naturalness_scores.csv`;
-- STANCE and explainable-feature summaries.
-
-The metrics CSV files use one row per metric and columns for mean difference, standard deviation, p-value, AUROC, accuracy, and additional detail. STANCE metrics are reported for `improvised` only.
-
-#### Stage 2: Graphs
-
-Generates plots with `matplotlib` and `seaborn`, saved under:
+The graph stage writes plots under:
 
 ```text
 reports/$llm_model/graphs/
 ```
 
-Main graph outputs include:
-
-```text
-reports/$llm_model/graphs/basic_metric_graphs/<metric>.png
-reports/$llm_model/graphs/basic_metrics.png
-reports/$llm_model/graphs/feat_graphs/<feature_name>.png
-reports/$llm_model/graphs/stances.png
-reports/$llm_model/graphs/emo_naturalness.png
-reports/$llm_model/graphs/explainables.png
-```
-
-The explainable-feature overview uses normalized horizontal violin plots, with separate panels for `improvised` and `naturalistic`. Feature labels are marked with significance stars based on the test-set p-value.
-
-#### Stage 3: Detailed HTML Report
-
-Builds a browser-readable report from the short report, metrics CSVs, and generated graphs:
+The long report stage writes:
 
 ```text
 reports/$llm_model/detailed_report.html
 ```
 
-The HTML report includes rendered tables, sectioned metric summaries, and graph galleries for basic metrics, emotional naturalness, STANCEs, and explainable features.
+Report generation uses `statistical_test` from `config.sh`, defaulting to Welch t-test if the variable is unset.
 
 ## Outputs
 
@@ -296,9 +384,21 @@ The main benchmark outputs are written under:
 results/$protocol/$model/$split/$subset/
 ```
 
-Typical outputs include base metrics, naturalness scores, STANCE metrics, merged STANCE outputs, explainable baseline features, and per-feature baseline scores.
+Typical outputs include:
 
-The final report artifacts are written under:
+```text
+base_metrics.csv
+language_id.csv
+dialect_id.csv
+naturalness_scores.csv
+naturalness_predictions_raw.csv
+stance_metrics_Q<idx>.csv
+merged_stances.csv
+distrib_baselines_features.csv
+distrib_baselines_feature_scores.csv
+```
+
+Final report artifacts are written under:
 
 ```text
 reports/$llm_model/
@@ -313,6 +413,15 @@ metrics-naturalistic.csv
 graphs/
 detailed_report.html
 ```
+
+## Notes and Current Assumptions
+
+- Most scripts are intended to be launched from `SPEARBench/benchmark` and source `config.sh`.
+- Several scripts submit work with `srun`, so the expected execution environment is an HPC cluster with CPU and GPU partitions named in the scripts.
+- Audio metadata paths are stored as relative paths under the benchmark directory in the generated CSVs.
+- LLM output audio is answer-only. Scripts that need the full interaction reconstruct it from `audio_path`, `answer_audio_path`, and `answer_start_time`.
+- STANCE currently runs on `improvised` only.
+- Naturalness feature extraction skips already-computed embedding chunks; remove the existing `naturalness/voxprofile_features` directory if you need a clean recompute.
 
 ## Contact
 
