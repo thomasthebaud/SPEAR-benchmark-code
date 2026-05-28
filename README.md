@@ -324,6 +324,8 @@ results/$protocol/$model/$split/$subset/
 
 The current shell script runs this scoring stage for both `test` and `dev`, across both subsets and both `original` and `$llm_model`.
 
+Scripts `20`, `21`, and `22` are based on the TRACE emotional naturalness pipeline. See [References](#references) for the paper citation and full implementation.
+
 ### `30_run_LLM_inference_STANCEs.sh`
 
 Builds STANCE question CSVs and uses an LLM judge to score stance/tone/style dimensions. It currently runs STANCE question indices `0` through `9` for `dev` and `test`, only on the `improvised` subset, for both `original` and `$llm_model`. The naturalistic subset is intentionally skipped because the STANCE setup depends on ground-truth stance role metadata available for improvised interactions.
@@ -353,6 +355,8 @@ Merges STANCE outputs from `original` and `$llm_model` for `dev` and `test`, imp
 ```text
 results/$protocol/$llm_model/$split/improvised/merged_stances.csv
 ```
+
+Scripts `30` and `31` are based on the StanceBench audio LLM interpersonal stance evaluation setup. See [References](#references) for the paper citation and full implementation.
 
 ### `40_extract_explainable_features.sh`
 
@@ -390,6 +394,8 @@ results/$protocol/$model/test/$subset/correlation_cluster_features_rho0p8.csv
 
 The cluster feature CSV includes one PCA feature per correlated group plus a `general_explainable_feature_rho0p8` PCA feature across all groups. Features listed in `ignored_explainable_features` in `config.sh` are excluded from both stages and from reports.
 
+Scripts `40` and `41` are based on the Distributional Baselines for conversational prosody and rhythm. See [References](#references) for the paper citation and full implementation.
+
 ### `50_check_missing_files.sh`
 
 Checks whether the expected output files from scripts `01` through `41` have been produced. It sources `config.sh`, then verifies the expected metadata, transcript, metric, language/dialect, naturalness, STANCE, explainable-feature, baseline-score, and correlation-cluster files for every relevant split, subset, and model.
@@ -403,8 +409,8 @@ bash 50_check_missing_files.sh
 It prints one status line per checked combination, for example:
 
 ```text
-script 10 - model original - subset test/improvised - all computed
-script 11 - model $llm_model - subset dev/naturalistic - file missing
+[X] script 20   - model original        - subset test/improvised        - all computed
+[X] script 20   - model gpt-audio-1.5   - subset test/improvised        - all computed
 ```
 
 When files are missing, it prints the missing paths below the status line. The script exits with status `0` if all expected files exist and `1` if any file is missing.
@@ -490,6 +496,71 @@ detailed_report.html
 - LLM output audio is answer-only. Scripts that need the full interaction reconstruct it from `audio_path`, `answer_audio_path`, and `answer_start_time`.
 - STANCE currently runs on `improvised` only.
 - Naturalness feature extraction skips already-computed embedding chunks; remove the existing `naturalness/voxprofile_features` directory if you need a clean recompute.
+
+
+## References
+
+The benchmark reuses or adapts feature pipelines from the following related work. Public arXiv IDs were not available in search at the time this README was updated, so the BibTeX entries keep `TBD` fields where exact paper metadata is still missing.
+
+### TRACE Naturalness Features
+
+Used by scripts `20_naturalness_feats.sh`, `21_extract_relations_context.sh`, and `22_score_naturalness.sh`.
+
+- Paper: `TRACE: Temporal Relationship-Aware Conversational Entrainment Detection in Dyadic Speech`
+- ArXiv: TBD; [search by title](https://arxiv.org/search/?query=TRACE%3A+Temporal+Relationship-Aware+Conversational+Entrainment+Detection+in+Dyadic+Speech&searchtype=all)
+- Code: [github.com/SathvikNapa/NaturalnessPrediction](https://github.com/SathvikNapa/NaturalnessPrediction)
+
+```bibtex
+@misc{trace2026,
+  title         = {{TRACE}: Temporal Relationship-Aware Conversational Entrainment Detection in Dyadic Speech},
+  author        = {{TRACE authors}},
+  year          = {2026},
+  archivePrefix = {arXiv},
+  eprint        = {TBD},
+  url           = {TBD},
+  note          = {Code: \url{https://github.com/SathvikNapa/NaturalnessPrediction}}
+}
+```
+
+### StanceBench STANCE Features
+
+Used by scripts `30_run_LLM_inference_STANCEs.sh` and `31_compute_STANCE_metrics.sh`.
+
+- Paper: `StanceBench: A Benchmark for Audio LLM-Based Interpersonal Stance Evaluation from Speech`
+- ArXiv: TBD; [search by title](https://arxiv.org/search/?query=StanceBench%3A+A+Benchmark+for+Audio+LLM-Based+Interpersonal+Stance+Evaluation+from+Speech&searchtype=all)
+- Code: [github.com/YuzheWangjhu/SPEAR_fine_grained_benchmark](https://github.com/YuzheWangjhu/SPEAR_fine_grained_benchmark)
+
+```bibtex
+@misc{stancebench2026,
+  title         = {{StanceBench}: A Benchmark for Audio LLM-Based Interpersonal Stance Evaluation from Speech},
+  author        = {{StanceBench authors}},
+  year          = {2026},
+  archivePrefix = {arXiv},
+  eprint        = {TBD},
+  url           = {TBD},
+  note          = {Code: \url{https://github.com/YuzheWangjhu/SPEAR_fine_grained_benchmark}}
+}
+```
+
+### Distributional Baselines
+
+Used by scripts `40_extract_explainable_features.sh` and `41_use_features_for_baseline.sh`.
+
+- Paper: `Distributional Baselines for Conversational Prosody and Rhythm`
+- ArXiv: TBD; [search by title](https://arxiv.org/search/?query=Distributional+Baselines+for+Conversational+Prosody+and+Rhythm&searchtype=all)
+- Code: [github.com/Ashish-Hallur/SPEAR-Metrics](https://github.com/Ashish-Hallur/SPEAR-Metrics)
+
+```bibtex
+@misc{distributionalbaselines2026,
+  title         = {Distributional Baselines for Conversational Prosody and Rhythm},
+  author        = {{Distributional Baselines authors}},
+  year          = {2026},
+  archivePrefix = {arXiv},
+  eprint        = {TBD},
+  url           = {TBD},
+  note          = {Code: \url{https://github.com/Ashish-Hallur/SPEAR-Metrics}}
+}
+```
 
 ## Contact
 
