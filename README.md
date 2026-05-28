@@ -129,6 +129,31 @@ openai_api_key="YOUR_API_KEY"
 org="YOUR_ORG_ID"
 ```
 
+## Command Helpers
+
+Pipeline scripts source `cmd.sh` to build Slurm launch commands in a consistent way. The main helper is:
+
+```bash
+$(python_cmd JOB_NAME --cpu)
+$(python_cmd JOB_NAME --gpu)
+```
+
+`JOB_NAME` is the Slurm job name, and the flag selects the scheduler resources. For example:
+
+```bash
+$(python_cmd SB10-S1 --gpu) bin/base_metrics.py --metadata metadata.csv --outputs base_metrics.csv
+$(python_cmd SB51-S3 --cpu) bin/reports/generate_html_report.py --protocol "$protocol" --model "$llm_model" --report-dir "$report_dir"
+```
+
+With the current `cmd.sh`, these expand to commands like:
+
+```bash
+srun -p gpu --gpus 1 --exclude=c19,c21,octopod --job-name SB10-S1 python3
+srun -p cpu --cpus-per-task 4 --exclude=c19,c21,octopod --job-name SB51-S3 python3
+```
+
+Use `python_cmd` for Python stages. `srun_cmd JOB_NAME --cpu|--gpu` is also available when a script needs the Slurm prefix without automatically appending `python3`. Edit `cmd.sh` if the cluster partition, GPU count, CPU count, or excluded nodes need to change.
+
 ## Model Proxies
 
 `02_run_LLM_inference.sh` selects a model proxy based on `llm_model`. Each speech-to-speech backend should have a module at:

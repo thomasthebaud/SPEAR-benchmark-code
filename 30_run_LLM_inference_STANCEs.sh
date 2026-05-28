@@ -197,8 +197,7 @@ for split in 'test' 'dev'; do
               continue
             fi
             echo "Predict STANCE Q$idx outputs for split:$split subset:$subset model:$model"
-            srun -p cpu  --job-name $job_name \
-                python3 bin/STANCE/score.py \
+            $(python_cmd "$job_name" --cpu) bin/STANCE/score.py \
                 --metadata "$metadata" \
                 --questions-csv "$questions_csv" \
                 --outputs_dir "$metrics" \

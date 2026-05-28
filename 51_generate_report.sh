@@ -3,14 +3,11 @@ set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")"
 source config.sh
+source cmd.sh
 
-run_short=0
-run_graphs=0
-run_long=0
-
-if [[ $# -eq 0 ]]; then
-  run_short=1
-fi
+run_short=1
+run_graphs=1
+run_long=1
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -53,8 +50,7 @@ report_dir="reports/$llm_model"
 
 if [[ "$run_short" -eq 1 ]]; then
   echo "Stage 1: generating short report for model:$llm_model"
-  srun -p cpu  --job-name 'SB51-S1' \
-    python3 bin/reports/generate_short_report.py \
+  $(python_cmd 'SB51-S1' --cpu) bin/reports/generate_short_report.py \
       --protocol "$protocol" \
       --model "$llm_model" \
       --asr-model "$asr" \
@@ -71,14 +67,12 @@ fi
 
 if [[ "$run_graphs" -eq 1 ]]; then
   echo "Stage 2: generating graphs for model:$llm_model"
-  srun -p cpu  --job-name 'SB51-S2' \
-    python3 bin/reports/generate_graphs.py       --model "$llm_model"       --results-root "results/$protocol"       --output-dir "$report_dir"
+  $(python_cmd 'SB51-S2' --cpu) bin/reports/generate_graphs.py       --model "$llm_model"       --results-root "results/$protocol"       --output-dir "$report_dir"
 fi
 
 if [[ "$run_long" -eq 1 ]]; then
   echo "Stage 3: generating detailed HTML report for model:$llm_model"
-  srun -p cpu  --job-name 'SB51-S3' \
-    python3 bin/reports/generate_html_report.py       --protocol "$protocol"       --model "$llm_model"       --report-dir "$report_dir"
+  $(python_cmd 'SB51-S3' --cpu) bin/reports/generate_html_report.py       --protocol "$protocol"       --model "$llm_model"       --report-dir "$report_dir"
 fi
 
 echo "report generation finished"

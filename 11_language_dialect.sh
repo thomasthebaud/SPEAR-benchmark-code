@@ -3,6 +3,7 @@ set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")"
 source config.sh
+source cmd.sh
 
 run_LID=0
 run_DialectID=0
@@ -65,7 +66,7 @@ if [[ "$run_LID" -eq 1 ]];then
                 output=$output_dir/language_id.csv
 
                 mkdir -p "$output_dir"
-                srun -p gpu --gpus 1 --job-name 'SB11-S1' python3 bin/language_id.py \
+                $(python_cmd 'SB11-S1' --gpu) bin/language_id.py \
                     --metadatafile "$metadata" \
                     --output "$output" \
                     --model "$language_id_model" \
@@ -91,7 +92,7 @@ if [[ "$run_DialectID" -eq 1 ]];then
                 output=$output_dir/dialect_id.csv
 
                 mkdir -p "$output_dir"
-                srun -p gpu --gpus 1 --job-name 'SB11-S2' python3 bin/dialect_id.py \
+                $(python_cmd 'SB11-S2' --gpu) bin/dialect_id.py \
                     --metadatafile "$metadata" \
                     --output "$output" \
                     --language "english" \

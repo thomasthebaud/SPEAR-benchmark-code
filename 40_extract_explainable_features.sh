@@ -3,6 +3,7 @@ set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")"
 source config.sh
+source cmd.sh
 
 for split in 'test' 'dev'; do
   for subset in 'improvised' 'naturalistic'; do
@@ -11,8 +12,7 @@ for split in 'test' 'dev'; do
       output=results/$protocol/$model/$split/$subset/distrib_baselines_features.csv
 
       echo "Extract explainable features for split:$split subset:$subset model:$model"
-      srun -p cpu  --job-name 'SB40' \
-        python3 bin/distrib_baselines/extract_features.py \
+      $(python_cmd 'SB40' --cpu) bin/distrib_baselines/extract_features.py \
           --metadata "$metadata" \
           --relationships-csv "$seamless_assets_dir/relationships.csv" \
           --output "$output" &

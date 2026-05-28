@@ -3,6 +3,7 @@ set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")"
 source config.sh
+source cmd.sh
 echo "Transcribing outputs of model $llm_model using $asr"
 echo "data directory: $data_dir"
 
@@ -12,7 +13,7 @@ for split in 'test' 'dev'; do
             echo "### Running base metrics for $model $split $subset ###"
             metadata=data/$protocol/outputs/$model/$split/$subset/metadata.csv
             outputs=results/$protocol/$model/$split/$subset/base_metrics.csv
-            srun -p gpu --gpus 1 --job-name 'SB10' python3 bin/base_metrics.py \
+            $(python_cmd 'SB10' --gpu) bin/base_metrics.py \
                 --metadata $metadata \
                 --outputs $outputs &
 
