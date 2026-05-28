@@ -364,11 +364,35 @@ results/$protocol/$model/$split/$subset/distrib_baselines_features.csv
 
 ### `41_use_features_for_baseline.sh`
 
-Trains dev-set explainable-feature baselines and scores test utterances for `$llm_model`. It reads feature CSVs from `results/$protocol`, trains per-feature classifiers for `improvised` and `naturalistic`, and writes per-utterance scores and summaries under `results/$protocol/$llm_model/`.
+Uses the explainable features from script `40`. It has two optional stages:
+
+```bash
+bash 41_use_features_for_baseline.sh --scores
+bash 41_use_features_for_baseline.sh --clusters
+bash 41_use_features_for_baseline.sh --all
+```
+
+If no option is passed, both stages are run.
+
+Stage 1, `--scores`, trains dev-set per-feature baselines and scores test utterances for `$llm_model`. It writes:
+
+```text
+results/$protocol/$llm_model/test/$subset/distrib_baselines_feature_scores.csv
+results/$protocol/$llm_model/distrib_baselines_summary.csv
+```
+
+Stage 2, `--clusters`, loads both `original` and `$llm_model` explainable features before computing correlations. It normalizes from the combined dev set, computes Spearman correlations, clusters features at the configured threshold, validates the groups on test, and fits PCA features. It writes the same cluster definitions and transformed test values back into each model directory:
+
+```text
+results/$protocol/$model/test/$subset/correlation_feature_groups_rho0p8.csv
+results/$protocol/$model/test/$subset/correlation_cluster_features_rho0p8.csv
+```
+
+The cluster feature CSV includes one PCA feature per correlated group plus a `general_explainable_feature_rho0p8` PCA feature across all groups. Features listed in `ignored_explainable_features` in `config.sh` are excluded from both stages and from reports.
 
 ### `50_check_missing_files.sh`
 
-Checks whether the expected output files from scripts `01` through `41` have been produced. It sources `config.sh`, then verifies the expected metadata, transcript, metric, language/dialect, naturalness, STANCE, and explainable-feature files for every relevant split, subset, and model.
+Checks whether the expected output files from scripts `01` through `41` have been produced. It sources `config.sh`, then verifies the expected metadata, transcript, metric, language/dialect, naturalness, STANCE, explainable-feature, baseline-score, and correlation-cluster files for every relevant split, subset, and model.
 
 Run it from the benchmark directory with:
 
@@ -396,9 +420,9 @@ bash 51_generate_report.sh --long
 bash 51_generate_report.sh --all
 ```
 
-If no option is passed, the script runs `--short`.
+If no option is passed, the script runs all stages.
 
-The short report reads base metrics, naturalness scores, merged STANCE metrics, and explainable baseline outputs. It writes:
+The short report reads base metrics, naturalness scores, merged STANCE metrics, explainable baseline outputs, and script `41` correlation-cluster PCA features. It writes:
 
 ```text
 reports/$llm_model/report.txt
@@ -418,7 +442,7 @@ The long report stage writes:
 reports/$llm_model/detailed_report.html
 ```
 
-Report generation uses `statistical_test` from `config.sh`, defaulting to Welch t-test if the variable is unset.
+Report generation uses `statistical_test` from `config.sh`, defaulting to Welch t-test if the variable is unset. Explainable features listed in `ignored_explainable_features` are omitted from the short report tables, long report tables, and graphs. The long report includes a dedicated table for `corr_cluster_*` and `general_explainable_feature_*` rows from script `41`.
 
 ## Outputs
 

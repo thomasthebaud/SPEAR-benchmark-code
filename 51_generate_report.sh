@@ -27,14 +27,15 @@ while [[ $# -gt 0 ]]; do
       ;;
     -h|--help)
       cat <<EOF
-Usage: bash 50_generate_report.sh [--short] [--graphs] [--long] [--all]
+Usage: bash 51_generate_report.sh [--short] [--graphs] [--long] [--all]
 
 Stages:
-  --short   Stage 1: write reports/\$llm_model/report.txt and metrics.csv
+  --short   Stage 1: write reports/\$llm_model/report.txt and metrics CSVs
   --graphs  Stage 2: generate matplotlib/seaborn graphs
   --long    Stage 3: generate reports/$llm_model/detailed_report.html
+  --all     Run all stages
 
-If no stage is passed, --short is run.
+If no stage is passed, all stages are run.
 EOF
       exit 0
       ;;
@@ -62,17 +63,26 @@ if [[ "$run_short" -eq 1 ]]; then
       --min-speakers 1 \
       --data-root "$data_dir" \
       --results-root "results/$protocol" \
-      --output-dir "$report_dir"
+      --output-dir "$report_dir" \
+      --ignore-features "${ignored_explainable_features[@]:-}"
 fi
 
 if [[ "$run_graphs" -eq 1 ]]; then
   echo "Stage 2: generating graphs for model:$llm_model"
-  $(python_cmd 'SB51-S2' --cpu) bin/reports/generate_graphs.py       --model "$llm_model"       --results-root "results/$protocol"       --output-dir "$report_dir"
+  $(python_cmd 'SB51-S2' --cpu) bin/reports/generate_graphs.py \
+      --model "$llm_model" \
+      --results-root "results/$protocol" \
+      --output-dir "$report_dir" \
+      --ignore-features "${ignored_explainable_features[@]:-}"
 fi
 
 if [[ "$run_long" -eq 1 ]]; then
   echo "Stage 3: generating detailed HTML report for model:$llm_model"
-  $(python_cmd 'SB51-S3' --cpu) bin/reports/generate_html_report.py       --protocol "$protocol"       --model "$llm_model"       --report-dir "$report_dir"
+  $(python_cmd 'SB51-S3' --cpu) bin/reports/generate_html_report.py \
+      --protocol "$protocol" \
+      --model "$llm_model" \
+      --report-dir "$report_dir" \
+      --ignore-features "${ignored_explainable_features[@]:-}"
 fi
 
 echo "report generation finished"

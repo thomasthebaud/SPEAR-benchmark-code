@@ -146,11 +146,20 @@ for split in "${splits[@]}"; do
   done
 done
 
-# 41_use_features_for_baseline.sh: train dev-set baselines and score test utterances.
+# 41_use_features_for_baseline.sh --scores: train dev-set baselines and score test utterances.
 for subset in "${subsets[@]}"; do
-  check_files "41" "$llm_model" "test/$subset" \
+  check_files "41-S1" "$llm_model" "test/$subset" \
     "results/$protocol/$llm_model/test/$subset/distrib_baselines_feature_scores.csv" \
     "results/$protocol/$llm_model/distrib_baselines_summary.csv"
+done
+
+# 41_use_features_for_baseline.sh --clusters: compute correlation groups and PCA cluster features.
+for subset in "${subsets[@]}"; do
+  for model in "${models[@]}"; do
+    check_files "41-S2" "$model" "test/$subset" \
+      "results/$protocol/$model/test/$subset/correlation_feature_groups_rho0p8.csv" \
+      "results/$protocol/$model/test/$subset/correlation_cluster_features_rho0p8.csv"
+  done
 done
 
 exit "$missing_any"
