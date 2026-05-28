@@ -46,6 +46,34 @@ def load_proxy_module(model_name: str):
     return module
 
 
+def ensure_output_columns(frame: pd.DataFrame) -> pd.DataFrame:
+    frame = frame.copy()
+    for col in ["answer_audio_path", "transcript_answer", "answer_start_time", "answer_duration", "finish_reason"]:
+        if col not in frame.columns:
+            frame[col] = pd.Series(index=frame.index, dtype="object")
+        else:
+            frame[col] = frame[col].astype("object")
+    return frame
+
+
+def save_output_metadata(frame: pd.DataFrame, output_csv: Path) -> None:
+    output_csv.parent.mkdir(parents=True, exist_ok=True)
+    tmp_csv = output_csv.with_suffix(output_csv.suffix + ".tmp")
+    frame.to_csv(tmp_csv, index=False)
+    tmp_csv.replace(output_csv)
+
+
+def load_existing_output(output_csv: Path) -> pd.DataFrame | None:
+    if not output_csv.exists():
+        return None
+    try:
+        frame = pd.read_csv(output_csv)
+    except Exception as exc:
+        print(f"Warning: could not read existing output metadata {output_csv}: {exc}", flush=True)
+        return None
+    return frame.loc[:, ~frame.columns.str.startswith("Unnamed:")]
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--audio_dir", help="Directory containing audio files")
@@ -64,25 +92,32 @@ if __name__ == "__main__":
     input_dir = Path(args.audio_dir) / args.split / args.subset
     output_dir = Path(args.output_dir) / args.split / args.subset
     output_dir.mkdir(parents=True, exist_ok=True)
-
-    if os.path.exists(output_dir / f"metadata.csv"):
-        print(f"### Subset {args.split}/{args.subset} already processed, moving on. ###")
-        exit()
+    output_csv = output_dir / "metadata.csv"
 
     if args.prompt=='None':print("Warning: No prompt provided, only feeding the audios.")
 
-    metadata = pd.read_csv(input_dir / f"metadata.csv")
+    metadata = pd.read_csv(input_dir / "metadata.csv")
     print(f"found {len(metadata)} rows in {input_dir}/metadata.csv")
-    output_metadata = metadata.copy()
-    for col in ["answer_audio_path", "transcript_answer", "answer_start_time", "finish_reason"]:
-        if col not in output_metadata.columns:
-            output_metadata[col] = pd.Series(index=output_metadata.index, dtype="object")
-        else:
-            output_metadata[col] = output_metadata[col].astype("object")
+
+    existing_output = load_existing_output(output_csv)
+    if existing_output is not None and len(existing_output) == len(metadata):
+        print(f"### Subset {args.split}/{args.subset} already processed, moving on. ###")
+        exit()
+
+    if existing_output is not None:
+        output_metadata = ensure_output_columns(existing_output)
+        processed_audio_paths = set(output_metadata["audio_path"].dropna().astype(str)) if "audio_path" in output_metadata.columns else set()
+        print(f"Resuming from {len(processed_audio_paths)}/{len(metadata)} completed rows in {output_csv}")
+    else:
+        output_metadata = ensure_output_columns(metadata.iloc[0:0].copy())
+        processed_audio_paths = set()
+        save_output_metadata(output_metadata, output_csv)
 
     failed_indices = {}
 
-    for idx, row in tqdm(metadata.iterrows(), total=metadata.shape[0]):
+    remaining = metadata[~metadata["audio_path"].astype(str).isin(processed_audio_paths)]
+
+    for idx, row in tqdm(remaining.iterrows(), total=remaining.shape[0]):
         input_audio_path = Path(row['audio_path'])
         output_path = output_dir / f"audio/{input_audio_path.stem}.wav"
         try:
@@ -119,11 +154,17 @@ if __name__ == "__main__":
 
         if answer_start_time is None: answer_start_time = row['question_end_time']
         # 0 if no delay or non streaming model, negative if interruption, positive if delayed
-        output_metadata.at[idx, 'transcript_answer'] = transcript_answer
-        output_metadata.at[idx, 'answer_start_time'] = f"{answer_start_time - row['question_end_time']:.3f}"
-        output_metadata.at[idx, 'answer_audio_path'] = str(output_path)
-        output_metadata.at[idx, 'answer_duration'] = len(audio_output) / sr
-        output_metadata.at[idx, 'finish_reason'] = finish_reason
+        output_row = row.copy()
+        output_row['transcript_answer'] = transcript_answer
+        output_row['answer_start_time'] = f"{answer_start_time - row['question_end_time']:.3f}"
+        output_row['answer_audio_path'] = str(output_path)
+        output_row['answer_duration'] = len(audio_output) / sr
+        output_row['finish_reason'] = finish_reason
+
+        output_metadata = pd.concat([output_metadata, pd.DataFrame([output_row])], ignore_index=True)
+        output_metadata = ensure_output_columns(output_metadata)
+        save_output_metadata(output_metadata, output_csv)
+        processed_audio_paths.add(str(row['audio_path']))
         # except Exception as exc:
         #     print(f"Warning: failed to process {input_audio_path}: {exc}")
         #     failed_indices.append(idx)
@@ -133,8 +174,7 @@ if __name__ == "__main__":
     total_failed = 0
     for reason in failed_indices:
         print(f"Failed due to {reason}: {len(failed_indices[reason])}")
-        output_metadata = output_metadata.drop(index=failed_indices[reason])
         total_failed += len(failed_indices[reason])
 
-    output_metadata.to_csv(output_dir / f"metadata.csv", index=False)
-    print(f"Failed audios = {total_failed}/{len(output_metadata)+total_failed}")
+    print(f"Completed audios = {len(output_metadata)}/{len(metadata)}")
+    print(f"Failed audios = {total_failed}/{remaining.shape[0]}")

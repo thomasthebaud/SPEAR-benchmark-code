@@ -5,6 +5,7 @@ from pathlib import Path
 from openai import OpenAI
 
 MIN_WAV_BYTES = 2000  # roughly >60 ms at 16 kHz mono 16-bit PCM
+NON_STREAMING_ANSWER_START_S = 0.0
 
 def convert_to_wav_strict(input_path: Path) -> Path:
     out = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
@@ -91,4 +92,4 @@ def get_reply_with_audio(
 
     audio_bytes_out = base64.b64decode(message.audio.data)
     transcript = message.audio.transcript
-    return audio_bytes_out, transcript, response.choices[0].finish_reason, True, None
+    return audio_bytes_out, transcript, response.choices[0].finish_reason, True, NON_STREAMING_ANSWER_START_S

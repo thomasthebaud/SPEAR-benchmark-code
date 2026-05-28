@@ -197,6 +197,7 @@ def _receiver_loop(
     response_done_event: threading.Event,
     active_responses: set,
     completed_responses: list,
+    timing_state: dict,
 ) -> None:
     """
     Receive server events while audio is still being streamed.
@@ -228,11 +229,12 @@ def _receiver_loop(
                     active_responses.add(response_id)
 
             elif event_type == "response.output_audio.delta":
-                # Record the start time of the audio stream
-                if 'stream_start_time' not in locals():
-                    stream_start_time = time.monotonic()
                 delta = event.get("delta")
                 if delta:
+                    if timing_state["answer_start_s"] is None:
+                        input_start_s = timing_state.get("input_stream_start_s")
+                        if input_start_s is not None:
+                            timing_state["answer_start_s"] = max(0.0, time.monotonic() - input_start_s)
                     audio_fragments.append(delta)
 
             elif event_type == "response.output_audio_transcript.delta":
@@ -333,7 +335,7 @@ def get_reply_with_audio(
     org: str,
     api_key: str,
     temp: float = 0.7,
-) -> Tuple[Optional[bytes], str, Optional[str], bool]:
+) -> Tuple[Optional[bytes], str, Optional[str], bool, Optional[float]]:
     """
     SPEARBench-compatible realtime proxy.
 
@@ -363,15 +365,15 @@ def get_reply_with_audio(
     audio_path = Path(audio_path)
 
     if not audio_path.exists():
-        return None, "", f"Audio file does not exist: {audio_path}", False
+        return None, "", f"Audio file does not exist: {audio_path}", False, None
 
     try:
         pcm_bytes = _read_audio_as_pcm16(audio_path)
     except Exception as exc:
-        return None, "", f"failed_to_read_audio: {exc}", False
+        return None, "", f"failed_to_read_audio: {exc}", False, None
 
     if not pcm_bytes:
-        return None, "", "empty_audio", False
+        return None, "", "empty_audio", False, None
 
     session_instructions = DEFAULT_INSTRUCTIONS
 
@@ -390,6 +392,10 @@ def get_reply_with_audio(
     event_log = []
     active_responses = set()
     completed_responses = []
+    timing_state = {
+        "input_stream_start_s": None,
+        "answer_start_s": None,
+    }
 
     try:
         ws = _connect(api_key=api_key, model_name=model_name, org=org)
@@ -406,6 +412,7 @@ def get_reply_with_audio(
                 response_done_event,
                 active_responses,
                 completed_responses,
+                timing_state,
             ),  
             daemon=True,
         )
@@ -416,12 +423,13 @@ def get_reply_with_audio(
 
         chunk_size = int(TARGET_RATE * BYTES_PER_SAMPLE * (CHUNK_MS / 1000.0))
 
+        timing_state["input_stream_start_s"] = time.monotonic()
+
         for offset in range(0, len(pcm_bytes), chunk_size):
             if not error_queue.empty():
                 raise error_queue.get()
 
             chunk = pcm_bytes[offset : offset + chunk_size]
-            stream_start_time = time.monotonic()
             _json_send(
                 ws,
                 {
@@ -509,13 +517,13 @@ def get_reply_with_audio(
                 transcript,
                 f"empty_decoded_audio; recent_events=[{debug_tail}]",
                 False,
+                None,
             )
 
         wav_bytes = _pcm16_to_wav_bytes(raw_audio, TARGET_RATE)
         finish_reason = "completed" if response_done_event.is_set() else "timeout"
 
-        answer_start_s = answer_start_s if 'answer_start_s' in locals() else None
-        return wav_bytes, transcript, finish_reason, True, answer_start_s
+        return wav_bytes, transcript, finish_reason, True, timing_state["answer_start_s"]
 
     except Exception as exc:
         transcript = "".join(text_fragments).strip()
