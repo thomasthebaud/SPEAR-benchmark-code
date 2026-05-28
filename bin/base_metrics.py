@@ -12,16 +12,27 @@ import re
 from silero_vad import load_silero_vad, read_audio, get_speech_timestamps
 
 utmos_model = None
+utmos_device = None
 vad_model = None
+
+def get_utmos_device():
+    global utmos_device
+    if utmos_device is None:
+        utmos_device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        print(f"Using {utmos_device} for UTMOS inference")
+    return utmos_device
+
 
 def get_utmos_model():
     global utmos_model
     if utmos_model is None:
+        device = get_utmos_device()
         utmos_model = torch.hub.load(
             "tarepan/SpeechMOS:v1.2.0",
             "utmos22_strong",
             trust_repo=True
         )
+        utmos_model = utmos_model.to(device).eval()
     return utmos_model
 
 
@@ -58,12 +69,14 @@ def get_metric(metadata, fn, name):
 
 def compute_wer(row):
     reference, hypothesis = row['transcript_answer'], row['ASR_transcript']
+    if str(reference)=='nan': return np.nan
     reference = clean_reference(reference).strip('.? ')
     hypothesis = hypothesis.strip('.? ')
     return wer(reference, hypothesis)
 
 def compute_cer(row):
     reference, hypothesis = row['transcript_answer'], row['ASR_transcript']
+    if str(reference)=='nan': return np.nan
     reference = clean_reference(reference).strip('.? ')
     hypothesis = hypothesis.strip('.? ')
     return cer(reference, hypothesis)
@@ -85,10 +98,14 @@ def compute_interrupted(row):return 1000*float(-row['answer_start_time']) if row
 def compute_UTMOS(row):
     waveform_segment, sr = load_answer(row)
     try:
-        with torch.no_grad():
+        device = get_utmos_device()
+        waveform_segment = waveform_segment.to(device)
+        with torch.inference_mode():
             score = get_utmos_model()(waveform_segment, sr)
-    except:
-        print(f"Warning: file {row['answer_audio_path']} failed UTMOS")
+        if isinstance(score, torch.Tensor):
+            score = score.detach().cpu().item()
+    except Exception as exc:
+        print(f"Warning: file {row['answer_audio_path']} failed UTMOS: {exc}")
         score = 'nan'
     return float(score)
 
@@ -166,10 +183,10 @@ if __name__ == "__main__":
         if asr_models[asr_model]:
             metadata_with_asr = metadata[metadata[f'{asr_model}_transcript']!='']
             L = len(metadata_with_asr)
-            print(f"Found {L}/{len(metadata)} lines without transcripts from model {asr_model}.")
+            print(f"Found {L}/{len(metadata)} lines with transcripts from model {asr_model}.")
             metadata_with_asr['ASR_transcript']=metadata_with_asr[f'{asr_model}_transcript']
-            metrics = compute_and_save_metric(metadata_with_asr, metrics, output_path, 'WER', compute_wer, f'WER_{asr_model}')
-            metrics = compute_and_save_metric(metadata_with_asr, metrics, output_path, 'CER', compute_cer, f'CER_{asr_model}')
+            metrics = compute_and_save_metric(metadata_with_asr, metrics, output_path, f'WER_{asr_model}', compute_wer, f'WER_{asr_model}')
+            metrics = compute_and_save_metric(metadata_with_asr, metrics, output_path, f'CER_{asr_model}', compute_cer, f'CER_{asr_model}')
         else:print(f"Warning: no ASR outputs computed for model {asr_model}, WER/CER will not be measured.")
 
     metrics = compute_and_save_metric(metadata, metrics, output_path, 'latency', compute_latency, 'latency (ms)')
