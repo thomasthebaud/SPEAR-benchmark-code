@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import ast
 import re
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple
@@ -9,6 +10,7 @@ from typing import Dict, Iterable, List, Optional, Tuple
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+from matplotlib.colors import LogNorm
 from matplotlib.patches import Patch
 import numpy as np
 import pandas as pd
@@ -19,6 +21,24 @@ ORIGINAL = "original"
 SUBSETS = ["improvised", "naturalistic"]
 DATASET_PALETTE = {"original": "#4C72B0", "model": "#DD8452"}
 EXCLUDED_REPORT_METRICS = {"question_end_time"}
+DIALECT_LABELS = [
+    "East Asia",
+    "English",
+    "Germanic",
+    "Irish",
+    "North America",
+    "Northern Irish",
+    "Oceania",
+    "Other",
+    "Romance",
+    "Scottish",
+    "Semitic",
+    "Slavic",
+    "South African",
+    "Southeast Asia",
+    "South Asia",
+    "Welsh",
+]
 
 sns.set_theme(style="whitegrid", context="talk")
 
@@ -59,6 +79,10 @@ def merged_stances_csv(results_root: Path, model: str, subset: str = "improvised
     return results_root / model / "test" / subset / "merged_stances.csv"
 
 
+def dialect_id_csv(results_root: Path, model: str, subset: str) -> Path:
+    return results_root / model / "test" / subset / "dialect_id.csv"
+
+
 def load_feature_values(results_root: Path, model: str, subset: str, feature: str) -> Optional[pd.DataFrame]:
     frames = []
     for label_model, label in [(ORIGINAL, "original"), (model, "model")]:
@@ -80,6 +104,47 @@ def base_metrics_csv(results_root: Path, model: str, subset: str) -> Path:
     return results_root / model / "test" / subset / "base_metrics.csv"
 
 
+def available_base_metric_columns(results_root: Path, model: str) -> List[str]:
+    columns = set()
+    for subset in SUBSETS:
+        for label_model in [ORIGINAL, model]:
+            frame = safe_read_csv(base_metrics_csv(results_root, label_model, subset))
+            if frame is None:
+                continue
+            columns.update(
+                column
+                for column in frame.columns
+                if column in {"CER", "WER", "UTMOS", "latency", "interrupted"}
+                or column.startswith("CER_")
+                or column.startswith("WER_")
+            )
+    ordered = []
+    for prefix in ["CER", "WER"]:
+        specific = sorted(column for column in columns if column.startswith(f"{prefix}_"))
+        if specific:
+            ordered.extend(specific)
+        elif prefix in columns:
+            ordered.append(prefix)
+    for metric in ["UTMOS", "latency", "interrupted"]:
+        if metric in columns:
+            ordered.append(metric)
+    return ordered
+
+
+def asr_error_columns(results_root: Path, model: str, error_type: str) -> List[str]:
+    columns = set(available_base_metric_columns(results_root, model))
+    specific = sorted(column for column in columns if column.startswith(f"{error_type}_"))
+    if specific:
+        return specific
+    return [error_type] if error_type in columns else []
+
+
+def asr_label(column: str, error_type: str) -> str:
+    if column == error_type:
+        return "default"
+    return column.split("_", 1)[1]
+
+
 def load_base_metric_values(results_root: Path, model: str, metric: str) -> Optional[pd.DataFrame]:
     frames = []
     for subset in SUBSETS:
@@ -91,6 +156,36 @@ def load_base_metric_values(results_root: Path, model: str, metric: str) -> Opti
             if values.empty:
                 continue
             frames.append(pd.DataFrame({"value": values, "dataset": label, "subset": subset, "metric": metric}))
+    if not frames:
+        return None
+    return pd.concat(frames, ignore_index=True)
+
+
+def load_asr_error_values(results_root: Path, model: str, error_type: str) -> Optional[pd.DataFrame]:
+    frames = []
+    columns = asr_error_columns(results_root, model, error_type)
+    for subset in SUBSETS:
+        for label_model, label in [(ORIGINAL, "original"), (model, "model")]:
+            frame = safe_read_csv(base_metrics_csv(results_root, label_model, subset))
+            if frame is None:
+                continue
+            for column in columns:
+                if column not in frame.columns:
+                    continue
+                values = numeric(frame[column]).dropna()
+                if values.empty:
+                    continue
+                frames.append(
+                    pd.DataFrame(
+                        {
+                            "value": values,
+                            "dataset": label,
+                            "subset": subset,
+                            "metric": error_type,
+                            "asr_system": asr_label(column, error_type),
+                        }
+                    )
+                )
     if not frames:
         return None
     return pd.concat(frames, ignore_index=True)
@@ -135,10 +230,50 @@ def remove_iqr_outliers(data: pd.DataFrame, group_cols: List[str], value_col: st
     return filtered
 
 
+def graph_asr_error_histogram(results_root: Path, model: str, error_type: str, output_path: Path) -> None:
+    data = load_asr_error_values(results_root, model, error_type)
+    if data is None or data.empty:
+        return
+    data = remove_iqr_outliers(data, ["subset", "metric", "asr_system"])
+    if data.empty:
+        return
+    subsets = [subset for subset in SUBSETS if subset in set(data["subset"])]
+    fig, axes = plt.subplots(len(subsets), 1, figsize=(11, max(4.5, 4.5 * len(subsets))), sharex=True, squeeze=False)
+    for ax, subset in zip(axes[:, 0], subsets):
+        sub = data[data["subset"] == subset]
+        sns.violinplot(
+            data=sub,
+            x="value",
+            y="asr_system",
+            hue="dataset",
+            hue_order=["original", "model"],
+            palette=DATASET_PALETTE,
+            orient="h",
+            inner="quartile",
+            cut=0,
+            linewidth=0.8,
+            density_norm="width",
+            ax=ax,
+        )
+        if ax.get_legend() is not None:
+            ax.get_legend().remove()
+        ax.set_title(subset.title())
+        ax.set_xlabel(error_type)
+        ax.set_ylabel("ASR system")
+    legend_handles = [Patch(facecolor=DATASET_PALETTE[label], label=label) for label in ["original", "model"]]
+    fig.legend(legend_handles, ["original", "model"], title="Dataset", loc="upper center", ncol=2, bbox_to_anchor=(0.5, 1.02), frameon=True)
+    fig.suptitle(f"{error_type}: Original vs Model Across ASR Systems", y=1.04)
+    fig.tight_layout(rect=(0, 0, 1, 0.96))
+    fig.savefig(output_path, dpi=180, bbox_inches="tight")
+    plt.close(fig)
+
 
 def graph_basic_metric_histograms(results_root: Path, model: str, output_dir: Path) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
-    for metric in ["CER", "WER", "UTMOS", "latency"]:
+    for error_type in ["CER", "WER"]:
+        graph_asr_error_histogram(results_root, model, error_type, output_dir / f"{error_type}.png")
+
+    for metric in [metric for metric in available_base_metric_columns(results_root, model) if not metric.startswith(("CER", "WER")) and metric != "interruptions"]:
         data = load_base_metric_values(results_root, model, metric)
         if data is None or data.empty:
             continue
@@ -146,8 +281,8 @@ def graph_basic_metric_histograms(results_root: Path, model: str, output_dir: Pa
         if data.empty:
             continue
         subsets = [subset for subset in SUBSETS if subset in set(data["subset"])]
-        fig, axes = plt.subplots(len(subsets), 1, figsize=(10, 5* len(subsets)), sharex=True, sharey=True, squeeze=False)
-        for ax, subset in zip(axes[0], subsets):
+        fig, axes = plt.subplots(len(subsets), 1, figsize=(10, 5 * len(subsets)), sharex=True, sharey=True, squeeze=False)
+        for ax, subset in zip(axes[:, 0], subsets):
             sub = data[data["subset"] == subset]
             sns.histplot(
                 data=sub,
@@ -159,11 +294,12 @@ def graph_basic_metric_histograms(results_root: Path, model: str, output_dir: Pa
                 element="step",
                 fill=True,
                 alpha=0.35,
+                palette=DATASET_PALETTE,
                 ax=ax,
             )
-            ax.set_title("")
+            ax.set_title(subset.title())
             ax.set_xlabel(metric)
-            ax.set_ylabel(subset)
+            ax.set_ylabel("Density")
         fig.suptitle(f"{metric}: Original vs Model", y=1.03)
         fig.tight_layout()
         out_path = output_dir / f"{sanitize_filename(metric)}.png"
@@ -174,21 +310,29 @@ def graph_basic_metric_histograms(results_root: Path, model: str, output_dir: Pa
 
 def graph_basic_metrics_violin(results_root: Path, model: str, output_path: Path) -> None:
     frames = []
-    for metric in ["CER", "WER", "UTMOS", "latency"]:
+    metric_order = []
+    for error_type in ["CER", "WER"]:
+        data = load_asr_error_values(results_root, model, error_type)
+        if data is not None:
+            frames.append(data)
+            metric_order.append(error_type)
+    for metric in [metric for metric in available_base_metric_columns(results_root, model) if not metric.startswith(("CER", "WER")) and metric != "interruptions"]:
         data = load_base_metric_values(results_root, model, metric)
         if data is not None:
             frames.append(data)
+            metric_order.append(metric)
     if not frames:
         print("[WARN] No base metrics found; skipping basic_metrics.png.")
         return
     data = pd.concat(frames, ignore_index=True)
-    data = remove_iqr_outliers(data, ["subset", "metric"])
+    group_cols = ["subset", "metric"] + (["asr_system"] if "asr_system" in data.columns else [])
+    data = remove_iqr_outliers(data, group_cols)
     if data.empty:
         print("[WARN] All base metric rows were filtered as outliers; skipping basic_metrics.png.")
         return
     available_subsets = [subset for subset in SUBSETS if subset in set(data["subset"])]
-    metrics = [metric for metric in ["CER", "WER", "UTMOS", "latency"] if metric in set(data["metric"])]
-    fig, axes = plt.subplots(len(metrics), len(available_subsets), figsize=(8 * len(available_subsets), 3.2 * len(metrics)), squeeze=False)
+    metrics = [metric for metric in metric_order if metric in set(data["metric"])]
+    fig, axes = plt.subplots(len(metrics), len(available_subsets), figsize=(8.5 * len(available_subsets), 3.8 * len(metrics)), squeeze=False)
     for row_idx, metric in enumerate(metrics):
         for col_idx, subset in enumerate(available_subsets):
             ax = axes[row_idx, col_idx]
@@ -196,30 +340,46 @@ def graph_basic_metrics_violin(results_root: Path, model: str, output_path: Path
             if sub.empty:
                 ax.set_axis_off()
                 continue
-            sns.violinplot(
-                data=sub,
-                x="value",
-                y="dataset",
-                hue="dataset",
-                hue_order=["original", "model"],
-                palette=DATASET_PALETTE,
-                orient="h",
-                inner="quartile",
-                cut=0,
-                linewidth=0.8,
-                density_norm="width",
-                ax=ax,
-            )
+            if metric in {"CER", "WER"} and "asr_system" in sub.columns:
+                sns.violinplot(
+                    data=sub,
+                    x="value",
+                    y="asr_system",
+                    hue="dataset",
+                    hue_order=["original", "model"],
+                    palette=DATASET_PALETTE,
+                    orient="h",
+                    inner="quartile",
+                    cut=0,
+                    linewidth=0.8,
+                    density_norm="width",
+                    ax=ax,
+                )
+                ax.set_ylabel(metric if col_idx == 0 else "")
+            else:
+                sns.violinplot(
+                    data=sub,
+                    x="value",
+                    y="dataset",
+                    hue="dataset",
+                    hue_order=["original", "model"],
+                    palette=DATASET_PALETTE,
+                    orient="h",
+                    inner="quartile",
+                    cut=0,
+                    linewidth=0.8,
+                    density_norm="width",
+                    ax=ax,
+                )
+                ax.set_ylabel(metric if col_idx == 0 else "")
+                ax.set_yticks([])
+                ax.tick_params(axis="y", left=False, labelleft=False)
             if ax.get_legend() is not None:
                 ax.get_legend().remove()
-            if row_idx == 0:
-                ax.set_title(subset.title())
-            else:
-                ax.set_title("")
+            ax.set_title(subset.title() if row_idx == 0 else "")
             ax.set_xlabel("")
-            ax.set_ylabel(metric if col_idx == 0 else "")
-            ax.set_yticks([])
-            ax.tick_params(axis="y", left=False, labelleft=False)
+            ax.tick_params(axis="x", labelsize=10)
+            ax.tick_params(axis="y", labelsize=10)
 
     legend_handles = [Patch(facecolor=DATASET_PALETTE[label], label=label) for label in ["original", "model"]]
     fig.legend(legend_handles, ["original", "model"], title="Dataset", loc="upper center", ncol=2, bbox_to_anchor=(0.5, 1.02), frameon=True)
@@ -285,6 +445,17 @@ def stance_polarity(score: float) -> Optional[str]:
     return "positive" if score > 0 else "negative"
 
 
+def stance_label_for_group(qidx: int, group: pd.DataFrame) -> str:
+    for column in ["target_category", "stance_related_categories", "stance_question"]:
+        if column not in group:
+            continue
+        values = group[column].dropna().astype(str).str.strip()
+        values = values[values != ""]
+        if not values.empty:
+            return values.iloc[0].replace("|", " / ")
+    return f"Q{qidx}"
+
+
 def graph_stances(results_root: Path, model: str, output_path: Path) -> None:
     frame = safe_read_csv(merged_stances_csv(results_root, model, "improvised"))
     if frame is None or not {"question_index", "score_original", "score_llm"}.issubset(frame.columns):
@@ -292,18 +463,24 @@ def graph_stances(results_root: Path, model: str, output_path: Path) -> None:
         return
 
     frame = frame.copy()
+    frame["question_index"] = numeric(frame["question_index"])
     frame["score_original"] = numeric(frame["score_original"])
     frame["score_llm"] = numeric(frame["score_llm"])
+    frame = frame.dropna(subset=["question_index"])
+    frame["question_index"] = frame["question_index"].astype(int)
     frame["original_polarity"] = frame["score_original"].map(stance_polarity)
     frame["model_polarity"] = frame["score_llm"].map(stance_polarity)
-    questions = list(range(10))
-    labels = ["negative", "positive"]
+    questions = sorted(frame["question_index"].unique())
+    stance_labels = {qidx: stance_label_for_group(qidx, group) for qidx, group in frame.groupby("question_index", sort=True)}
+    polarity_labels = ["negative", "positive"]
 
-    fig, axes = plt.subplots(2, 5, figsize=(21, 9), sharex=False, sharey=False)
+    ncols = min(5, max(1, len(questions)))
+    nrows = int(np.ceil(len(questions) / ncols))
+    fig, axes = plt.subplots(nrows, ncols, figsize=(4.2 * ncols, 4.5 * nrows), sharex=False, sharey=False, squeeze=False)
     axes_flat = axes.ravel()
     for ax, qidx in zip(axes_flat, questions):
         sub = frame[frame["question_index"] == qidx].dropna(subset=["original_polarity", "model_polarity"])
-        counts = pd.crosstab(sub["original_polarity"], sub["model_polarity"]).reindex(index=labels, columns=labels, fill_value=0)
+        counts = pd.crosstab(sub["original_polarity"], sub["model_polarity"]).reindex(index=polarity_labels, columns=polarity_labels, fill_value=0)
         sns.heatmap(
             counts,
             annot=True,
@@ -315,14 +492,152 @@ def graph_stances(results_root: Path, model: str, output_path: Path) -> None:
             square=True,
             ax=ax,
         )
-        ax.set_title(f"Q{qidx}")
+        ax.set_title(stance_labels.get(qidx, f"Q{qidx}"))
         ax.set_xlabel("Model")
         ax.set_ylabel("Original")
         ax.tick_params(axis="x", rotation=0)
         ax.tick_params(axis="y", rotation=0)
+    for ax in axes_flat[len(questions):]:
+        ax.set_axis_off()
     fig.suptitle("STANCE Polarity Confusion Matrices: Original vs Model", y=1.02)
     fig.text(0.5, 0.01, "Neutral scores (0) are excluded from the positive/negative polarity counts.", ha="center", fontsize=11)
     fig.tight_layout(rect=(0, 0.03, 1, 0.98))
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output_path, dpi=180, bbox_inches="tight")
+    plt.close(fig)
+    print(f"Wrote {output_path}")
+
+
+def parse_score_vector(value) -> Optional[List[float]]:
+    if isinstance(value, list):
+        parsed = value
+    else:
+        if pd.isna(value):
+            return None
+        try:
+            parsed = ast.literal_eval(str(value))
+        except (SyntaxError, ValueError):
+            return None
+    if not isinstance(parsed, (list, tuple)) or len(parsed) != len(DIALECT_LABELS):
+        return None
+    try:
+        return [float(item) for item in parsed]
+    except (TypeError, ValueError):
+        return None
+
+
+def load_dialect_frame(results_root: Path, model: str, subset: str) -> Optional[pd.DataFrame]:
+    frame = safe_read_csv(dialect_id_csv(results_root, model, subset))
+    if frame is None:
+        return None
+    required = {"dialect", "answer_dialect"}
+    if not required.issubset(frame.columns):
+        return None
+    frame = frame.copy()
+    frame["dialect"] = frame["dialect"].astype(str).str.strip()
+    frame["answer_dialect"] = frame["answer_dialect"].astype(str).str.strip()
+    frame = frame[frame["dialect"].isin(DIALECT_LABELS) & frame["answer_dialect"].isin(DIALECT_LABELS)]
+    return frame
+
+
+def graph_dialect_confusion(results_root: Path, model: str, output_path: Path) -> None:
+    subset_frames = {subset: load_dialect_frame(results_root, model, subset) for subset in SUBSETS}
+    subset_frames = {subset: frame for subset, frame in subset_frames.items() if frame is not None and not frame.empty}
+    if not subset_frames:
+        print("[WARN] Missing dialect ID rows; skipping dialect_confusion.png.")
+        return
+
+    fig, axes = plt.subplots(1, len(subset_frames), figsize=(8 * len(subset_frames), 7.2), squeeze=False)
+    for ax, (subset, frame) in zip(axes[0], subset_frames.items()):
+        counts = pd.crosstab(frame["dialect"], frame["answer_dialect"]).reindex(index=DIALECT_LABELS, columns=DIALECT_LABELS, fill_value=0)
+        vmax = max(1, int(counts.to_numpy().max()))
+        sns.heatmap(
+            counts,
+            annot=True,
+            fmt="d",
+            cmap="Blues",
+            norm=LogNorm(vmin=1, vmax=vmax),
+            mask=counts.eq(0),
+            cbar=len(subset_frames) == 1,
+            linewidths=0.25,
+            linecolor="white",
+            square=True,
+            annot_kws={"fontsize": 7},
+            ax=ax,
+        )
+        ax.set_title(subset.title())
+        ax.set_xlabel("Answer dialect")
+        ax.set_ylabel("Question dialect")
+        ax.tick_params(axis="x", rotation=45, labelsize=8)
+        ax.tick_params(axis="y", rotation=0, labelsize=8)
+    fig.suptitle("Dialect Changes from Question to Answer", y=1.02)
+    fig.tight_layout()
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output_path, dpi=180, bbox_inches="tight")
+    plt.close(fig)
+    print(f"Wrote {output_path}")
+
+
+def graph_dialect_scores(results_root: Path, model: str, output_path: Path) -> None:
+    rows = []
+    for subset in SUBSETS:
+        frame = safe_read_csv(dialect_id_csv(results_root, model, subset))
+        if frame is None or not {"dialect_score", "answer_dialect_score"}.issubset(frame.columns):
+            continue
+        for score_column, field in [("dialect_score", "question"), ("answer_dialect_score", "answer")]:
+            for vector in frame[score_column].map(parse_score_vector).dropna():
+                rows.extend(
+                    {"subset": subset, "field": field, "dialect": dialect, "score": score}
+                    for dialect, score in zip(DIALECT_LABELS, vector)
+                )
+    if not rows:
+        print("[WARN] Missing dialect score vectors; skipping dialect_scores.png.")
+        return
+
+    data = pd.DataFrame(rows)
+    data["score"] = numeric(data["score"])
+    data = data.dropna(subset=["score"])
+    positive_scores = data.loc[data["score"] > 0, "score"]
+    if positive_scores.empty:
+        print("[WARN] Dialect score vectors do not contain positive values; skipping dialect_scores.png.")
+        return
+    score_floor = float(positive_scores.min()) / 10.0
+    data["score_plot"] = data["score"].where(data["score"] > 0, score_floor)
+    subsets = [subset for subset in SUBSETS if subset in set(data["subset"])]
+    fig, axes = plt.subplots(1, len(subsets), figsize=(9 * len(subsets), 7.5), sharex=True, squeeze=False)
+    legend_handles = None
+    legend_labels = None
+    for ax, subset in zip(axes[0], subsets):
+        sub = data[data["subset"] == subset]
+        sns.boxplot(
+            data=sub,
+            x="score_plot",
+            y="dialect",
+            hue="field",
+            order=DIALECT_LABELS,
+            hue_order=["question", "answer"],
+            orient="h",
+            showfliers=False,
+            linewidth=0.8,
+            ax=ax,
+        )
+        handles, labels = ax.get_legend_handles_labels()
+        if handles and legend_handles is None:
+            legend_handles, legend_labels = handles, labels
+        if ax.get_legend() is not None:
+            ax.get_legend().remove()
+        ax.set_title(subset.title())
+        ax.set_xscale("log")
+        # ax.set_xlim(score_floor, 1.0)
+        ax.set_xlabel("Dialect score (log scale)")
+        ax.set_ylabel("Dialect" if ax is axes[0, 0] else "")
+        if ax is not axes[0, 0]:
+            ax.set_yticks([])
+            ax.tick_params(axis="y", left=False, labelleft=False)
+    if legend_handles:
+        fig.legend(legend_handles, legend_labels, title="Field", loc="upper center", ncol=2, bbox_to_anchor=(0.5, 1.01), frameon=True)
+    fig.suptitle("Dialect Score Distributions: Question vs Answer", y=1.035)
+    fig.tight_layout(rect=(0, 0, 1, 0.98))
     output_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(output_path, dpi=180, bbox_inches="tight")
     plt.close(fig)
@@ -387,6 +702,137 @@ def significance_stars(pvalue) -> str:
         return "*"
     return ""
 
+
+
+
+def cluster_feature_csv(results_root: Path, model: str, subset: str, threshold: str = "0p8") -> Path:
+    return results_root / model / "test" / subset / f"correlation_cluster_features_rho{threshold}.csv"
+
+
+def cluster_groups_csv(results_root: Path, model: str, subset: str, threshold: str = "0p8") -> Path:
+    return results_root / model / "test" / subset / f"correlation_feature_groups_rho{threshold}.csv"
+
+
+def cluster_feature_labels(results_root: Path, model: str, subset: str, threshold: str = "0p8") -> Dict[str, str]:
+    groups = safe_read_csv(cluster_groups_csv(results_root, model, subset, threshold))
+    if groups is None or not {"cluster_feature", "features"}.issubset(groups.columns):
+        return {}
+    labels = {}
+    for _, row in groups.dropna(subset=["cluster_feature"]).iterrows():
+        feature = str(row.get("cluster_feature", ""))
+        source_features = str(row.get("features", "")).strip()
+        if feature.startswith("corr_cluster_") and source_features:
+            labels[feature] = source_features
+    return labels
+
+
+def load_cluster_feature_values(results_root: Path, model: str, general: bool) -> Optional[pd.DataFrame]:
+    frames = []
+    for subset in SUBSETS:
+        for label_model, label in [(ORIGINAL, "original"), (model, "model")]:
+            path = cluster_feature_csv(results_root, label_model, subset)
+            frame = safe_read_csv(path)
+            if frame is None:
+                continue
+            label_map = cluster_feature_labels(results_root, label_model, subset) if not general else {}
+            if general:
+                features = [column for column in frame.columns if column.startswith("general_explainable_feature_")]
+            else:
+                features = [column for column in frame.columns if column.startswith("corr_cluster_")]
+            for feature in features:
+                if feature in EXCLUDED_REPORT_METRICS:
+                    continue
+                values = numeric(frame[feature]).dropna()
+                if values.empty:
+                    continue
+                frames.append(pd.DataFrame({"value": values, "dataset": label, "subset": subset, "feature": feature, "feature_label": label_map.get(feature, feature)}))
+    if not frames:
+        return None
+    return pd.concat(frames, ignore_index=True)
+
+
+def graph_cluster_feature_violins(results_root: Path, model: str, output_path: Path) -> None:
+    data = load_cluster_feature_values(results_root, model, general=False)
+    if data is None or data.empty:
+        print("[WARN] Missing correlation cluster feature values; skipping cluster_explainables.png.")
+        return
+    subsets = [subset for subset in SUBSETS if subset in set(data["subset"])]
+    max_features = max(data[data["subset"] == subset]["feature_label"].nunique() for subset in subsets)
+    fig_height = max(5, 0.38 * max_features + 2.8)
+    fig, axes = plt.subplots(1, len(subsets), figsize=(9 * len(subsets), fig_height), sharex=True, squeeze=False)
+    legend_handles = None
+    legend_labels = None
+    for ax, subset in zip(axes[0], subsets):
+        sub = data[data["subset"] == subset].copy()
+        feature_order = sub.groupby("feature_label")["value"].median().sort_values(ascending=False).index.tolist()
+        sns.violinplot(
+            data=sub,
+            x="value",
+            y="feature_label",
+            hue="dataset",
+            hue_order=["original", "model"],
+            order=feature_order,
+            palette=DATASET_PALETTE,
+            orient="h",
+            inner="quartile",
+            cut=0,
+            linewidth=0.8,
+            density_norm="width",
+            ax=ax,
+        )
+        handles, labels = ax.get_legend_handles_labels()
+        if handles and legend_handles is None:
+            legend_handles, legend_labels = handles, labels
+        if ax.get_legend() is not None:
+            ax.get_legend().remove()
+        ax.set_title(subset.title())
+        ax.set_xlabel("PCA cluster feature value")
+        ax.set_ylabel("Cluster feature" if ax is axes[0, 0] else "")
+        if ax is not axes[0, 0]:
+            ax.set_yticks([])
+            ax.tick_params(axis="y", left=False, labelleft=False)
+    if legend_handles:
+        fig.legend(legend_handles, legend_labels, title="Dataset", loc="upper center", ncol=2, bbox_to_anchor=(0.5, 1.01))
+    fig.suptitle("Correlation Cluster Explainable Features", y=1.035)
+    fig.tight_layout(rect=(0, 0, 1, 0.98))
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output_path, dpi=180, bbox_inches="tight")
+    plt.close(fig)
+    print(f"Wrote {output_path}")
+
+
+def graph_general_explainable_histogram(results_root: Path, model: str, output_path: Path) -> None:
+    data = load_cluster_feature_values(results_root, model, general=True)
+    if data is None or data.empty:
+        print("[WARN] Missing general explainable feature values; skipping general_explainable.png.")
+        return
+    subsets = [subset for subset in SUBSETS if subset in set(data["subset"])]
+    fig, axes = plt.subplots(len(subsets), 1, figsize=(11, max(4, 4 * len(subsets))), sharex=True, squeeze=False)
+    for ax, subset in zip(axes[:, 0], subsets):
+        sub = data[data["subset"] == subset]
+        sns.histplot(
+            data=sub,
+            x="value",
+            hue="dataset",
+            hue_order=["original", "model"],
+            palette=DATASET_PALETTE,
+            bins=40,
+            stat="density",
+            common_norm=False,
+            element="step",
+            fill=True,
+            alpha=0.35,
+            ax=ax,
+        )
+        ax.set_title(subset.title())
+        ax.set_xlabel("General explainable feature value")
+        ax.set_ylabel("Density")
+    fig.suptitle("General Explainable Feature", y=1.03)
+    fig.tight_layout()
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output_path, dpi=180, bbox_inches="tight")
+    plt.close(fig)
+    print(f"Wrote {output_path}")
 
 def graph_explainable_scatter(results_root: Path, model: str, output_path: Path) -> None:
     summary = safe_read_csv(feature_summary_csv(results_root, model))
@@ -539,7 +985,9 @@ def main() -> int:
     parser.add_argument("--model", required=True)
     parser.add_argument("--results-root", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
+    parser.add_argument("--ignore-features", nargs="*", default=[])
     args = parser.parse_args()
+    EXCLUDED_REPORT_METRICS.update(args.ignore_features)
 
     graphs_dir = args.output_dir / "graphs"
     graph_basic_metric_histograms(args.results_root, args.model, graphs_dir / "basic_metric_graphs")
@@ -547,7 +995,11 @@ def main() -> int:
     graph_feature_histograms(args.results_root, args.model, graphs_dir / "feat_graphs")
     graph_stances(args.results_root, args.model, graphs_dir / "stances.png")
     graph_emotional_naturalness(args.results_root, args.model, graphs_dir / "emo_naturalness.png")
+    graph_dialect_confusion(args.results_root, args.model, graphs_dir / "dialect_confusion.png")
+    graph_dialect_scores(args.results_root, args.model, graphs_dir / "dialect_scores.png")
     graph_explainable_scatter(args.results_root, args.model, graphs_dir / "explainables.png")
+    graph_cluster_feature_violins(args.results_root, args.model, graphs_dir / "cluster_explainables.png")
+    graph_general_explainable_histogram(args.results_root, args.model, graphs_dir / "general_explainable.png")
     return 0
 
 
