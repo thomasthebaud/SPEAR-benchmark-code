@@ -24,3 +24,7 @@ for split in 'test' 'dev'; do
         done
     done
 done
+
+wait
+echo "All transcriptions completed for original and $llm_model outputs with both Qwen3-ASR-0.6B and whisper-large-v3 ASR models."
+exit

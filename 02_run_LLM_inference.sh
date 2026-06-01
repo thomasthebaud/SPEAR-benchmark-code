@@ -28,3 +28,7 @@ for split in 'test' 'dev'; do
             --org "$org" &
     done
 done
+
+wait
+echo "LLM inference with $llm_model completed for all splits and subsets."
+exit

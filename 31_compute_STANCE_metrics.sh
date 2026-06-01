@@ -8,14 +8,16 @@ source cmd.sh
 
 for split in 'test' 'dev'; do
     for subset in 'improvised'; do
-        metrics="results/$protocol/$llm_model/$split/$subset"
-            
-        $(python_cmd 'SB31' --cpu) bin/STANCE/merge_outputs.py \
-            --stances-original "results/$protocol/original/$split/$subset" \
-            --stances-llm "results/$protocol/$llm_model/$split/$subset" \
-            --output-csv "$metrics/merged_stances.csv" &
-            
-
+        for model in 'original' $llm_model; do
+            echo "### Merging STANCE metrics for $model $split $subset ###"
+            metrics="results/$protocol/$model/$split/$subset"
+                
+            $(python_cmd 'SB31' --cpu) bin/STANCE/merge_outputs.py \
+                --stances-original "results/$protocol/original/$split/$subset" \
+                --stances-llm "results/$protocol/$model/$split/$subset" \
+                --output-csv "$metrics/merged_stances.csv" &
+        
+        done    
     done
 done
 
