@@ -47,7 +47,7 @@ EOF
   shift
 done
 
-report_dir="reports/$llm_model"
+report_dir="reports/$protocol/$llm_model"
 
 if [[ "$run_short" -eq 1 ]]; then
   echo "Stage 1: generating short report for model:$llm_model"

@@ -1,0 +1,2 @@
+metric,section,mean_diff,std_diff,p_value,n,auroc,accuracy,detail
+English language detected in original answers (%),Language ID,97.61673151750973,,,2056,,,percentage of language_id.csv rows with language=eng; numerator=2007; denominator=2056

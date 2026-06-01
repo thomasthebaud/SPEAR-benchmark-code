@@ -1,0 +1,2 @@
+protocol,model,avg_latency,avg_UTMOS,avg_WER,WER_std_between_asr_models,interrupted_pct,avg_interruption_time,EN_lang_%,same_dialect_%,NA_dialect_%,avg_emo_naturalness_logit,same_stance_as_question_%,more_negative_stance_%,more_positive_stance_%,avg_general_expl_feat
+seamless_2t_2s_questions,original,752.525,2.217,5.729,0.228,40.305,2495.889,97.818,74.124,76.641,-4.405,100.000,0.000,0.000,0.950

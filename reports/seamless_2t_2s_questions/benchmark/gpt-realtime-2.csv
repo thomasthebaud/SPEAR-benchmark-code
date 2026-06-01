@@ -1,0 +1,2 @@
+protocol,model,avg_latency,avg_UTMOS,avg_WER,WER_std_between_asr_models,interrupted_pct,avg_interruption_time,EN_lang_%,same_dialect_%,NA_dialect_%,avg_emo_naturalness_logit,same_stance_as_question_%,more_negative_stance_%,more_positive_stance_%,avg_general_expl_feat
+seamless_2t_2s_questions,gpt-realtime-2,104.820,4.274,0.150,0.006,29.922,11260.979,99.844,75.133,98.027,-4.438,94.889,3.066,2.385,-0.622

@@ -1,0 +1,166 @@
+SPEARBench Short Report
+=======================
+
+Setup
+-----
+parameter                            value
+protocol                             seamless_2t_2s_questions
+selection_method                     end_with_question
+min_turns                            1
+min_speakers                         1
+splits                               dev,test
+subsets                              improvised,naturalistic
+asr_model                            whisper-large-v3
+evaluated_llm_model                  gpt-realtime-2
+stance_llm_model                     gpt-audio-1.5
+sbert_model_for_naturalness_context  sentence-transformers/all-MiniLM-L6-v2
+statistical_test                     Mann-Whitney U Test
+data_root                            data/seamless_2t_2s_questions
+results_root                         results/seamless_2t_2s_questions
+
+Data Statistics
+---------------
+model           split  subset        utterances  total_audio_hours
+original        dev    improvised    missing     missing
+original        dev    naturalistic  missing     missing
+original        test   improvised    missing     missing
+original        test   naturalistic  missing     missing
+gpt-realtime-2  dev    improvised    missing     missing
+gpt-realtime-2  dev    naturalistic  missing     missing
+gpt-realtime-2  test   improvised    missing     missing
+gpt-realtime-2  test   naturalistic  missing     missing
+
+Basic Metrics
+-------------
+metric                              n     mean_diff  std_diff   p_value    auroc  accuracy
+CER_Qwen3-ASR-0.6B (improvised)     1149  -4.5383    5.4919     0          nan    nan
+CER_whisper-large-v3 (improvised)   1149  -4.2439    5.1896     0          nan    nan
+WER_Qwen3-ASR-0.6B (improvised)     1149  -5.5398    6.7258     0          nan    nan
+WER_whisper-large-v3 (improvised)   1149  -5.1633    6.2933     0          nan    nan
+UTMOS (improvised)                  1150  1.9861     0.5405     0          nan    nan
+latency (improvised)                1150  -302.0008  1000.1294  2.57e-34   nan    nan
+interrupted (improvised)            1150  665.0898   5507.6164  1e-24      nan    nan
+interruptions count (improvised)    1150  -289       nan        nan        nan    nan
+CER_Qwen3-ASR-0.6B (naturalistic)   2045  -4.9994    6.5024     0          nan    nan
+WER_Qwen3-ASR-0.6B (naturalistic)   2045  -5.9604    7.7218     0          nan    nan
+UTMOS (naturalistic)                2045  2.0970     0.6054     0          nan    nan
+latency (naturalistic)              2045  -841.3921  1780.4005  6.85e-208  nan    nan
+interrupted (naturalistic)          2045  3318.6107  8404.8121  6.31e-09   nan    nan
+interruptions count (naturalistic)  2045  -48        nan        nan        nan    nan
+
+Language ID
+-----------
+subset        % Eng in models' answers  % Eng in original answers
+improvised    99.9130                   98.1771
+naturalistic  99.8047                   97.6167
+
+Dialect ID
+----------
+Subset        Question/Answer  East Asia  English  Germanic  Irish   North America  Northern Irish  Oceania  Other   Romance  Scottish  Semitic  Slavic  South African  Southeast Asia  South Asia  Welsh
+improvised    Question         0.3478     0.0870   0.0870    5.8261  83.3913        0.0000          0.0870   0.0000  9.0435   0.0870    0.0870   0.3478  0.0000         0.4348          0.0870      0.0000
+improvised    Answer           0.0000     0.0000   0.0000    1.8277  97.4761        0.0000          0.0000   0.0000  0.4352   0.0000    0.0000   0.0000  0.0000         0.2611          0.0000      0.0000
+naturalistic  Question         1.9043     0.5859   0.2930    4.6387  72.5586        0.0000          0.2441   0.1953  16.7480  0.1465    0.2930   0.2441  0.3418         1.2695          0.3418      0.0000
+naturalistic  Answer           0.0000     0.0000   0.0000    1.2720  98.3366        0.0000          0.0489   0.0000  0.0978   0.0978    0.0000   0.0000  0.0000         0.1468          0.0000      0.0000
+
+Emotional Naturalness
+---------------------
+metric  n  mean_diff  std_diff  p_value  auroc  accuracy
+improvised
+Emotional naturalness (improvised)                             379  -0.0358  0.5219  0.782  nan  nan
+Emotional naturalness collaborative_storytelling (improvised)  2    -0.0019  nan     nan    nan  nan
+Emotional naturalness grounded_gesture (improvised)            4    -0.0029  nan     nan    nan  nan
+Emotional naturalness ipc_conversation (improvised)            6    -0.0043  nan     nan    nan  nan
+Emotional naturalness stranger (improvised)                    367  -0.0369  nan     nan    nan  nan
+naturalistic
+Emotional naturalness (naturalistic)                                 676  -0.0282  0.5742  0.86  nan  nan
+Emotional naturalness collaborative_storytelling (naturalistic)      4    -0.0092  nan     nan   nan  nan
+Emotional naturalness coworkers (naturalistic)                       14   -0.0060  nan     nan   nan  nan
+Emotional naturalness dating/spouse/romantic_partner (naturalistic)  39   -0.0057  nan     nan   nan  nan
+Emotional naturalness familiar-generic (naturalistic)                35   -0.0055  nan     nan   nan  nan
+Emotional naturalness family-generic (naturalistic)                  88   -0.0032  nan     nan   nan  nan
+Emotional naturalness friends (naturalistic)                         299  -0.0555  nan     nan   nan  nan
+Emotional naturalness grounded_gesture (naturalistic)                7    -0.0150  nan     nan   nan  nan
+Emotional naturalness ipc_conversation (naturalistic)                22   -0.0141  nan     nan   nan  nan
+Emotional naturalness stranger (naturalistic)                        168  -0.0291  nan     nan   nan  nan
+
+STANCEs
+-------
+metric                                            n    mean_diff  std_diff  p_value  auroc  accuracy
+STANCE same sign (%)                              587  94.8893    nan       nan      nan    nan
+STANCE model positive when original negative (%)  307  4.2345     nan       nan      nan    nan
+STANCE model negative when original positive (%)  280  6.0714     nan       nan      nan    nan
+Q0                                                61   0.0000     0.0000    1        nan    nan
+Q1                                                94   0.0532     0.4242    0.83     nan    nan
+Q2                                                46   0.0000     0.0000    1        nan    nan
+Q3                                                91   -0.0879    1.0504    0.71     nan    nan
+Q4                                                81   -0.0988    0.6246    0.75     nan    nan
+Q5                                                27   -0.1481    0.7698    0.336    nan    nan
+Q6                                                55   -0.0182    1.0272    0.96     nan    nan
+Q7                                                61   0.0000     1.7889    1        nan    nan
+Q8                                                56   -0.0179    0.7744    0.914    nan    nan
+Q9                                                15   0.0000     0.0000    1        nan    nan
+
+Explainable Features
+--------------------
+improvised
+rank_group     metric                n     mean_diff  std_diff  p_value    auroc   accuracy
+highest_auroc  f0_max_raw            1150  -106.4510  130.4712  1.05e-128  0.7906  0.7419
+highest_auroc  f0_range_raw          1150  -101.8113  131.6018  3.8e-116   0.7758  0.7397
+highest_auroc  f0_std_p10_p90        1150  -10.6383   18.4000   1.44e-56   0.6908  0.6914
+highest_auroc  f0_std_p25_p75        1150  -6.2489    11.6141   3.93e-51   0.6811  0.6867
+highest_auroc  f0_range_p10_p90      1150  -35.9713   65.3850   6.31e-48   0.6751  0.6884
+highest_auroc  f0_range_p25_p75      1150  -20.7671   38.6366   1.47e-47   0.6744  0.6719
+highest_auroc  f0_mean_raw           1150  -23.4889   42.3642   5.57e-44   0.6674  0.6506
+highest_auroc  f0_p75                1150  -29.3724   56.7970   3.89e-41   0.6617  0.6558
+highest_auroc  f0_mean_p10_p90       1150  -19.3232   42.8203   5.82e-27   0.6294  0.5363
+highest_auroc  f0_voiced_duration_s  1150  -0.5862    8.3676    0.377      0.5106  0.4978
+lowest_auroc   f0_mean_p25_p75       1150  -17.5228   42.3023   2.17e-21   0.3857  0.3116
+lowest_auroc   f0_median_raw         1150  -17.0432   42.2753   5.17e-19   0.3928  0.2868
+lowest_auroc   f0_total_duration_s   1150  -0.9004    16.4759   0.692      0.5048  0.4809
+lowest_auroc   f0_n_voiced_frames    1150  -58.3237   836.6529  0.385      0.5105  0.4983
+lowest_auroc   f0_voiced_duration_s  1150  -0.5862    8.3676    0.377      0.5106  0.4978
+lowest_auroc   f0_mean_p10_p90       1150  -19.3232   42.8203   5.82e-27   0.6294  0.5363
+lowest_auroc   f0_p75                1150  -29.3724   56.7970   3.89e-41   0.6617  0.6558
+lowest_auroc   f0_mean_raw           1150  -23.4889   42.3642   5.57e-44   0.6674  0.6506
+lowest_auroc   f0_range_p25_p75      1150  -20.7671   38.6366   1.47e-47   0.6744  0.6719
+lowest_auroc   f0_range_p10_p90      1150  -35.9713   65.3850   6.31e-48   0.6751  0.6884
+naturalistic
+rank_group     metric                n     mean_diff  std_diff  p_value    auroc   accuracy
+highest_auroc  f0_max_raw            2045  -84.8804   143.8724  3.75e-140  0.7273  0.7024
+highest_auroc  f0_range_raw          2045  -80.9480   144.8090  7.11e-125  0.7143  0.6983
+highest_auroc  f0_p75                2045  -14.4801   56.6644   1.19e-12   0.5641  0.6400
+highest_auroc  f0_mean_raw           2045  -13.9520   45.8051   1.56e-11   0.5608  0.6544
+highest_auroc  f0_total_duration_s   2045  -3.6338    17.2200   1.69e-10   0.5576  0.5474
+highest_auroc  f0_std_p10_p90        2045  -4.2149    15.4388   7.19e-06   0.5405  0.5900
+highest_auroc  f0_mean_p10_p90       2045  -11.0377   46.5908   6.6e-05    0.5360  0.6339
+highest_auroc  f0_range_p10_p90      2045  -13.6887   57.5170   0.000551   0.5312  0.5817
+highest_auroc  f0_mean_p25_p75       2045  -9.9016    46.6348   0.00366    0.5262  0.6190
+highest_auroc  f0_median_raw         2045  -9.6283    46.8958   0.021      0.5208  0.6095
+lowest_auroc   f0_n_voiced_frames    2045  -85.5405   869.7214  0.804      0.5022  0.5011
+lowest_auroc   f0_voiced_duration_s  2045  -0.8565    8.6986    0.799      0.5023  0.5009
+lowest_auroc   f0_range_p25_p75      2045  -7.2028    31.6354   0.261      0.5101  0.5590
+lowest_auroc   f0_std_p25_p75        2045  -2.3907    9.7333    0.157      0.5128  0.5690
+lowest_auroc   f0_median_raw         2045  -9.6283    46.8958   0.021      0.5208  0.6095
+lowest_auroc   f0_mean_p25_p75       2045  -9.9016    46.6348   0.00366    0.5262  0.6190
+lowest_auroc   f0_range_p10_p90      2045  -13.6887   57.5170   0.000551   0.5312  0.5817
+lowest_auroc   f0_mean_p10_p90       2045  -11.0377   46.5908   6.6e-05    0.5360  0.6339
+lowest_auroc   f0_std_p10_p90        2045  -4.2149    15.4388   7.19e-06   0.5405  0.5900
+lowest_auroc   f0_total_duration_s   2045  -3.6338    17.2200   1.69e-10   0.5576  0.5474
+cluster_features_rho0p8
+corr_cluster_001_rho0p8             1150  -1.3826  1.7369  6.48e-122  nan  nan
+corr_cluster_002_rho0p8             1150  -1.3253  2.7895  2.31e-30   nan  nan
+corr_cluster_003_rho0p8             1150  -0.1520  2.2993  0.378      nan  nan
+corr_cluster_004_rho0p8             1150  -1.3365  2.3515  1.99e-54   nan  nan
+general_explainable_feature_rho0p8  1150  -2.0146  3.3223  3.77e-58   nan  nan
+cluster_features_rho0p8
+corr_cluster_001_rho0p8             2045  -1.0862  1.8894  2.57e-132  nan  nan
+corr_cluster_002_rho0p8             2045  -0.8656  3.5339  7.06e-06   nan  nan
+corr_cluster_003_rho0p8             2045  -0.2699  1.9795  0.00909    nan  nan
+corr_cluster_004_rho0p8             2045  -0.6730  2.6393  0.000308   nan  nan
+general_explainable_feature_rho0p8  2045  -1.3253  3.9684  4.46e-24   nan  nan
+
+Files
+-----
+metrics-improvised.csv    reports/seamless_2t_2s_questions/gpt-realtime-2/metrics-improvised.csv
+metrics-naturalistic.csv  reports/seamless_2t_2s_questions/gpt-realtime-2/metrics-naturalistic.csv
+report.txt                reports/seamless_2t_2s_questions/gpt-realtime-2/report.txt

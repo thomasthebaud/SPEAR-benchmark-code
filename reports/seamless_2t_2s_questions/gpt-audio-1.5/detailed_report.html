@@ -1,0 +1,1190 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SPEARBench Detailed Report - gpt-audio-1.5</title>
+  <style>
+    :root { --ink:#17212b; --muted:#5b6773; --line:#d8dee6; --bg:#f7f9fb; --card:#ffffff; --accent:#225ea8; }
+    body { margin:0; font-family: Arial, Helvetica, sans-serif; color:var(--ink); background:var(--bg); line-height:1.5; }
+    header { padding:32px 44px; background:#0f2438; color:white; }
+    header h1 { margin:0 0 8px 0; font-size:30px; }
+    header p { margin:0; color:#dbe7f3; }
+    main { max-width:1180px; margin:0 auto; padding:28px 24px 56px; }
+    section { margin:0 0 32px; }
+    h2 { margin-top:0; border-bottom:2px solid var(--line); padding-bottom:8px; }
+    h3 { margin-bottom:8px; }
+    .cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:16px; margin:18px 0; }
+    .card { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:16px; box-shadow:0 1px 2px rgba(0,0,0,0.04); }
+    .metric-table { width:100%; border-collapse:collapse; font-size:14px; background:white; }
+    .metric-table th, .metric-table td { border:1px solid var(--line); padding:7px 9px; text-align:left; vertical-align:top; }
+    .metric-table th { background:#eef3f8; font-weight:700; }
+    .figure { width:100%; max-width:1120px; display:block; margin:14px auto 24px; border:1px solid var(--line); border-radius:6px; background:white; }
+    .muted { color:var(--muted); }
+    details { margin-top:16px; }
+    summary { cursor:pointer; color:var(--accent); font-weight:700; margin-bottom:12px; }
+    .gallery { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:14px; }
+    .thumb { margin:0; background:white; border:1px solid var(--line); border-radius:6px; padding:8px; }
+    .thumb img { width:100%; display:block; }
+    .thumb figcaption { font-size:12px; color:var(--muted); padding-top:6px; word-break:break-word; }
+  </style>
+</head>
+<body>
+<header>
+  <h1>SPEARBench Detailed Report</h1>
+  <p>Model: gpt-audio-1.5 | Protocol: seamless_2t_2s_questions</p>
+</header>
+<main>
+  <section>
+    <h2>Executive Summary</h2>
+    <p>This report combines the simplified text report, Stage 1 metric tables, and Stage 2 figures into a browsable HTML document.</p>
+    <div class="cards"><section class="card"><h3>Improvised</h3>
+<p><strong>Emotional naturalness diff:</strong> -0.0388 (p=0.7930)</p>
+<p><strong>Basic metrics:</strong> 8 metrics summarized</p>
+<p><strong>Language ID:</strong> English language detected in original answers (%): 98.1771%; English language detected in model answers (%): 100.0000%</p>
+<p><strong>Dialect ID:</strong> 32 dialect percentage rows</p>
+<p><strong>Mean STANCE diff:</strong> 0.0100 across 10 stances</p>
+<p><strong>Best explainable AUROC:</strong> f0_max_raw (0.9163)</p></section>
+<section class="card"><h3>Naturalistic</h3>
+<p><strong>Emotional naturalness diff:</strong> -0.0052 (p=0.8831)</p>
+<p><strong>Basic metrics:</strong> 8 metrics summarized</p>
+<p><strong>Language ID:</strong> English language detected in original answers (%): 97.6167%; English language detected in model answers (%): 100.0000%</p>
+<p><strong>Dialect ID:</strong> 32 dialect percentage rows</p>
+<p><strong>Best explainable AUROC:</strong> f0_max_raw (0.8669)</p></section></div>
+  </section>
+
+
+  <section>
+    <h2>Basic Metrics</h2>
+    <p>Basic metrics come from script 10 and include ASR-specific CER/WER columns, UTMOS, latency, interruption counts, and interruption overlap duration when available. If original base metrics were not generated, the table reports model means and standard deviations.</p>
+    <table class="dataframe metric-table">
+  <thead>
+    <tr style="text-align: right;">
+      <th>subset</th>
+      <th>metric</th>
+      <th>mean_diff</th>
+      <th>std_diff</th>
+      <th>p_value</th>
+      <th>n</th>
+      <th>detail</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>improvised</td>
+      <td>CER_Qwen3-ASR-0.6B</td>
+      <td>-4.5623</td>
+      <td>5.4917</td>
+      <td>0.0000</td>
+      <td>1150</td>
+      <td>model-original mean difference; p-value is Mann-Whitney U Test</td>
+    </tr>
+    <tr>
+      <td>improvised</td>
+      <td>CER_whisper-large-v3</td>
+      <td>-4.3010</td>
+      <td>5.1886</td>
+      <td>0.0000</td>
+      <td>1150</td>
+      <td>model-original mean difference; p-value is Mann-Whitney U Test</td>
+    </tr>
+    <tr>
+      <td>improvised</td>
+      <td>WER_Qwen3-ASR-0.6B</td>
+      <td>-5.6087</td>
+      <td>6.7256</td>
+      <td>0.0000</td>
+      <td>1150</td>
+      <td>model-original mean difference; p-value is Mann-Whitney U Test</td>
+    </tr>
+    <tr>
+      <td>improvised</td>
+      <td>WER_whisper-large-v3</td>
+      <td>-5.2651</td>
+      <td>6.2923</td>
+      <td>0.0000</td>
+      <td>1150</td>
+      <td>model-original mean difference; p-value is Mann-Whitney U Test</td>
+    </tr>
+    <tr>
+      <td>improvised</td>
+      <td>UTMOS</td>
+      <td>2.0636</td>
+      <td>0.5249</td>
+      <td>0.0000</td>
+      <td>1150</td>
+      <td>model-original mean difference; p-value is Mann-Whitney U Test</td>
+    </tr>
+    <tr>
+      <td>improvised</td>
+      <td>latency</td>
+      <td>-265.9138</td>
+      <td>1004.5726</td>
+      <td>4.391e-07</td>
+      <td>1150</td>
+      <td>model-original mean difference; p-value is Mann-Whitney U Test</td>
+    </tr>
+    <tr>
+      <td>improvised</td>
+      <td>interrupted</td>
+      <td>-1000.6181</td>
+      <td>2402.3845</td>
+      <td>1.393e-131</td>
+      <td>1150</td>
+      <td>model-original mean difference; p-value is Mann-Whitney U Test; interrupted overlap duration in ms, with 0 for non-interruptions</td>
+    </tr>
+    <tr>
+      <td>improvised</td>
+      <td>interruptions count</td>
+      <td>-481.0000</td>
+      <td></td>
+      <td></td>
+      <td>1150</td>
+      <td>model-original interruption count difference; model_count=0; original_count=481</td>
+    </tr>
+    <tr>
+      <td>naturalistic</td>
+      <td>CER_Qwen3-ASR-0.6B</td>
+      <td>-5.0477</td>
+      <td>6.5020</td>
+      <td>0.0000</td>
+      <td>2054</td>
+      <td>model-original mean difference; p-value is Mann-Whitney U Test</td>
+    </tr>
+    <tr>
+      <td>naturalistic</td>
+      <td>CER_whisper-large-v3</td>
+      <td>-4.6147</td>
+      <td>5.8752</td>
+      <td>0.0000</td>
+      <td>2055</td>
+      <td>model-original mean difference; p-value is Mann-Whitney U Test</td>
+    </tr>
+    <tr>
+      <td>naturalistic</td>
+      <td>WER_Qwen3-ASR-0.6B</td>
+      <td>-6.0547</td>
+      <td>7.7214</td>
+      <td>0.0000</td>
+      <td>2054</td>
+      <td>model-original mean difference; p-value is Mann-Whitney U Test</td>
+    </tr>
+    <tr>
+      <td>naturalistic</td>
+      <td>WER_whisper-large-v3</td>
+      <td>-5.5489</td>
+      <td>6.9811</td>
+      <td>0.0000</td>
+      <td>2055</td>
+      <td>model-original mean difference; p-value is Mann-Whitney U Test</td>
+    </tr>
+    <tr>
+      <td>naturalistic</td>
+      <td>UTMOS</td>
+      <td>4.3611</td>
+      <td>0.0972</td>
+      <td></td>
+      <td>2055</td>
+      <td>model mean/std; original base_metrics.csv unavailable</td>
+    </tr>
+    <tr>
+      <td>naturalistic</td>
+      <td>latency</td>
+      <td>130.3650</td>
+      <td>210.6757</td>
+      <td></td>
+      <td>2055</td>
+      <td>model mean/std; original base_metrics.csv unavailable</td>
+    </tr>
+    <tr>
+      <td>naturalistic</td>
+      <td>interrupted</td>
+      <td>0.0000</td>
+      <td>0.0000</td>
+      <td></td>
+      <td>2055</td>
+      <td>model mean/std; original base_metrics.csv unavailable; interrupted overlap duration in ms, with 0 for non-interruptions</td>
+    </tr>
+    <tr>
+      <td>naturalistic</td>
+      <td>interruptions count</td>
+      <td>0.0000</td>
+      <td></td>
+      <td></td>
+      <td>2055</td>
+      <td>model interruption count=0</td>
+    </tr>
+  </tbody>
+</table>
+    <img class="figure" src="graphs/basic_metrics.png" alt="Basic metric violin plots" loading="lazy">
+    <details open><summary>Basic metric histogram gallery</summary><div class="gallery"><figure class="thumb"><img src="graphs/basic_metric_graphs/CER.png" alt="CER" loading="lazy"></figure>
+<figure class="thumb"><img src="graphs/basic_metric_graphs/UTMOS.png" alt="UTMOS" loading="lazy"></figure>
+<figure class="thumb"><img src="graphs/basic_metric_graphs/WER.png" alt="WER" loading="lazy"></figure>
+<figure class="thumb"><img src="graphs/basic_metric_graphs/interrupted.png" alt="interrupted" loading="lazy"></figure>
+<figure class="thumb"><img src="graphs/basic_metric_graphs/latency.png" alt="latency" loading="lazy"></figure></div></details>
+  </section>
+
+  <section>
+    <h2>Language ID</h2>
+    <p>Language ID reports the percentage of answer audio rows whose detected language is English (<code>eng</code>) in <code>language_id.csv</code>.</p>
+    <table class="dataframe metric-table">
+  <thead>
+    <tr style="text-align: right;">
+      <th>subset</th>
+      <th>% Eng in models' answers</th>
+      <th>% Eng in original answers</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>improvised</td>
+      <td>100.0</td>
+      <td>98.177083</td>
+    </tr>
+    <tr>
+      <td>naturalistic</td>
+      <td>100.0</td>
+      <td>97.616732</td>
+    </tr>
+  </tbody>
+</table>
+  </section>
+
+  <section>
+    <h2>Dialect ID</h2>
+    <p>Dialect ID reports the percentage of question and answer rows assigned to each VoxLect dialect class. The confusion matrix counts question-to-answer dialect changes; the box plot compares the full question and answer score vectors for each class.</p>
+    <table class="dataframe metric-table">
+  <thead>
+    <tr style="text-align: right;">
+      <th>Subset</th>
+      <th>Question/Answer</th>
+      <th>East Asia</th>
+      <th>English</th>
+      <th>Germanic</th>
+      <th>Irish</th>
+      <th>North America</th>
+      <th>Northern Irish</th>
+      <th>Oceania</th>
+      <th>Other</th>
+      <th>Romance</th>
+      <th>Scottish</th>
+      <th>Semitic</th>
+      <th>Slavic</th>
+      <th>South African</th>
+      <th>Southeast Asia</th>
+      <th>South Asia</th>
+      <th>Welsh</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>improvised</td>
+      <td>Question</td>
+      <td>0.347826</td>
+      <td>0.086957</td>
+      <td>0.000000</td>
+      <td>5.913043</td>
+      <td>83.391304</td>
+      <td>0.0</td>
+      <td>0.086957</td>
+      <td>0.000000</td>
+      <td>9.130435</td>
+      <td>0.086957</td>
+      <td>0.086957</td>
+      <td>0.347826</td>
+      <td>0.000000</td>
+      <td>0.434783</td>
+      <td>0.086957</td>
+      <td>0.0</td>
+    </tr>
+    <tr>
+      <td>improvised</td>
+      <td>Answer</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>1.826087</td>
+      <td>97.043478</td>
+      <td>0.0</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>1.043478</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>0.086957</td>
+      <td>0.000000</td>
+      <td>0.0</td>
+    </tr>
+    <tr>
+      <td>naturalistic</td>
+      <td>Question</td>
+      <td>1.946472</td>
+      <td>0.583942</td>
+      <td>0.291971</td>
+      <td>4.622871</td>
+      <td>72.554745</td>
+      <td>0.0</td>
+      <td>0.243309</td>
+      <td>0.194647</td>
+      <td>16.934307</td>
+      <td>0.145985</td>
+      <td>0.291971</td>
+      <td>0.243309</td>
+      <td>0.340633</td>
+      <td>1.265207</td>
+      <td>0.340633</td>
+      <td>0.0</td>
+    </tr>
+    <tr>
+      <td>naturalistic</td>
+      <td>Answer</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>1.265207</td>
+      <td>97.566910</td>
+      <td>0.0</td>
+      <td>0.048662</td>
+      <td>0.000000</td>
+      <td>0.973236</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>0.145985</td>
+      <td>0.000000</td>
+      <td>0.0</td>
+    </tr>
+  </tbody>
+</table>
+    <img class="figure" src="graphs/dialect_confusion.png" alt="Dialect question-to-answer confusion matrix" loading="lazy">
+    <img class="figure" src="graphs/dialect_scores.png" alt="Dialect score distributions for question and answer fields" loading="lazy">
+  </section>
+
+  <section>
+    <h2>Emotional Naturalness</h2>
+    <p>Naturalness is summarized as the paired test-set logit difference between model and original utterances. Positive values mean higher model logits than original logits.</p>
+    <table class="dataframe metric-table">
+  <thead>
+    <tr style="text-align: right;">
+      <th>subset</th>
+      <th>metric</th>
+      <th>mean_diff</th>
+      <th>std_diff</th>
+      <th>p_value</th>
+      <th>n</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>improvised</td>
+      <td>Emotional naturalness</td>
+      <td>-0.0388</td>
+      <td>0.5994</td>
+      <td>0.7930</td>
+      <td>379</td>
+    </tr>
+    <tr>
+      <td>improvised</td>
+      <td>Emotional naturalness by relationship: collaborative_storytelling</td>
+      <td>0.0021</td>
+      <td></td>
+      <td></td>
+      <td>2</td>
+    </tr>
+    <tr>
+      <td>improvised</td>
+      <td>Emotional naturalness by relationship: grounded_gesture</td>
+      <td>-0.0054</td>
+      <td></td>
+      <td></td>
+      <td>4</td>
+    </tr>
+    <tr>
+      <td>improvised</td>
+      <td>Emotional naturalness by relationship: ipc_conversation</td>
+      <td>-1.9485</td>
+      <td></td>
+      <td></td>
+      <td>6</td>
+    </tr>
+    <tr>
+      <td>improvised</td>
+      <td>Emotional naturalness by relationship: stranger</td>
+      <td>-0.0082</td>
+      <td></td>
+      <td></td>
+      <td>367</td>
+    </tr>
+    <tr>
+      <td>naturalistic</td>
+      <td>Emotional naturalness</td>
+      <td>-0.0052</td>
+      <td>0.0364</td>
+      <td>0.8831</td>
+      <td>677</td>
+    </tr>
+    <tr>
+      <td>naturalistic</td>
+      <td>Emotional naturalness by relationship: collaborative_storytelling</td>
+      <td>-0.0091</td>
+      <td></td>
+      <td></td>
+      <td>4</td>
+    </tr>
+    <tr>
+      <td>naturalistic</td>
+      <td>Emotional naturalness by relationship: coworkers</td>
+      <td>-0.0079</td>
+      <td></td>
+      <td></td>
+      <td>14</td>
+    </tr>
+    <tr>
+      <td>naturalistic</td>
+      <td>Emotional naturalness by relationship: dating/spouse/romantic_partner</td>
+      <td>-0.0060</td>
+      <td></td>
+      <td></td>
+      <td>39</td>
+    </tr>
+    <tr>
+      <td>naturalistic</td>
+      <td>Emotional naturalness by relationship: familiar-generic</td>
+      <td>-0.0020</td>
+      <td></td>
+      <td></td>
+      <td>35</td>
+    </tr>
+    <tr>
+      <td>naturalistic</td>
+      <td>Emotional naturalness by relationship: family-generic</td>
+      <td>-9.196e-04</td>
+      <td></td>
+      <td></td>
+      <td>88</td>
+    </tr>
+    <tr>
+      <td>naturalistic</td>
+      <td>Emotional naturalness by relationship: friends</td>
+      <td>-0.0051</td>
+      <td></td>
+      <td></td>
+      <td>299</td>
+    </tr>
+    <tr>
+      <td>naturalistic</td>
+      <td>Emotional naturalness by relationship: grounded_gesture</td>
+      <td>-0.0101</td>
+      <td></td>
+      <td></td>
+      <td>7</td>
+    </tr>
+    <tr>
+      <td>naturalistic</td>
+      <td>Emotional naturalness by relationship: ipc_conversation</td>
+      <td>-0.0091</td>
+      <td></td>
+      <td></td>
+      <td>22</td>
+    </tr>
+    <tr>
+      <td>naturalistic</td>
+      <td>Emotional naturalness by relationship: stranger</td>
+      <td>-0.0071</td>
+      <td></td>
+      <td></td>
+      <td>169</td>
+    </tr>
+  </tbody>
+</table>
+    <img class="figure" src="graphs/emo_naturalness.png" alt="Emotional naturalness distributions" loading="lazy">
+  </section>
+
+  <section>
+    <h2>STANCEs</h2>
+    <p>STANCE metrics compare LLM and original scores for each STANCE question. Naturalistic STANCEs are omitted because they are not computed in this benchmark pipeline.</p>
+    <table class="dataframe metric-table">
+  <thead>
+    <tr style="text-align: right;">
+      <th>subset</th>
+      <th>metric</th>
+      <th>mean_diff</th>
+      <th>std_diff</th>
+      <th>p_value</th>
+      <th>n</th>
+      <th>detail</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>improvised</td>
+      <td>STANCE same sign (%)</td>
+      <td>95.1220</td>
+      <td></td>
+      <td></td>
+      <td>574</td>
+      <td>percentage of valid paired rows where score_original and score_llm have the same sign, with zero treated as neutral; numerator=546; denominator=574</td>
+    </tr>
+    <tr>
+      <td>improvised</td>
+      <td>STANCE model positive when original negative (%)</td>
+      <td>5.0000</td>
+      <td></td>
+      <td></td>
+      <td>300</td>
+      <td>percentage among valid paired rows with score_original &lt; 0; numerator=15; denominator=300</td>
+    </tr>
+    <tr>
+      <td>improvised</td>
+      <td>STANCE model negative when original positive (%)</td>
+      <td>4.7445</td>
+      <td></td>
+      <td></td>
+      <td>274</td>
+      <td>percentage among valid paired rows with score_original &gt; 0; numerator=13; denominator=274</td>
+    </tr>
+    <tr>
+      <td>improvised</td>
+      <td>Q0</td>
+      <td>0.0000</td>
+      <td>0.0000</td>
+      <td>1.0000</td>
+      <td>61</td>
+      <td>Based on the audio, does the TARGET speaker sound warm and affiliative, or cold and detached?</td>
+    </tr>
+    <tr>
+      <td>improvised</td>
+      <td>Q1</td>
+      <td>0.0543</td>
+      <td>0.4288</td>
+      <td>0.8271</td>
+      <td>92</td>
+      <td>Based on the audio, does the TARGET speaker sound compassionate and supportive, or callous and unsympathetic?</td>
+    </tr>
+    <tr>
+      <td>improvised</td>
+      <td>Q2</td>
+      <td>0.0000</td>
+      <td>0.0000</td>
+      <td>1.0000</td>
+      <td>45</td>
+      <td>Based on the audio, does the TARGET speaker sound polite and respectful, or rude and disrespectful?</td>
+    </tr>
+    <tr>
+      <td>improvised</td>
+      <td>Q3</td>
+      <td>0.0112</td>
+      <td>0.8187</td>
+      <td>0.8014</td>
+      <td>89</td>
+      <td>Based on the audio, does the TARGET speaker sound assertive and self-confident, or hesitant and inhibited?</td>
+    </tr>
+    <tr>
+      <td>improvised</td>
+      <td>Q4</td>
+      <td>-0.0988</td>
+      <td>0.6246</td>
+      <td>0.7501</td>
+      <td>81</td>
+      <td>Based on the audio, does the TARGET speaker sound straightforward and sincere, or sly and manipulative?</td>
+    </tr>
+    <tr>
+      <td>improvised</td>
+      <td>Q5</td>
+      <td>-0.1538</td>
+      <td>0.7845</td>
+      <td>0.3363</td>
+      <td>26</td>
+      <td>Based on the audio, does the TARGET speaker sound attentive and focused, or confused and distracted?</td>
+    </tr>
+    <tr>
+      <td>improvised</td>
+      <td>Q6</td>
+      <td>-0.1509</td>
+      <td>1.0451</td>
+      <td>0.6510</td>
+      <td>53</td>
+      <td>Based on the audio, does the TARGET speaker sound organized and goal-driven, or disorganized and unmotivated?</td>
+    </tr>
+    <tr>
+      <td>improvised</td>
+      <td>Q7</td>
+      <td>0.1864</td>
+      <td>1.6966</td>
+      <td>0.6494</td>
+      <td>59</td>
+      <td>Based on the audio, does the TARGET speaker sound socially engaged and expressive with the other speaker, or withdrawn and disengaged?</td>
+    </tr>
+    <tr>
+      <td>improvised</td>
+      <td>Q8</td>
+      <td>0.0370</td>
+      <td>0.8894</td>
+      <td>1.0000</td>
+      <td>54</td>
+      <td>Based on the audio, does the TARGET speaker accommodate and yield to the other speaker’s preferences, or do they try to control and dominate?</td>
+    </tr>
+    <tr>
+      <td>improvised</td>
+      <td>Q9</td>
+      <td>0.2143</td>
+      <td>0.8018</td>
+      <td>0.3531</td>
+      <td>14</td>
+      <td>Based on the audio, does the TARGET speaker stay calm and avoid confrontation, or are they hostile and aggressive?</td>
+    </tr>
+  </tbody>
+</table>
+    <img class="figure" src="graphs/stances.png" alt="STANCE score distributions" loading="lazy">
+  </section>
+
+  <section>
+    <h2>Explainable Features</h2>
+    <p>Explainable feature rows report model-minus-original mean differences, p-values, and the Stage 41 classification AUROC/accuracy. Correlation-cluster rows come from script 41 PCA cluster features.</p>
+    <h3>Correlation Cluster Features</h3>
+    <table class="dataframe metric-table">
+  <thead>
+    <tr style="text-align: right;">
+      <th>subset</th>
+      <th>metric</th>
+      <th>mean_diff</th>
+      <th>std_diff</th>
+      <th>p_value</th>
+      <th>n</th>
+      <th>detail</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>improvised</td>
+      <td>corr_cluster_001_rho0p8</td>
+      <td>-2.1173</td>
+      <td>1.3051</td>
+      <td>4.200e-258</td>
+      <td>1150</td>
+      <td>script 41 PCA cluster feature model-original; p-value is Mann-Whitney U Test; source_features=f0_max_raw|f0_range_raw; validates_in_test=True; test_mean_abs_spearman=0.9916; pca_explained_variance_ratio=0.9987</td>
+    </tr>
+    <tr>
+      <td>improvised</td>
+      <td>corr_cluster_002_rho0p8</td>
+      <td>-1.6901</td>
+      <td>2.6748</td>
+      <td>9.827e-49</td>
+      <td>1150</td>
+      <td>script 41 PCA cluster feature model-original; p-value is Mann-Whitney U Test; source_features=f0_mean_p10_p90|f0_mean_p25_p75|f0_mean_raw|f0_median_raw|f0_p75; validates_in_test=True; test_mean_abs_spearman=0.9514; pca_explained_variance_ratio=0.9798</td>
+    </tr>
+    <tr>
+      <td>improvised</td>
+      <td>corr_cluster_003_rho0p8</td>
+      <td>-1.5382</td>
+      <td>2.0469</td>
+      <td>2.145e-141</td>
+      <td>1150</td>
+      <td>script 41 PCA cluster feature model-original; p-value is Mann-Whitney U Test; source_features=f0_n_voiced_frames|f0_total_duration_s|f0_voiced_duration_s; validates_in_test=True; test_mean_abs_spearman=0.9513; pca_explained_variance_ratio=0.9491</td>
+    </tr>
+    <tr>
+      <td>improvised</td>
+      <td>corr_cluster_004_rho0p8</td>
+      <td>-1.8771</td>
+      <td>2.2423</td>
+      <td>4.309e-143</td>
+      <td>1150</td>
+      <td>script 41 PCA cluster feature model-original; p-value is Mann-Whitney U Test; source_features=f0_range_p10_p90|f0_range_p25_p75|f0_std_p10_p90|f0_std_p25_p75; validates_in_test=True; test_mean_abs_spearman=0.9394; pca_explained_variance_ratio=0.9602</td>
+    </tr>
+    <tr>
+      <td>improvised</td>
+      <td>general_explainable_feature_rho0p8</td>
+      <td>-3.0410</td>
+      <td>3.1464</td>
+      <td>1.739e-150</td>
+      <td>1150</td>
+      <td>script 41 PCA cluster feature model-original; p-value is Mann-Whitney U Test; source_features=corr_cluster_001_rho0p8|corr_cluster_002_rho0p8|corr_cluster_003_rho0p8|corr_cluster_004_rho0p8; validates_in_test=True; test_mean_abs_spearman=nan; pca_explained_variance_ratio=0.5884</td>
+    </tr>
+    <tr>
+      <td>naturalistic</td>
+      <td>corr_cluster_001_rho0p8</td>
+      <td>-1.8904</td>
+      <td>1.4907</td>
+      <td>0.0000</td>
+      <td>2055</td>
+      <td>script 41 PCA cluster feature model-original; p-value is Mann-Whitney U Test; source_features=f0_max_raw|f0_range_raw; validates_in_test=True; test_mean_abs_spearman=0.9947; pca_explained_variance_ratio=0.9991</td>
+    </tr>
+    <tr>
+      <td>naturalistic</td>
+      <td>corr_cluster_002_rho0p8</td>
+      <td>-1.3175</td>
+      <td>3.4686</td>
+      <td>4.868e-14</td>
+      <td>2055</td>
+      <td>script 41 PCA cluster feature model-original; p-value is Mann-Whitney U Test; source_features=f0_mean_p10_p90|f0_mean_p25_p75|f0_mean_raw|f0_median_raw|f0_p75; validates_in_test=True; test_mean_abs_spearman=0.9606; pca_explained_variance_ratio=0.9716</td>
+    </tr>
+    <tr>
+      <td>naturalistic</td>
+      <td>corr_cluster_003_rho0p8</td>
+      <td>-1.3559</td>
+      <td>1.6906</td>
+      <td>3.922e-280</td>
+      <td>2055</td>
+      <td>script 41 PCA cluster feature model-original; p-value is Mann-Whitney U Test; source_features=f0_n_voiced_frames|f0_total_duration_s|f0_voiced_duration_s; validates_in_test=True; test_mean_abs_spearman=0.9334; pca_explained_variance_ratio=0.9608</td>
+    </tr>
+    <tr>
+      <td>naturalistic</td>
+      <td>corr_cluster_004_rho0p8</td>
+      <td>-1.4104</td>
+      <td>2.4675</td>
+      <td>1.046e-86</td>
+      <td>2055</td>
+      <td>script 41 PCA cluster feature model-original; p-value is Mann-Whitney U Test; source_features=f0_range_p10_p90|f0_range_p25_p75|f0_std_p10_p90|f0_std_p25_p75; validates_in_test=True; test_mean_abs_spearman=0.9180; pca_explained_variance_ratio=0.9249</td>
+    </tr>
+    <tr>
+      <td>naturalistic</td>
+      <td>general_explainable_feature_rho0p8</td>
+      <td>-2.7066</td>
+      <td>3.6440</td>
+      <td>2.480e-136</td>
+      <td>2055</td>
+      <td>script 41 PCA cluster feature model-original; p-value is Mann-Whitney U Test; source_features=corr_cluster_001_rho0p8|corr_cluster_002_rho0p8|corr_cluster_003_rho0p8|corr_cluster_004_rho0p8; validates_in_test=True; test_mean_abs_spearman=nan; pca_explained_variance_ratio=0.5595</td>
+    </tr>
+  </tbody>
+</table>
+    <img class="figure" src="graphs/cluster_explainables.png" alt="Correlation cluster explainable feature violins" loading="lazy">
+    <img class="figure" src="graphs/general_explainable.png" alt="General explainable feature histogram" loading="lazy">
+    <h3>Improvised</h3><h4>Highest AUROC Features</h4><table class="dataframe metric-table">
+  <thead>
+    <tr style="text-align: right;">
+      <th>metric</th>
+      <th>mean_diff</th>
+      <th>std_diff</th>
+      <th>p_value</th>
+      <th>n</th>
+      <th>auroc</th>
+      <th>accuracy</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>f0_max_raw</td>
+      <td>-182.0998</td>
+      <td>110.5882</td>
+      <td>4.436e-262</td>
+      <td>1150</td>
+      <td>0.9163</td>
+      <td>0.8853</td>
+    </tr>
+    <tr>
+      <td>f0_range_raw</td>
+      <td>-178.2166</td>
+      <td>111.8133</td>
+      <td>1.576e-254</td>
+      <td>1150</td>
+      <td>0.9102</td>
+      <td>0.8774</td>
+    </tr>
+    <tr>
+      <td>f0_total_duration_s</td>
+      <td>-10.1780</td>
+      <td>13.4602</td>
+      <td>5.950e-156</td>
+      <td>1150</td>
+      <td>0.8202</td>
+      <td>0.7359</td>
+    </tr>
+    <tr>
+      <td>f0_std_p10_p90</td>
+      <td>-15.1170</td>
+      <td>17.8455</td>
+      <td>1.315e-145</td>
+      <td>1150</td>
+      <td>0.8093</td>
+      <td>0.7897</td>
+    </tr>
+    <tr>
+      <td>f0_range_p10_p90</td>
+      <td>-54.6355</td>
+      <td>63.2540</td>
+      <td>6.732e-138</td>
+      <td>1150</td>
+      <td>0.8009</td>
+      <td>0.7836</td>
+    </tr>
+    <tr>
+      <td>f0_range_p10_p90</td>
+      <td>-54.6355</td>
+      <td>63.2540</td>
+      <td>6.732e-138</td>
+      <td>1150</td>
+      <td>0.8009</td>
+      <td>0.7836</td>
+    </tr>
+    <tr>
+      <td>f0_range_p25_p75</td>
+      <td>-29.2184</td>
+      <td>37.4970</td>
+      <td>1.483e-127</td>
+      <td>1150</td>
+      <td>0.7892</td>
+      <td>0.7749</td>
+    </tr>
+    <tr>
+      <td>f0_range_p25_p75</td>
+      <td>-29.2184</td>
+      <td>37.4970</td>
+      <td>1.483e-127</td>
+      <td>1150</td>
+      <td>0.7892</td>
+      <td>0.7749</td>
+    </tr>
+    <tr>
+      <td>f0_voiced_duration_s</td>
+      <td>-4.9492</td>
+      <td>6.8361</td>
+      <td>2.859e-126</td>
+      <td>1150</td>
+      <td>0.7877</td>
+      <td>0.7250</td>
+    </tr>
+    <tr>
+      <td>f0_voiced_duration_s</td>
+      <td>-4.9492</td>
+      <td>6.8361</td>
+      <td>2.859e-126</td>
+      <td>1150</td>
+      <td>0.7877</td>
+      <td>0.7250</td>
+    </tr>
+  </tbody>
+</table><h4>Lowest AUROC Features</h4><table class="dataframe metric-table">
+  <thead>
+    <tr style="text-align: right;">
+      <th>metric</th>
+      <th>mean_diff</th>
+      <th>std_diff</th>
+      <th>p_value</th>
+      <th>n</th>
+      <th>auroc</th>
+      <th>accuracy</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>f0_median_raw</td>
+      <td>-21.8509</td>
+      <td>41.0183</td>
+      <td>8.004e-30</td>
+      <td>1150</td>
+      <td>0.6366</td>
+      <td>0.6488</td>
+    </tr>
+    <tr>
+      <td>f0_mean_p25_p75</td>
+      <td>-22.5364</td>
+      <td>40.9817</td>
+      <td>1.400e-34</td>
+      <td>1150</td>
+      <td>0.6477</td>
+      <td>0.6558</td>
+    </tr>
+    <tr>
+      <td>f0_mean_p10_p90</td>
+      <td>-24.7074</td>
+      <td>41.4841</td>
+      <td>2.609e-43</td>
+      <td>1150</td>
+      <td>0.6661</td>
+      <td>0.6780</td>
+    </tr>
+    <tr>
+      <td>f0_mean_raw</td>
+      <td>-29.6625</td>
+      <td>40.8988</td>
+      <td>4.558e-72</td>
+      <td>1150</td>
+      <td>0.7161</td>
+      <td>0.7332</td>
+    </tr>
+    <tr>
+      <td>f0_p75</td>
+      <td>-39.1139</td>
+      <td>55.0313</td>
+      <td>9.634e-73</td>
+      <td>1150</td>
+      <td>0.7172</td>
+      <td>0.7631</td>
+    </tr>
+    <tr>
+      <td>f0_p75</td>
+      <td>-39.1139</td>
+      <td>55.0313</td>
+      <td>9.634e-73</td>
+      <td>1150</td>
+      <td>0.7172</td>
+      <td>0.7631</td>
+    </tr>
+    <tr>
+      <td>f0_std_p25_p75</td>
+      <td>-8.4747</td>
+      <td>11.2573</td>
+      <td>8.693e-126</td>
+      <td>1150</td>
+      <td>0.7872</td>
+      <td>0.7697</td>
+    </tr>
+    <tr>
+      <td>f0_std_p25_p75</td>
+      <td>-8.4747</td>
+      <td>11.2573</td>
+      <td>8.693e-126</td>
+      <td>1150</td>
+      <td>0.7872</td>
+      <td>0.7697</td>
+    </tr>
+    <tr>
+      <td>f0_n_voiced_frames</td>
+      <td>-494.7341</td>
+      <td>683.4938</td>
+      <td>3.113e-126</td>
+      <td>1150</td>
+      <td>0.7877</td>
+      <td>0.7250</td>
+    </tr>
+    <tr>
+      <td>f0_n_voiced_frames</td>
+      <td>-494.7341</td>
+      <td>683.4938</td>
+      <td>3.113e-126</td>
+      <td>1150</td>
+      <td>0.7877</td>
+      <td>0.7250</td>
+    </tr>
+  </tbody>
+</table><h3>Naturalistic</h3><h4>Highest AUROC Features</h4><table class="dataframe metric-table">
+  <thead>
+    <tr style="text-align: right;">
+      <th>metric</th>
+      <th>mean_diff</th>
+      <th>std_diff</th>
+      <th>p_value</th>
+      <th>n</th>
+      <th>auroc</th>
+      <th>accuracy</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>f0_max_raw</td>
+      <td>-160.2451</td>
+      <td>124.9606</td>
+      <td>0.0000</td>
+      <td>2055</td>
+      <td>0.8669</td>
+      <td>0.8443</td>
+    </tr>
+    <tr>
+      <td>f0_total_duration_s</td>
+      <td>-13.3738</td>
+      <td>14.7801</td>
+      <td>0.0000</td>
+      <td>2055</td>
+      <td>0.8655</td>
+      <td>0.7558</td>
+    </tr>
+    <tr>
+      <td>f0_range_raw</td>
+      <td>-157.5358</td>
+      <td>125.8888</td>
+      <td>0.0000</td>
+      <td>2055</td>
+      <td>0.8618</td>
+      <td>0.8411</td>
+    </tr>
+    <tr>
+      <td>f0_n_voiced_frames</td>
+      <td>-542.4160</td>
+      <td>747.4022</td>
+      <td>9.066e-219</td>
+      <td>2055</td>
+      <td>0.7843</td>
+      <td>0.7222</td>
+    </tr>
+    <tr>
+      <td>f0_voiced_duration_s</td>
+      <td>-5.4240</td>
+      <td>7.4756</td>
+      <td>1.344e-218</td>
+      <td>2055</td>
+      <td>0.7842</td>
+      <td>0.7222</td>
+    </tr>
+    <tr>
+      <td>f0_voiced_duration_s</td>
+      <td>-5.4240</td>
+      <td>7.4756</td>
+      <td>1.344e-218</td>
+      <td>2055</td>
+      <td>0.7842</td>
+      <td>0.7222</td>
+    </tr>
+    <tr>
+      <td>f0_std_p10_p90</td>
+      <td>-8.7786</td>
+      <td>14.8793</td>
+      <td>1.023e-92</td>
+      <td>2055</td>
+      <td>0.6840</td>
+      <td>0.7114</td>
+    </tr>
+    <tr>
+      <td>f0_std_p10_p90</td>
+      <td>-8.7786</td>
+      <td>14.8793</td>
+      <td>1.023e-92</td>
+      <td>2055</td>
+      <td>0.6840</td>
+      <td>0.7114</td>
+    </tr>
+    <tr>
+      <td>f0_range_p10_p90</td>
+      <td>-32.2312</td>
+      <td>55.5404</td>
+      <td>1.048e-86</td>
+      <td>2055</td>
+      <td>0.6778</td>
+      <td>0.7056</td>
+    </tr>
+    <tr>
+      <td>f0_range_p10_p90</td>
+      <td>-32.2312</td>
+      <td>55.5404</td>
+      <td>1.048e-86</td>
+      <td>2055</td>
+      <td>0.6778</td>
+      <td>0.7056</td>
+    </tr>
+  </tbody>
+</table><h4>Lowest AUROC Features</h4><table class="dataframe metric-table">
+  <thead>
+    <tr style="text-align: right;">
+      <th>metric</th>
+      <th>mean_diff</th>
+      <th>std_diff</th>
+      <th>p_value</th>
+      <th>n</th>
+      <th>auroc</th>
+      <th>accuracy</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>f0_median_raw</td>
+      <td>-14.6037</td>
+      <td>46.4793</td>
+      <td>9.724e-06</td>
+      <td>2055</td>
+      <td>0.5398</td>
+      <td>0.6893</td>
+    </tr>
+    <tr>
+      <td>f0_mean_p25_p75</td>
+      <td>-15.1072</td>
+      <td>46.1468</td>
+      <td>1.604e-07</td>
+      <td>2055</td>
+      <td>0.5472</td>
+      <td>0.7039</td>
+    </tr>
+    <tr>
+      <td>f0_mean_p10_p90</td>
+      <td>-16.5360</td>
+      <td>46.0617</td>
+      <td>1.482e-11</td>
+      <td>2055</td>
+      <td>0.5608</td>
+      <td>0.7112</td>
+    </tr>
+    <tr>
+      <td>f0_mean_raw</td>
+      <td>-20.1374</td>
+      <td>45.2161</td>
+      <td>2.874e-26</td>
+      <td>2055</td>
+      <td>0.5955</td>
+      <td>0.7287</td>
+    </tr>
+    <tr>
+      <td>f0_p75</td>
+      <td>-24.5803</td>
+      <td>55.4798</td>
+      <td>1.391e-30</td>
+      <td>2055</td>
+      <td>0.6035</td>
+      <td>0.7399</td>
+    </tr>
+    <tr>
+      <td>f0_p75</td>
+      <td>-24.5803</td>
+      <td>55.4798</td>
+      <td>1.391e-30</td>
+      <td>2055</td>
+      <td>0.6035</td>
+      <td>0.7399</td>
+    </tr>
+    <tr>
+      <td>f0_std_p25_p75</td>
+      <td>-4.7151</td>
+      <td>9.3622</td>
+      <td>9.007e-61</td>
+      <td>2055</td>
+      <td>0.6481</td>
+      <td>0.6827</td>
+    </tr>
+    <tr>
+      <td>f0_std_p25_p75</td>
+      <td>-4.7151</td>
+      <td>9.3622</td>
+      <td>9.007e-61</td>
+      <td>2055</td>
+      <td>0.6481</td>
+      <td>0.6827</td>
+    </tr>
+    <tr>
+      <td>f0_range_p25_p75</td>
+      <td>-16.1030</td>
+      <td>30.3694</td>
+      <td>3.279e-67</td>
+      <td>2055</td>
+      <td>0.6560</td>
+      <td>0.6932</td>
+    </tr>
+    <tr>
+      <td>f0_range_p25_p75</td>
+      <td>-16.1030</td>
+      <td>30.3694</td>
+      <td>3.279e-67</td>
+      <td>2055</td>
+      <td>0.6560</td>
+      <td>0.6932</td>
+    </tr>
+  </tbody>
+</table>
+    <img class="figure" src="graphs/explainables.png" alt="Explainable feature violin plots" loading="lazy">
+    <details><summary>Per-feature histogram gallery</summary><div class="gallery"><figure class="thumb"><img src="graphs/feat_graphs/f0_max_raw.png" alt="f0_max_raw" loading="lazy"><figcaption>f0_max_raw</figcaption></figure>
+<figure class="thumb"><img src="graphs/feat_graphs/f0_mean_p10_p90.png" alt="f0_mean_p10_p90" loading="lazy"><figcaption>f0_mean_p10_p90</figcaption></figure>
+<figure class="thumb"><img src="graphs/feat_graphs/f0_mean_p25_p75.png" alt="f0_mean_p25_p75" loading="lazy"><figcaption>f0_mean_p25_p75</figcaption></figure>
+<figure class="thumb"><img src="graphs/feat_graphs/f0_mean_raw.png" alt="f0_mean_raw" loading="lazy"><figcaption>f0_mean_raw</figcaption></figure>
+<figure class="thumb"><img src="graphs/feat_graphs/f0_median_raw.png" alt="f0_median_raw" loading="lazy"><figcaption>f0_median_raw</figcaption></figure>
+<figure class="thumb"><img src="graphs/feat_graphs/f0_n_voiced_frames.png" alt="f0_n_voiced_frames" loading="lazy"><figcaption>f0_n_voiced_frames</figcaption></figure>
+<figure class="thumb"><img src="graphs/feat_graphs/f0_p75.png" alt="f0_p75" loading="lazy"><figcaption>f0_p75</figcaption></figure>
+<figure class="thumb"><img src="graphs/feat_graphs/f0_range_p10_p90.png" alt="f0_range_p10_p90" loading="lazy"><figcaption>f0_range_p10_p90</figcaption></figure>
+<figure class="thumb"><img src="graphs/feat_graphs/f0_range_p25_p75.png" alt="f0_range_p25_p75" loading="lazy"><figcaption>f0_range_p25_p75</figcaption></figure>
+<figure class="thumb"><img src="graphs/feat_graphs/f0_range_raw.png" alt="f0_range_raw" loading="lazy"><figcaption>f0_range_raw</figcaption></figure>
+<figure class="thumb"><img src="graphs/feat_graphs/f0_std_p10_p90.png" alt="f0_std_p10_p90" loading="lazy"><figcaption>f0_std_p10_p90</figcaption></figure>
+<figure class="thumb"><img src="graphs/feat_graphs/f0_std_p25_p75.png" alt="f0_std_p25_p75" loading="lazy"><figcaption>f0_std_p25_p75</figcaption></figure>
+<figure class="thumb"><img src="graphs/feat_graphs/f0_total_duration_s.png" alt="f0_total_duration_s" loading="lazy"><figcaption>f0_total_duration_s</figcaption></figure>
+<figure class="thumb"><img src="graphs/feat_graphs/f0_voiced_duration_s.png" alt="f0_voiced_duration_s" loading="lazy"><figcaption>f0_voiced_duration_s</figcaption></figure></div></details>
+  </section>
+</main>
+</body>
+</html>

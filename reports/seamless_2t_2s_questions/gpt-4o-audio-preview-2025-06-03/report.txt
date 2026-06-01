@@ -1,0 +1,72 @@
+SPEARBench Short Report
+=======================
+
+Setup
+-----
+parameter                            value
+protocol                             seamless_2t_2s_questions
+selection_method                     end_with_question
+min_turns                            1
+min_speakers                         1
+splits                               dev,test
+subsets                              improvised,naturalistic
+asr_model                            whisper-large-v3
+evaluated_llm_model                  gpt-4o-audio-preview-2025-06-03
+stance_llm_model                     gpt-audio-1.5
+sbert_model_for_naturalness_context  sentence-transformers/all-MiniLM-L6-v2
+statistical_test                     Mann-Whitney U Test
+data_root                            data/seamless_2t_2s_questions
+results_root                         results/seamless_2t_2s_questions
+
+Data Statistics
+---------------
+model                            split  subset        utterances  total_audio_hours
+original                         dev    improvised    missing     missing
+original                         dev    naturalistic  missing     missing
+original                         test   improvised    missing     missing
+original                         test   naturalistic  missing     missing
+gpt-4o-audio-preview-2025-06-03  dev    improvised    missing     missing
+gpt-4o-audio-preview-2025-06-03  dev    naturalistic  missing     missing
+gpt-4o-audio-preview-2025-06-03  test   improvised    missing     missing
+gpt-4o-audio-preview-2025-06-03  test   naturalistic  missing     missing
+
+Basic Metrics
+-------------
+metric                        n        mean_diff  std_diff  p_value  auroc    accuracy
+Basic metrics (improvised)    missing  missing    missing   missing  missing  missing
+Basic metrics (naturalistic)  missing  missing    missing   missing  missing  missing
+
+Language ID
+-----------
+subset        % Eng in models' answers  % Eng in original answers
+improvised    nan                       98.1771
+naturalistic  nan                       97.6167
+
+Dialect ID
+----------
+Subset        Question/Answer  East Asia  English  Germanic  Irish    North America  Northern Irish  Oceania  Other    Romance  Scottish  Semitic  Slavic   South African  Southeast Asia  South Asia  Welsh
+improvised    missing          missing    missing  missing   missing  missing        missing         missing  missing  missing  missing   missing  missing  missing        missing         missing     missing
+naturalistic  missing          missing    missing  missing   missing  missing        missing         missing  missing  missing  missing   missing  missing  missing        missing         missing     missing
+
+Emotional Naturalness
+---------------------
+metric  n  mean_diff  std_diff  p_value  auroc  accuracy
+improvised
+Emotional naturalness (improvised)  missing  missing  missing  missing  missing  missing
+naturalistic
+Emotional naturalness (naturalistic)  missing  missing  missing  missing  missing  missing
+
+STANCEs
+-------
+metric             n        mean_diff  std_diff  p_value  auroc    accuracy
+STANCE improvised  missing  missing    missing   missing  missing  missing
+
+Explainable Features
+--------------------
+Baseline summary  missing
+
+Files
+-----
+metrics-improvised.csv    reports/seamless_2t_2s_questions/gpt-4o-audio-preview-2025-06-03/metrics-improvised.csv
+metrics-naturalistic.csv  reports/seamless_2t_2s_questions/gpt-4o-audio-preview-2025-06-03/metrics-naturalistic.csv
+report.txt                reports/seamless_2t_2s_questions/gpt-4o-audio-preview-2025-06-03/report.txt
