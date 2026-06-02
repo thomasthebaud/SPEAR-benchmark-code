@@ -6,3 +6,5 @@ models/*/*
 results/*
 __pycache__/
 *.py[cod]
+reports/*/*/graphs/feat_graphs/*
+reports/*/*/graphs/basic_metric_graphs/*
