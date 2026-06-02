@@ -397,6 +397,8 @@ def build_html(args, metrics: dict[str, Optional[pd.DataFrame]], report_text: st
     <p>Naturalness is summarized as the paired test-set logit difference between model and original utterances. Positive values mean higher model logits than original logits.</p>
     {table_html(emo_table, columns=["subset", "metric", "mean_diff", "std_diff", "p_value", "n"])}
     {img_tag(report_dir / "graphs" / "emo_naturalness.png", report_dir, "Emotional naturalness distributions")}
+    <p>The emotion scatter plot compares full-question and full-answer Arousal, Dominance, and Valence scores normalized to [-1, 1]. Dotted lines show per-dataset correlations with rho labels.</p>
+    {img_tag(report_dir / "graphs" / "emotion_scatter.png", report_dir, "Question-answer Arousal, Dominance, and Valence scatter plots")}
   </section>
 
   <section>

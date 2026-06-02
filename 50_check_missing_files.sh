@@ -86,12 +86,13 @@ for split in "${splits[@]}"; do
   done
 done
 
-# 20_naturalness_feats.sh: extract question+answer VoxProfile naturalness features.
+# 20_naturalness_feats.sh: extract question+answer VoxProfile naturalness features and SER_AVD averages.
 for split in "${splits[@]}"; do
   for subset in "${subsets[@]}"; do
     for model in "${models[@]}"; do
       check_files "20" "$model" "$split/$subset" \
-        "data/$protocol/outputs/$model/$split/$subset/naturalness/voxprofile_features/metadata.csv"
+        "data/$protocol/outputs/$model/$split/$subset/naturalness/voxprofile_features/metadata.csv" \
+        "results/$protocol/$model/$split/$subset/SER_AVD.csv"
     done
   done
 done

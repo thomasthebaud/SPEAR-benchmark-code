@@ -71,6 +71,10 @@ def naturalness_csv(results_root: Path, model: str, subset: str) -> Path:
     return results_root / model / "test" / subset / "naturalness_scores.csv"
 
 
+def ser_avd_csv(results_root: Path, model: str, subset: str) -> Path:
+    return results_root / model / "test" / subset / "SER_AVD.csv"
+
+
 def feature_summary_csv(results_root: Path, model: str) -> Path:
     return results_root / model / "distrib_baselines_summary.csv"
 
@@ -644,6 +648,143 @@ def graph_dialect_scores(results_root: Path, model: str, output_path: Path) -> N
     print(f"Wrote {output_path}")
 
 
+def normalize_emotion_score(values: pd.Series) -> pd.Series:
+    return (numeric(values) * 2.0 - 1.0).clip(-1.0, 1.0)
+
+
+def load_emotion_scatter_values(results_root: Path, model: str) -> Optional[pd.DataFrame]:
+    rows = []
+    for subset in SUBSETS:
+        for label_model, label in [(ORIGINAL, "original"), (model, "model")]:
+            frame = safe_read_csv(ser_avd_csv(results_root, label_model, subset))
+            if frame is None:
+                continue
+            for emotion in ["arousal", "dominance", "valence"]:
+                question_col = f"question_{emotion}"
+                answer_col = f"answer_{emotion}"
+                if question_col not in frame.columns or answer_col not in frame.columns:
+                    continue
+                pairs = pd.DataFrame(
+                    {
+                        "question": normalize_emotion_score(frame[question_col]),
+                        "answer": normalize_emotion_score(frame[answer_col]),
+                        "dataset": label,
+                        "subset": subset,
+                        "emotion": emotion,
+                    }
+                ).dropna(subset=["question", "answer"])
+                if not pairs.empty:
+                    rows.append(pairs)
+    if not rows:
+        return None
+    return pd.concat(rows, ignore_index=True)
+
+
+def draw_correlation_lines(ax, data: pd.DataFrame, palette: Dict[str, str]) -> None:
+    label_x = {"original": 0.58, "model": -0.92}
+    label_offset = {"original": 0.08, "model": -0.08}
+    for dataset in ["original", "model"]:
+        sub = data[data["dataset"] == dataset].dropna(subset=["question", "answer"])
+        if len(sub) < 2:
+            continue
+        x = sub["question"].astype(float).to_numpy()
+        y = sub["answer"].astype(float).to_numpy()
+        x_std = np.nanstd(x)
+        y_std = np.nanstd(y)
+        rho = np.nan if x_std == 0 or y_std == 0 else float(np.corrcoef(x, y)[0, 1])
+        rho_text = "rho=nan" if np.isnan(rho) else f"rho={rho:.2f}"
+        color = palette.get(dataset, "#333333")
+        if x_std > 0:
+            slope, intercept = np.polyfit(x, y, 1)
+            x_line = np.array([-1.0, 1.0])
+            y_line = slope * x_line + intercept
+            ax.plot(x_line, y_line, color=color, linestyle=":", linewidth=2.0, alpha=0.95)
+            text_x = label_x.get(dataset, 0.6)
+            text_y = float(np.clip(slope * text_x + intercept + label_offset.get(dataset, 0.0), -0.94, 0.94))
+            ax.text(
+                text_x,
+                text_y,
+                rho_text,
+                color=color,
+                fontsize=9,
+                fontweight="bold",
+                ha="left",
+                va="center",
+                bbox={"facecolor": "white", "edgecolor": "none", "alpha": 0.65, "pad": 1.5},
+            )
+        else:
+            ax.text(
+                0.05,
+                0.9 if dataset == "original" else 0.8,
+                rho_text,
+                transform=ax.transAxes,
+                color=color,
+                fontsize=9,
+                fontweight="bold",
+                ha="left",
+                va="top",
+            )
+
+
+def graph_emotion_scatter(results_root: Path, model: str, output_path: Path) -> None:
+    data = load_emotion_scatter_values(results_root, model)
+    if data is None or data.empty:
+        print("[WARN] Missing SER_AVD rows; skipping emotion_scatter.png.")
+        return
+
+    emotions = ["arousal", "dominance", "valence"]
+    emotion_titles = {"arousal": "Arousal", "dominance": "Dominance", "valence": "Valence"}
+    subsets = [subset for subset in SUBSETS if subset in set(data["subset"])]
+    if not subsets:
+        print("[WARN] No subset data found in SER_AVD rows; skipping emotion_scatter.png.")
+        return
+
+    fig, axes = plt.subplots(len(subsets), len(emotions), figsize=(17, 10), sharex=True, sharey=True, squeeze=False)
+    legend_handles = None
+    legend_labels = None
+    for row_idx, subset in enumerate(subsets):
+        for col_idx, emotion in enumerate(emotions):
+            ax = axes[row_idx, col_idx]
+            sub = data[(data["subset"] == subset) & (data["emotion"] == emotion)]
+            if sub.empty:
+                ax.set_axis_off()
+                continue
+            sns.scatterplot(
+                data=sub,
+                x="question",
+                y="answer",
+                hue="dataset",
+                hue_order=["original", "model"],
+                palette=DATASET_PALETTE,
+                alpha=0.55,
+                s=24,
+                edgecolor="none",
+                ax=ax,
+            )
+            handles, labels = ax.get_legend_handles_labels()
+            if handles and legend_handles is None:
+                legend_handles, legend_labels = handles, labels
+            if ax.get_legend() is not None:
+                ax.get_legend().remove()
+            ax.plot([-1, 1], [-1, 1], color="#666666", linestyle="--", linewidth=1.0, alpha=0.55)
+            draw_correlation_lines(ax, sub, DATASET_PALETTE)
+            ax.set_xlim(-1.02, 1.02)
+            ax.set_ylim(-1.02, 1.02)
+            ax.set_aspect("equal", adjustable="box")
+            ax.set_title(emotion_titles[emotion] if row_idx == 0 else "")
+            ax.set_xlabel(f"Question {emotion_titles[emotion]}" if row_idx == len(subsets) - 1 else "")
+            ax.set_ylabel(f"{subset.title()}\nAnswer {emotion_titles[emotion]}" if col_idx == 0 else "")
+            ax.tick_params(axis="both", labelsize=9)
+    if legend_handles:
+        fig.legend(legend_handles, legend_labels, title="Dataset", loc="upper center", ncol=2, bbox_to_anchor=(0.5, 1.015), frameon=True)
+    fig.suptitle("Question vs Answer VoxProfile Emotion Scores", y=1.035)
+    fig.tight_layout(rect=(0, 0, 1, 0.98))
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output_path, dpi=180, bbox_inches="tight")
+    plt.close(fig)
+    print(f"Wrote {output_path}")
+
+
 def graph_emotional_naturalness(results_root: Path, model: str, output_path: Path) -> None:
     subset_frames = []
     for subset in SUBSETS:
@@ -995,6 +1136,7 @@ def main() -> int:
     graph_feature_histograms(args.results_root, args.model, graphs_dir / "feat_graphs")
     graph_stances(args.results_root, args.model, graphs_dir / "stances.png")
     graph_emotional_naturalness(args.results_root, args.model, graphs_dir / "emo_naturalness.png")
+    graph_emotion_scatter(args.results_root, args.model, graphs_dir / "emotion_scatter.png")
     graph_dialect_confusion(args.results_root, args.model, graphs_dir / "dialect_confusion.png")
     graph_dialect_scores(args.results_root, args.model, graphs_dir / "dialect_scores.png")
     graph_explainable_scatter(args.results_root, args.model, graphs_dir / "explainables.png")

@@ -9,9 +9,12 @@ import soundfile as sf
 import torch
 from tqdm import tqdm
 import os
+import shutil
 import pandas as pd
 
 from whisper_emotion import WhisperWrapper
+
+TURN_SCORE_COLUMNS = ["turn_valence", "turn_arousal", "turn_dominance"]
 try:
     from .extract import (
         CSV_FIELDS,
@@ -40,6 +43,8 @@ except ImportError:
         to_16k,
     )
 
+
+FEATURE_CSV_FIELDS = list(CSV_FIELDS) + [column for column in TURN_SCORE_COLUMNS if column not in CSV_FIELDS]
 
 
 def waveform_to_mono_np(waveform):
@@ -78,11 +83,14 @@ def expected_num_chunks(audio_info, args):
 
 
 
-def load_audio(audio_path, start_time=0.0):
+def load_audio(audio_path, start_time=0.0, end_time=None):
     waveform, sr = sf.read(audio_path, dtype="float32", always_2d=True)
     y = waveform_to_mono_np(waveform)
     start_sample = max(0, int(round(float(start_time) * sr)))
-    y = y[start_sample:]
+    end_sample = len(y)
+    if end_time is not None:
+        end_sample = min(end_sample, max(start_sample, int(round(float(end_time) * sr))))
+    y = y[start_sample:end_sample]
     return to_16k(y, sr, TARGET_SR)
 
 
@@ -153,6 +161,75 @@ def compute_chunks(chunks, model, device, args):
     return computed
 
 
+def compute_turn_scores(audio, model, device, args):
+    if len(audio) == 0:
+        return {"turn_valence": "", "turn_arousal": "", "turn_dominance": ""}
+    val, aro, dom, _pooled_vec, _last_btd = forward_fast(
+        model=model,
+        device=device,
+        batch_audio_np=[audio.astype(np.float32, copy=False)],
+        pool=args.pool,
+        amp=args.amp,
+    )
+    return {
+        "turn_valence": f"{float(val[0]):.6f}",
+        "turn_arousal": f"{float(aro[0]):.6f}",
+        "turn_dominance": f"{float(dom[0]):.6f}",
+    }
+
+
+def feature_metadata_is_old_version(output_dir):
+    csv_path = output_dir / "metadata.csv"
+    if not csv_path.exists() or csv_path.stat().st_size == 0:
+        return False
+    try:
+        with csv_path.open(newline="", encoding="utf-8") as csv_file:
+            reader = csv.reader(csv_file)
+            header = next(reader, [])
+    except Exception:
+        return False
+    return not set(TURN_SCORE_COLUMNS).issubset(header)
+
+
+def warn_old_feature_metadata(output_dir):
+    csv_path = output_dir / "metadata.csv"
+    raise RuntimeError(
+        f"Old VoxProfile feature metadata detected at {csv_path}; it does not contain "
+        f"the full-turn columns {', '.join(TURN_SCORE_COLUMNS)}. Remove the existing "
+        "naturalness/voxprofile_features directory and rerun 20_naturalness_feats.sh --extract "
+        "to recompute a clean new-version feature CSV."
+    )
+
+
+def feature_metadata_has_turn_scores(row, output_dir):
+    csv_path = output_dir / "metadata.csv"
+    if not csv_path.exists() or csv_path.stat().st_size == 0:
+        return False
+    key = Path(row["audio_path"]).stem.lower()
+    required_sources = {"question", "answer"}
+    seen_sources = set()
+    try:
+        with csv_path.open(newline="", encoding="utf-8") as csv_file:
+            reader = csv.DictReader(csv_file)
+            if not reader.fieldnames or not set(TURN_SCORE_COLUMNS).issubset(reader.fieldnames):
+                return False
+            for metadata_row in reader:
+                if str(metadata_row.get("pair_stem", "")).strip().lower() != key:
+                    continue
+                source = str(metadata_row.get("vad_source", "")).strip().lower()
+                if source.startswith("existing_"):
+                    source = source.removeprefix("existing_")
+                if source not in required_sources:
+                    continue
+                if all(str(metadata_row.get(column, "")).strip() for column in TURN_SCORE_COLUMNS):
+                    seen_sources.add(source)
+                if seen_sources == required_sources:
+                    return True
+    except Exception:
+        return False
+    return False
+
+
 def num_chunks_for_duration(duration, args):
     n_samples = int(round(max(0.0, float(duration)) * TARGET_SR))
     win = int(round(args.win_sec * TARGET_SR))
@@ -176,7 +253,7 @@ def combined_embeddings_exist(row, args, output_dir):
     answer_path = Path(row["answer_audio_path"])
     key = question_path.stem.lower()
 
-    question_duration = max(0.0, audio_duration(question_path) - float(row["context_end_time"]))
+    question_duration = max(0.0, float(row["question_end_time"]) - float(row["context_end_time"]))
     answer_duration = audio_duration(answer_path)
     expected_chunks = (
         num_chunks_for_duration(question_duration, args)
@@ -197,7 +274,7 @@ def combined_embeddings_exist(row, args, output_dir):
     return True
 
 
-def write_embedding_row(writer, chunk, key, ci, vec_path, seq_path, segment_path, args):
+def write_embedding_row(writer, chunk, key, ci, vec_path, seq_path, segment_path, args, turn_scores):
     writer.writerow(
         {
             "dyad_id": key.lower(),
@@ -214,6 +291,9 @@ def write_embedding_row(writer, chunk, key, ci, vec_path, seq_path, segment_path
             "valence": f"{chunk['valence']:.6f}",
             "arousal": f"{chunk['arousal']:.6f}",
             "dominance": f"{chunk['dominance']:.6f}",
+            "turn_valence": turn_scores[chunk["turn_name"]].get("turn_valence", ""),
+            "turn_arousal": turn_scores[chunk["turn_name"]].get("turn_arousal", ""),
+            "turn_dominance": turn_scores[chunk["turn_name"]].get("turn_dominance", ""),
             "vad_source": chunk["turn_name"],
             "emb_vec_path": str(vec_path),
             "emb_vec_shape": str(tuple(chunk["pooled_vec"].shape)),
@@ -227,7 +307,7 @@ def write_embedding_row(writer, chunk, key, ci, vec_path, seq_path, segment_path
     )
 
 
-def save_computed_chunks(computed_chunks, sr, args, key, output_dir):
+def save_computed_chunks(computed_chunks, sr, args, key, output_dir, turn_scores):
     dyad_id = key.lower()
     seg_base = key.lower()
 
@@ -245,7 +325,7 @@ def save_computed_chunks(computed_chunks, sr, args, key, output_dir):
     csv_path = output_dir / "metadata.csv"
     csv_exists = csv_path.exists() and csv_path.stat().st_size > 0
     with csv_path.open("a", newline="", encoding="utf-8") as csv_file:
-        writer = csv.DictWriter(csv_file, fieldnames=CSV_FIELDS)
+        writer = csv.DictWriter(csv_file, fieldnames=FEATURE_CSV_FIELDS)
         if not csv_exists:
             writer.writeheader()
 
@@ -290,6 +370,9 @@ def save_computed_chunks(computed_chunks, sr, args, key, output_dir):
                         "valence": "",
                         "arousal": "",
                         "dominance": "",
+                        "turn_valence": turn_scores[chunk["turn_name"]].get("turn_valence", ""),
+                        "turn_arousal": turn_scores[chunk["turn_name"]].get("turn_arousal", ""),
+                        "turn_dominance": turn_scores[chunk["turn_name"]].get("turn_dominance", ""),
                         "vad_source": f"existing_{chunk['turn_name']}",
                         "emb_vec_path": str(vec_path),
                         "emb_vec_shape": vshape,
@@ -306,14 +389,15 @@ def save_computed_chunks(computed_chunks, sr, args, key, output_dir):
             np.save(vec_path, chunk["pooled_vec"])
             if seq_path is not None:
                 np.save(seq_path, chunk["last_btd"])
-            write_embedding_row(writer, chunk, key, ci, vec_path, seq_path, segment_path, args)
+            write_embedding_row(writer, chunk, key, ci, vec_path, seq_path, segment_path, args, turn_scores)
 
 
 def process_audio(audio_path, model, device, args, key, output_dir, start_time=0.0):
     y, sr = load_audio(audio_path, start_time=start_time)
     chunks, _duration = chunk_audio(y, sr, args, "audio", start_offset=0.0)
     computed = compute_chunks(chunks, model, device, args)
-    save_computed_chunks(computed, sr, args, key, output_dir)
+    turn_scores = {"audio": compute_turn_scores(y, model, device, args)}
+    save_computed_chunks(computed, sr, args, key, output_dir, turn_scores)
 
 
 def process_question_answer(row, model, device, args, output_dir):
@@ -321,7 +405,11 @@ def process_question_answer(row, model, device, args, output_dir):
     answer_path = Path(row["answer_audio_path"])
     base_key = question_path.stem
 
-    question_audio, question_sr = load_audio(question_path, start_time=row["context_end_time"])
+    question_audio, question_sr = load_audio(
+        question_path,
+        start_time=row["context_end_time"],
+        end_time=row["question_end_time"],
+    )
     answer_audio, answer_sr = load_audio(answer_path, start_time=0.0)
     if question_sr != answer_sr:
         raise ValueError(f"Question and answer sample rates differ after resampling: {question_sr} != {answer_sr}")
@@ -333,9 +421,13 @@ def process_question_answer(row, model, device, args, output_dir):
         answer_audio, answer_sr, args, "answer", start_offset=question_duration
     )
 
+    turn_scores = {
+        "question": compute_turn_scores(question_audio, model, device, args),
+        "answer": compute_turn_scores(answer_audio, model, device, args),
+    }
     question_embeddings = compute_chunks(question_chunks, model, device, args)
     answer_embeddings = compute_chunks(answer_chunks, model, device, args)
-    save_computed_chunks(question_embeddings + answer_embeddings, question_sr, args, base_key, output_dir)
+    save_computed_chunks(question_embeddings + answer_embeddings, question_sr, args, base_key, output_dir, turn_scores)
 
 
 if __name__ == "__main__":
@@ -361,11 +453,21 @@ if __name__ == "__main__":
     parser.set_defaults(amp=True)
 
     parser.add_argument("--num-gpus", type=int, default=0, help="0 = all visible CUDA devices.")
+    parser.add_argument(
+        "--force-recompute",
+        action="store_true",
+        help="Remove existing naturalness/voxprofile_features for this metadata directory before extraction.",
+    )
 
     args = parser.parse_args()
 
     output_dir = args.metadata.parent / 'naturalness/voxprofile_features'
+    if args.force_recompute and output_dir.exists():
+        print(f"Force recompute requested; removing existing feature directory: {output_dir}")
+        shutil.rmtree(output_dir)
     os.makedirs(output_dir, exist_ok=True)
+    if feature_metadata_is_old_version(output_dir):
+        warn_old_feature_metadata(output_dir)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = WhisperWrapper.from_pretrained("tiantiaf/whisper-large-v3-msp-podcast-emotion-dim").to(device)
@@ -375,11 +477,11 @@ if __name__ == "__main__":
     metadata = pd.read_csv(args.metadata)
     too_short = 0
     already_computed = 0
-    for idx, row in tqdm(metadata.iterrows(), desc=f"Processing file {args.metadata.stem}", total=len(metadata)):
+    for idx, row in tqdm(metadata.iterrows(), desc=f"Extracting emotions", total=len(metadata)):
         if float(row['question_end_time'] - row["context_end_time"]) < args.min_len_question:
             too_short += 1
             continue
-        if combined_embeddings_exist(row, args, output_dir):
+        if combined_embeddings_exist(row, args, output_dir) and feature_metadata_has_turn_scores(row, output_dir):
             already_computed += 1
             continue
         process_question_answer(row, model, device, args, output_dir)

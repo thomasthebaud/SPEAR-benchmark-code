@@ -459,7 +459,7 @@ def forward_fast(
 
     with torch.no_grad():
         if amp and device.type == "cuda":
-            with torch.cuda.amp.autocast(dtype=torch.float16):
+            with torch.amp.autocast("cuda", dtype=torch.float16):
                 enc = model.backbone_model.encoder(input_features, output_hidden_states=True)
                 last_btd = enc.hidden_states[-1]
         else:

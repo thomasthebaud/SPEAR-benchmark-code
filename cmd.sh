@@ -4,7 +4,7 @@
 # Usage: $(python_cmd SB10-S1 --gpu) bin/base_metrics.py --arg value
 
 # exclude="--exclude=c18,c19,c21,octopod"
-exclude=''
+exclude='--exclude=octopod'
 
 gpu_cmd() {
     printf "srun -p gpu --gpus 1 %s" "$exclude"
