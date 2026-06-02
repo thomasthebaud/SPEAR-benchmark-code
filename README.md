@@ -287,7 +287,7 @@ Dialect prediction uses language predictions to decide whether an utterance shou
 
 ### `20_naturalness_feats.sh`
 
-Extracts VoxProfile-style Whisper emotion features used by the naturalness model for `dev` and `test`, both subsets, and both `original` and `$llm_model` outputs.
+Extracts VoxProfile-style Whisper emotion features used by the naturalness model for `dev` and `test`, both subsets, and both `original` and `$llm_model` outputs. With no flags it runs both stages; use `--extract`/`--stage1` for only feature extraction and `--aggregate`/`--stage2` for only SER_AVD aggregation.
 
 `bin/naturalness/extract_features.py` now handles the split question/answer layout. For each metadata row it:
 
@@ -303,6 +303,12 @@ Features are saved under:
 
 ```text
 data/$protocol/outputs/$model/$split/$subset/naturalness/voxprofile_features/
+```
+
+`bin/naturalness/extract_features.py` also stores full-turn VoxProfile `turn_arousal`, `turn_dominance`, and `turn_valence` values for the whole question and whole answer. `bin/naturalness/aggregate_AVD_emotions.py` exports those full-turn values to:
+
+```text
+results/$protocol/$model/$split/$subset/SER_AVD.csv
 ```
 
 ### `21_extract_relations_context.sh`
@@ -442,6 +448,8 @@ The graph stage writes plots under:
 reports/$llm_model/graphs/
 ```
 
+It includes `emotion_scatter.png`, a 2x3 grid comparing full-question vs full-answer Arousal, Dominance, and Valence from `SER_AVD.csv`. Columns are Arousal, Dominance, and Valence; rows are improvised and naturalistic.
+
 The long report stage writes:
 
 ```text
@@ -496,6 +504,7 @@ language_id.csv
 dialect_id.csv
 naturalness_scores.csv
 naturalness_predictions_raw.csv
+SER_AVD.csv
 stance_metrics_Q<idx>.csv
 merged_stances.csv
 distrib_baselines_features.csv
