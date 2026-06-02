@@ -1,0 +1,2 @@
+protocol,model,avg_latency,avg_UTMOS,avg_WER,WER_std_between_asr_models,interrupted_pct,avg_interruption_time,EN_lang_%,same_dialect_%,NA_dialect_%,avg_emo_naturalness_logit,same_stance_as_question_%,more_negative_stance_%,more_positive_stance_%,avg_general_expl_feat
+seamless_2t_2s_questions,gpt-4o-audio-preview-2025-06-03,,,,,,,,,,,,,,
