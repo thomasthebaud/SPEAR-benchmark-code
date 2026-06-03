@@ -8,6 +8,7 @@ data_dir="data/$protocol"
 llm_model="gpt-4o-audio-preview-2025-06-03" #deprecated
 llm_model="gpt-audio-1.5"
 llm_model="gpt-realtime-2"
+llm_model="Qwen3-Omni-30B-A3B-Instruct"
 
 language_id_model=facebook/mms-lid-126
 dialect_id_model=tiantiaf/voxlect-english-dialect-whisper-large-v3
