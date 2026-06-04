@@ -9,7 +9,9 @@ exclude='--exclude=octopod'
 gpu_cmd() {
     printf "srun -p gpu --gpus 1 %s" "$exclude"
 }
-
+gpu_a100_cmd() {
+    printf "srun -p gpu-a100 --account=a100acct --gpus 1 %s" "$exclude"
+}
 cpu_cmd() {
     printf "srun -p cpu --cpus-per-task 4 %s" "$exclude"
 }
@@ -31,6 +33,10 @@ srun_cmd() {
         --gpu)
             base_cmd="$(gpu_cmd)"
             ;;
+        --gpu-a100)
+             base_cmd="$(gpu_a100_cmd)"
+             ;;
+
         *)
             echo "Unknown execution flag: $flag. Expected --cpu or --gpu." >&2
             return 2
