@@ -83,6 +83,9 @@ if [[ "$run_graphs" -eq 1 ]]; then
         --output-dir "$report_dir" \
         --ignore-features "${ignored_explainable_features[@]:-}" &
   done
+
+  wait
+  echo "Graph generation finished for ${eval_models[@]}."
 fi
 
 if [[ "$run_long" -eq 1 ]]; then

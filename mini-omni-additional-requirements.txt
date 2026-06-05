@@ -1,0 +1,11 @@
+pip install \
+  litgpt==0.4.3 \
+  snac==1.2.0 \
+  openai-whisper \
+  streamlit==1.37.1 \
+  pydub==0.25.1 \
+  onnxruntime==1.19.0 \
+  gradio==4.42.0 \
+  flask==3.0.3 \
+  fire \
+  setuptools<82.0.0
