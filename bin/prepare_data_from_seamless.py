@@ -10,6 +10,7 @@ from tqdm import tqdm
 import numpy as np
 
 TARGET_SAMPLE_RATE = 16000
+MIN_ANSWER_DURATION_SECONDS = 1.0
 
 def iter_dyads(split_name: str, data_dir: Path, SET: str) -> list[dict]:
     dyads: list[dict] = []
@@ -135,7 +136,10 @@ def get_end_with_question(transcripts: dict[str, list[dict]], audios: dict[str, 
                 selected_audio['end_audio'] = end_audio
                 selected_audio['context_end_time'] = turns[row]["start"] - start_audio
                 selected_audio['question_end_time'] = turns[row]["end"] - start_audio
-                selected_audio['answer_duration'] = end_audio - turns[row]["end"]
+                answer_duration = end_audio - turns[row]["end"]
+                if answer_duration < MIN_ANSWER_DURATION_SECONDS:
+                    continue
+                selected_audio['answer_duration'] = answer_duration
                 selected_audio['total_duration'] = end_audio - start_audio
                 selected_audio['answer_start_time'] = turns[row+1]["start"] - turns[row]["end"] #for potential interruptions
                 # if selected_audio['total_duration'] <= selected_audio['question_end_time']:continue # sanity check to make sure the question end time is within the total duration of the selected audio
@@ -267,9 +271,9 @@ def write_stereo_wav(audio_path: Path, channel_a: list[float], channel_b: list[f
         outfile.writeframes(frames)
 
 
-def export_segment_audio(audio_path: Path, audio_info: dict, question_only: bool = True) -> tuple[Path, float]:
-    start_time = float(audio_info["start_audio"]) if question_only else float(audio_info["question_end_time"])
-    end_delta = float(audio_info["question_end_time"]) if question_only else float(audio_info["answer_duration"])+float(audio_info["question_end_time"])
+def export_segment_audio_question(audio_path: Path, audio_info: dict) -> tuple[Path, float]:
+    start_time = float(audio_info["start_audio"])
+    end_delta = float(audio_info["question_end_time"])
     end_time = end_delta + start_time
     target_frames = max(1, round((end_time - start_time) * TARGET_SAMPLE_RATE))
 
@@ -280,6 +284,29 @@ def export_segment_audio(audio_path: Path, audio_info: dict, question_only: bool
         speaker_b = fit_length(resample_linear(speaker_b, rate_b), target_frames)
 
         write_stereo_wav(audio_path, speaker_a, speaker_b)
+    return target_frames / TARGET_SAMPLE_RATE
+
+def export_segment_audio_answer(audio_path: Path, audio_info: dict) -> tuple[Path, float]:
+    answer_speaker_id = str(audio_info["transcript_answer"]).split(":", 1)[0].strip()
+    if answer_speaker_id == audio_info["spk1"]:
+        source_audio_path = Path(audio_info["audio1"])
+    elif answer_speaker_id == audio_info["spk2"]:
+        source_audio_path = Path(audio_info["audio2"])
+    else:
+        raise ValueError(
+            f"Answer speaker {answer_speaker_id} does not match dyad speakers "
+            f"{audio_info['spk1']} or {audio_info['spk2']}."
+        )
+
+    start_time = float(audio_info["start_audio"]) + float(audio_info["question_end_time"])
+    end_time = start_time + float(audio_info["answer_duration"])
+    target_frames = max(1, round((end_time - start_time) * TARGET_SAMPLE_RATE))
+
+    if not os.path.exists(audio_path):
+        speaker_audio, sample_rate = read_wav_segment_mono(source_audio_path, start_time, end_time)
+        speaker_audio = fit_length(resample_linear(speaker_audio, sample_rate), target_frames)
+
+        write_stereo_wav(audio_path, speaker_audio, speaker_audio)
     return target_frames / TARGET_SAMPLE_RATE
 
 
@@ -316,11 +343,13 @@ def save_processed_dataset(
         writer.writeheader()
         for audio_id, audio_info in tqdm(audios.items(), desc=f"Saving audio {label} for {split} {subset}"):
             Q_audio_path = output_path / "audios" / f"{audio_id}.wav"
-            duration = export_segment_audio(Q_audio_path, audio_info, question_only=True)
+            duration = export_segment_audio_question(Q_audio_path, audio_info)
+            audio_info["transcript_answer"] = format_transcript(transcripts[audio_id]["answer"])
             if label == "answers": 
                 A_audio_path = output_path / "audios" / f"answer_{audio_id}.wav"
-                export_segment_audio(A_audio_path, audio_info, question_only=False)
+                answer_duration = export_segment_audio_answer(A_audio_path, audio_info)
             else:
+                answer_duration = ""
                 audio_info.pop("answer_duration", None)
                 audio_info.pop("transcript_answer", None)
             writer.writerow(
@@ -334,7 +363,7 @@ def save_processed_dataset(
                     "transcript_answer": format_transcript(transcripts[audio_id]['answer']),
                     "question_end_time": audio_info.get("question_end_time", ""),
                     "context_end_time": audio_info.get("context_end_time", ""),
-                    "answer_duration": audio_info.get("answer_duration", ""),
+                    "answer_duration": answer_duration,
                     "answer_start_time": audio_info.get("answer_start_time", "")
                 }
             )
