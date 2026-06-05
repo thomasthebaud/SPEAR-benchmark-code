@@ -13,7 +13,7 @@ for split in 'test' 'dev'; do
 
           echo "Predict Naturalness score for split:$split subset:$subset model:$model"
 
-          $(python_cmd 'SB22' --cpu) bin/naturalness/score.py \
+          $(python_cmd 'SB22' --gpu) bin/naturalness/score.py \
               --metadata $metadata \
               --outputs $metrics \
               --pickle-dir $pickle_dir \

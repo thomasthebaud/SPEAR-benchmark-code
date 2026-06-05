@@ -4,7 +4,8 @@ data/*/*
 !data/seamless_assets
 models/*/*
 results/*
-__pycache__/
+__pycache__
+**/__pycache__
 *.py[cod]
 reports/*/*/graphs/feat_graphs/*
 reports/*/*/graphs/basic_metric_graphs/*

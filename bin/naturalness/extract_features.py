@@ -71,6 +71,9 @@ def expected_num_chunks(audio_info, args):
     except Exception:
         return 0
 
+    if args.win_sec == 0:
+        return 1 if n_samples > 0 else 0
+
     win = int(round(args.win_sec * TARGET_SR))
     hop = int(round(args.hop_sec * TARGET_SR))
     if win <= 0 or hop <= 0 or n_samples <= 0:
@@ -95,6 +98,22 @@ def load_audio(audio_path, start_time=0.0, end_time=None):
 
 
 def chunk_audio(y, sr, args, turn_name, start_offset=0.0):
+    duration = len(y) / sr
+    if args.win_sec == 0:
+        if len(y) == 0:
+            return [], 0.0
+        return [
+            {
+                "audio": y.astype(np.float32, copy=False),
+                "turn_name": turn_name,
+                "turn_chunk_index": 0,
+                "start": float(start_offset),
+                "end": float(start_offset + duration),
+                "true_end": float(start_offset + duration),
+                "padded": False,
+            }
+        ], duration
+
     win_n = int(round(args.win_sec * sr))
     chunks = []
 
@@ -119,7 +138,7 @@ def chunk_audio(y, sr, args, turn_name, start_offset=0.0):
             }
         )
 
-    return chunks, len(y) / sr
+    return chunks, duration
 
 
 def compute_chunks(chunks, model, device, args):
@@ -232,6 +251,9 @@ def feature_metadata_has_turn_scores(row, output_dir):
 
 def num_chunks_for_duration(duration, args):
     n_samples = int(round(max(0.0, float(duration)) * TARGET_SR))
+    if args.win_sec == 0:
+        return 1 if n_samples > 0 else 0
+
     win = int(round(args.win_sec * TARGET_SR))
     hop = int(round(args.hop_sec * TARGET_SR))
     if win <= 0 or hop <= 0 or n_samples <= 0:
@@ -434,7 +456,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--metadata", type=Path, help="metadata file")
 
-    parser.add_argument("--win-sec", type=float, default=3.0, help="Window size seconds.")
+    parser.add_argument("--win-sec", type=float, default=3.0, help="Window size seconds. Use 0 to process each full audio turn as one chunk.")
     parser.add_argument("--min-len-question", type=float, default=0.5, help="Minimum question duration in seconds to process (default 0.5s).")
     parser.add_argument("--hop-sec", type=float, default=1.0, help="Hop size seconds (hop < win => sliding window).")
     parser.add_argument("--pad-last", action="store_true", help="Pad last short window to full length (default ON).")
@@ -460,6 +482,10 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
+    if args.win_sec < 0:
+        parser.error("--win-sec must be >= 0; use 0 for full-audio chunks.")
+    if args.win_sec > 0 and args.hop_sec <= 0:
+        parser.error("--hop-sec must be > 0 when --win-sec is nonzero.")
 
     output_dir = args.metadata.parent / 'naturalness/voxprofile_features'
     if args.force_recompute and output_dir.exists():

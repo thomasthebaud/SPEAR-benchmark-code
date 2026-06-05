@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import os
 import pickle
 import sys
 from pathlib import Path
@@ -77,9 +78,32 @@ def load_pickle(path: Path) -> Dict[str, np.ndarray]:
 
 
 def get_device(requested: Optional[str]) -> torch.device:
-    if requested:
-        return torch.device(requested)
-    return torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    requested = (requested or "auto").strip().lower()
+    if requested in {"", "auto"}:
+        if torch.cuda.is_available():
+            local_rank = os.environ.get("LOCAL_RANK")
+            if local_rank is not None:
+                try:
+                    rank = int(local_rank)
+                    if 0 <= rank < torch.cuda.device_count():
+                        torch.cuda.set_device(rank)
+                        return torch.device(f"cuda:{rank}")
+                except ValueError:
+                    pass
+            return torch.device("cuda")
+        return torch.device("cpu")
+
+    device = torch.device(requested)
+    if device.type == "cuda":
+        if not torch.cuda.is_available():
+            raise RuntimeError(f"Requested CUDA device '{requested}', but torch.cuda.is_available() is false.")
+        if device.index is not None:
+            if device.index >= torch.cuda.device_count():
+                raise RuntimeError(
+                    f"Requested CUDA device '{requested}', but only {torch.cuda.device_count()} CUDA device(s) are visible."
+                )
+            torch.cuda.set_device(device.index)
+    return device
 
 
 def build_scoring_csv(
@@ -211,13 +235,14 @@ def main() -> None:
     parser.add_argument("--context-metadata", type=Path, default=None, help="Metadata CSV used when the text caches were built.")
     parser.add_argument("--threshold", type=float, default=0.5)
     parser.add_argument("--batch-size", type=int, default=16)
-    parser.add_argument("--device", type=str, default=None)
+    parser.add_argument("--device", type=str, default="auto", help="Device for inference: auto, cpu, cuda, cuda:0, etc. Default auto uses CUDA when available.")
     parser.add_argument("--max-seq-len", type=int, default=None)
     parser.add_argument("--min-chunks", type=int, default=1, help="Minimum feature chunks required per utterance.")
     args = parser.parse_args()
 
     args.outputs.mkdir(parents=True, exist_ok=True)
     device = get_device(args.device)
+    print(f"Using device: {device}")
     infer_module.MIN_REAL_PAIRS = max(1, int(args.min_chunks))
 
     print(f"Loading checkpoint: {args.model_path}")
