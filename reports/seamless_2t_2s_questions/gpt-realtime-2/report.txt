@@ -66,22 +66,22 @@ Emotional Naturalness
 ---------------------
 metric  n  mean_diff  std_diff  p_value  auroc  accuracy
 improvised
-Emotional naturalness (improvised)                             379  -0.0358  0.5219  0.782  nan  nan
-Emotional naturalness collaborative_storytelling (improvised)  2    -0.0019  nan     nan    nan  nan
-Emotional naturalness grounded_gesture (improvised)            4    -0.0029  nan     nan    nan  nan
-Emotional naturalness ipc_conversation (improvised)            6    -0.0043  nan     nan    nan  nan
-Emotional naturalness stranger (improvised)                    367  -0.0369  nan     nan    nan  nan
+Emotional naturalness (improvised)                             867  -0.0296  0.5208  0.658  nan  nan
+Emotional naturalness collaborative_storytelling (improvised)  4    0.0028   nan     nan    nan  nan
+Emotional naturalness grounded_gesture (improvised)            8    -0.0023  nan     nan    nan  nan
+Emotional naturalness ipc_conversation (improvised)            18   -0.0049  nan     nan    nan  nan
+Emotional naturalness stranger (improvised)                    837  -0.0306  nan     nan    nan  nan
 naturalistic
-Emotional naturalness (naturalistic)                                 676  -0.0282  0.5742  0.86  nan  nan
-Emotional naturalness collaborative_storytelling (naturalistic)      4    -0.0092  nan     nan   nan  nan
-Emotional naturalness coworkers (naturalistic)                       14   -0.0060  nan     nan   nan  nan
-Emotional naturalness dating/spouse/romantic_partner (naturalistic)  39   -0.0057  nan     nan   nan  nan
-Emotional naturalness familiar-generic (naturalistic)                35   -0.0055  nan     nan   nan  nan
-Emotional naturalness family-generic (naturalistic)                  88   -0.0032  nan     nan   nan  nan
-Emotional naturalness friends (naturalistic)                         299  -0.0555  nan     nan   nan  nan
-Emotional naturalness grounded_gesture (naturalistic)                7    -0.0150  nan     nan   nan  nan
-Emotional naturalness ipc_conversation (naturalistic)                22   -0.0141  nan     nan   nan  nan
-Emotional naturalness stranger (naturalistic)                        168  -0.0291  nan     nan   nan  nan
+Emotional naturalness (naturalistic)                                 1451  0.0010   0.7071  0.812  nan  nan
+Emotional naturalness collaborative_storytelling (naturalistic)      5     -0.0109  nan     nan    nan  nan
+Emotional naturalness coworkers (naturalistic)                       27    -0.0072  nan     nan    nan  nan
+Emotional naturalness dating/spouse/romantic_partner (naturalistic)  79    -0.0113  nan     nan    nan  nan
+Emotional naturalness familiar-generic (naturalistic)                87    -0.0132  nan     nan    nan  nan
+Emotional naturalness family-generic (naturalistic)                  214   0.0649   nan     nan    nan  nan
+Emotional naturalness friends (naturalistic)                         642   -0.0376  nan     nan    nan  nan
+Emotional naturalness grounded_gesture (naturalistic)                19    -0.0092  nan     nan    nan  nan
+Emotional naturalness ipc_conversation (naturalistic)                46    -0.0108  nan     nan    nan  nan
+Emotional naturalness stranger (naturalistic)                        332   0.0404   nan     nan    nan  nan
 
 STANCEs
 -------
@@ -147,17 +147,17 @@ lowest_auroc   f0_mean_p10_p90       2045  -11.0377   46.5908   6.6e-05    0.536
 lowest_auroc   f0_std_p10_p90        2045  -4.2149    15.4388   7.19e-06   0.5405  0.5900
 lowest_auroc   f0_total_duration_s   2045  -3.6338    17.2200   1.69e-10   0.5576  0.5474
 cluster_features_rho0p8
-corr_cluster_001_rho0p8             1150  -1.3826  1.7369  6.48e-122  nan  nan
-corr_cluster_002_rho0p8             1150  -1.3253  2.7895  2.31e-30   nan  nan
-corr_cluster_003_rho0p8             1150  -0.1520  2.2993  0.378      nan  nan
-corr_cluster_004_rho0p8             1150  -1.3365  2.3515  1.99e-54   nan  nan
-general_explainable_feature_rho0p8  1150  -2.0146  3.3223  3.77e-58   nan  nan
+corr_cluster_001_rho0p8             1150  -1.5455  1.7346  1.45e-153  nan  nan
+corr_cluster_002_rho0p8             1150  -0.1533  2.3400  0.641      nan  nan
+corr_cluster_003_rho0p8             1150  -0.7060  1.9128  5.19e-42   nan  nan
+corr_cluster_004_rho0p8             1150  -0.7186  2.2517  3.75e-08   nan  nan
+general_explainable_feature_rho0p8  1150  -0.4377  2.8663  0.004      nan  nan
 cluster_features_rho0p8
-corr_cluster_001_rho0p8             2045  -1.0862  1.8894  2.57e-132  nan  nan
-corr_cluster_002_rho0p8             2045  -0.8656  3.5339  7.06e-06   nan  nan
-corr_cluster_003_rho0p8             2045  -0.2699  1.9795  0.00909    nan  nan
-corr_cluster_004_rho0p8             2045  -0.6730  2.6393  0.000308   nan  nan
-general_explainable_feature_rho0p8  2045  -1.3253  3.9684  4.46e-24   nan  nan
+corr_cluster_001_rho0p8             2045  -1.2504  1.9007  3.82e-178  nan  nan
+corr_cluster_002_rho0p8             2045  0.3466   2.8902  2.73e-06   nan  nan
+corr_cluster_003_rho0p8             2045  -0.8150  1.6072  3.27e-125  nan  nan
+corr_cluster_004_rho0p8             2045  0.1114   2.2591  7.98e-26   nan  nan
+general_explainable_feature_rho0p8  2045  0.3191   3.2023  1.14e-08   nan  nan
 
 Files
 -----

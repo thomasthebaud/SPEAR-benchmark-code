@@ -190,7 +190,7 @@ def _run_generate_with_streaming(
     generation_kwargs = {
         **inputs,
         "streamer": streamer,
-        "spk": DEFAULT_SPEAKER,
+        "speaker": DEFAULT_SPEAKER,
         "return_audio": True,
         "thinker_max_new_tokens": MAX_NEW_TOKENS,
         "thinker_do_sample": temp > 0,
@@ -204,23 +204,19 @@ def _run_generate_with_streaming(
     def target() -> None:
         try:
             result_queue.put(model.generate(**generation_kwargs))
-        except TypeError as exc:
-            if "spk" not in str(exc):
+        except Exception as exc:
+            if "speaker" not in str(exc):
                 streamer.end()
                 result_queue.put(exc)
                 return
 
             fallback_kwargs = dict(generation_kwargs)
-            fallback_kwargs.pop("spk", None)
-            fallback_kwargs["speaker"] = DEFAULT_SPEAKER
+            fallback_kwargs.pop("speaker", None)
             try:
                 result_queue.put(model.generate(**fallback_kwargs))
             except Exception as fallback_exc:
                 streamer.end()
                 result_queue.put(fallback_exc)
-        except Exception as exc:
-            streamer.end()
-            result_queue.put(exc)
 
     start_time = time.monotonic()
     first_text_delta_s = None

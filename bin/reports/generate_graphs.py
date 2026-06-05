@@ -5,7 +5,7 @@ import argparse
 import ast
 import re
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Tuple
+from typing import Dict, List, Optional
 
 import matplotlib
 matplotlib.use("Agg")
@@ -21,6 +21,16 @@ ORIGINAL = "original"
 SUBSETS = ["improvised", "naturalistic"]
 DATASET_PALETTE = {"original": "#4C72B0", "model": "#DD8452"}
 EXCLUDED_REPORT_METRICS = {"question_end_time"}
+RELATIONSHIP_ORDER = [
+    "coworkers",
+    "dating/spouse/romantic_partner",
+    "familiar-generic",
+    "family-generic",
+    "friends",
+    "stranger",
+]
+
+
 DIALECT_LABELS = [
     "East Asia",
     "English",
@@ -63,34 +73,30 @@ def sanitize_filename(name: str) -> str:
     return clean[:180] or "feature"
 
 
-def feature_csv(results_root: Path, model: str, split: str, subset: str) -> Path:
-    return results_root / model / split / subset / "distrib_baselines_features.csv"
+def result_file(results_root: Path, model: str, *parts: str) -> Path:
+    path = results_root / model
+    for part in parts:
+        path /= part
+    return path
 
 
-def naturalness_csv(results_root: Path, model: str, subset: str) -> Path:
-    return results_root / model / "test" / subset / "naturalness_scores.csv"
+def save_figure(fig, output_path: Path, *, dpi: int = 180, bbox_inches: str = "tight") -> None:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output_path, dpi=dpi, bbox_inches=bbox_inches)
+    plt.close(fig)
+    print(f"Wrote {output_path}")
 
 
-def ser_avd_csv(results_root: Path, model: str, subset: str) -> Path:
-    return results_root / model / "test" / subset / "SER_AVD.csv"
-
-
-def feature_summary_csv(results_root: Path, model: str) -> Path:
-    return results_root / model / "distrib_baselines_summary.csv"
-
-
-def merged_stances_csv(results_root: Path, model: str, subset: str = "improvised") -> Path:
-    return results_root / model / "test" / subset / "merged_stances.csv"
-
-
-def dialect_id_csv(results_root: Path, model: str, subset: str) -> Path:
-    return results_root / model / "test" / subset / "dialect_id.csv"
+def remove_axis_legend(ax) -> None:
+    legend = ax.get_legend()
+    if legend is not None:
+        legend.remove()
 
 
 def load_feature_values(results_root: Path, model: str, subset: str, feature: str) -> Optional[pd.DataFrame]:
     frames = []
     for label_model, label in [(ORIGINAL, "original"), (model, "model")]:
-        path = feature_csv(results_root, label_model, "test", subset)
+        path = result_file(results_root, label_model, "test", subset, "distrib_baselines_features.csv")
         frame = safe_read_csv(path)
         if frame is None or feature not in frame.columns:
             continue
@@ -103,16 +109,11 @@ def load_feature_values(results_root: Path, model: str, subset: str, feature: st
     return pd.concat(frames, ignore_index=True)
 
 
-
-def base_metrics_csv(results_root: Path, model: str, subset: str) -> Path:
-    return results_root / model / "test" / subset / "base_metrics.csv"
-
-
 def available_base_metric_columns(results_root: Path, model: str) -> List[str]:
     columns = set()
     for subset in SUBSETS:
         for label_model in [ORIGINAL, model]:
-            frame = safe_read_csv(base_metrics_csv(results_root, label_model, subset))
+            frame = safe_read_csv(result_file(results_root, label_model, "test", subset, "base_metrics.csv"))
             if frame is None:
                 continue
             columns.update(
@@ -135,25 +136,11 @@ def available_base_metric_columns(results_root: Path, model: str) -> List[str]:
     return ordered
 
 
-def asr_error_columns(results_root: Path, model: str, error_type: str) -> List[str]:
-    columns = set(available_base_metric_columns(results_root, model))
-    specific = sorted(column for column in columns if column.startswith(f"{error_type}_"))
-    if specific:
-        return specific
-    return [error_type] if error_type in columns else []
-
-
-def asr_label(column: str, error_type: str) -> str:
-    if column == error_type:
-        return "default"
-    return column.split("_", 1)[1]
-
-
 def load_base_metric_values(results_root: Path, model: str, metric: str) -> Optional[pd.DataFrame]:
     frames = []
     for subset in SUBSETS:
         for label_model, label in [(ORIGINAL, "original"), (model, "model")]:
-            frame = safe_read_csv(base_metrics_csv(results_root, label_model, subset))
+            frame = safe_read_csv(result_file(results_root, label_model, "test", subset, "base_metrics.csv"))
             if frame is None or metric not in frame.columns:
                 continue
             values = numeric(frame[metric]).dropna()
@@ -167,10 +154,14 @@ def load_base_metric_values(results_root: Path, model: str, metric: str) -> Opti
 
 def load_asr_error_values(results_root: Path, model: str, error_type: str) -> Optional[pd.DataFrame]:
     frames = []
-    columns = asr_error_columns(results_root, model, error_type)
+    available_columns = set(available_base_metric_columns(results_root, model))
+    columns = sorted(column for column in available_columns if column.startswith(f"{error_type}_"))
+    if not columns and error_type in available_columns:
+        columns = [error_type]
+
     for subset in SUBSETS:
         for label_model, label in [(ORIGINAL, "original"), (model, "model")]:
-            frame = safe_read_csv(base_metrics_csv(results_root, label_model, subset))
+            frame = safe_read_csv(result_file(results_root, label_model, "test", subset, "base_metrics.csv"))
             if frame is None:
                 continue
             for column in columns:
@@ -179,34 +170,11 @@ def load_asr_error_values(results_root: Path, model: str, error_type: str) -> Op
                 values = numeric(frame[column]).dropna()
                 if values.empty:
                     continue
-                frames.append(
-                    pd.DataFrame(
-                        {
-                            "value": values,
-                            "dataset": label,
-                            "subset": subset,
-                            "metric": error_type,
-                            "asr_system": asr_label(column, error_type),
-                        }
-                    )
-                )
+                asr_system = "default" if column == error_type else column.split("_", 1)[1]
+                frames.append(pd.DataFrame({"value": values, "dataset": label, "subset": subset, "metric": error_type, "asr_system": asr_system}))
     if not frames:
         return None
     return pd.concat(frames, ignore_index=True)
-
-def add_normalized_values(data: pd.DataFrame, group_cols: List[str], value_col: str = "value") -> pd.DataFrame:
-    data = data.copy()
-    data["normalized_value"] = np.nan
-    for _, idx in data.groupby(group_cols).groups.items():
-        values = data.loc[idx, value_col].astype(float)
-        value_min = values.min()
-        value_max = values.max()
-        denom = value_max - value_min
-        if pd.isna(denom) or denom == 0:
-            data.loc[idx, "normalized_value"] = 0.5
-        else:
-            data.loc[idx, "normalized_value"] = (values - value_min) / denom
-    return data
 
 
 def remove_iqr_outliers(data: pd.DataFrame, group_cols: List[str], value_col: str = "value") -> pd.DataFrame:
@@ -259,8 +227,7 @@ def graph_asr_error_histogram(results_root: Path, model: str, error_type: str, o
             density_norm="width",
             ax=ax,
         )
-        if ax.get_legend() is not None:
-            ax.get_legend().remove()
+        remove_axis_legend(ax)
         ax.set_title(subset.title())
         ax.set_xlabel(error_type)
         ax.set_ylabel("ASR system")
@@ -268,8 +235,7 @@ def graph_asr_error_histogram(results_root: Path, model: str, error_type: str, o
     fig.legend(legend_handles, ["original", "model"], title="Dataset", loc="upper center", ncol=2, bbox_to_anchor=(0.5, 1.02), frameon=True)
     fig.suptitle(f"{error_type}: Original vs Model Across ASR Systems", y=1.04)
     fig.tight_layout(rect=(0, 0, 1, 0.96))
-    fig.savefig(output_path, dpi=180, bbox_inches="tight")
-    plt.close(fig)
+    save_figure(fig, output_path)
 
 
 def graph_basic_metric_histograms(results_root: Path, model: str, output_dir: Path) -> None:
@@ -378,8 +344,7 @@ def graph_basic_metrics_violin(results_root: Path, model: str, output_path: Path
                 ax.set_ylabel(metric if col_idx == 0 else "")
                 ax.set_yticks([])
                 ax.tick_params(axis="y", left=False, labelleft=False)
-            if ax.get_legend() is not None:
-                ax.get_legend().remove()
+            remove_axis_legend(ax)
             ax.set_title(subset.title() if row_idx == 0 else "")
             ax.set_xlabel("")
             ax.tick_params(axis="x", labelsize=10)
@@ -389,13 +354,10 @@ def graph_basic_metrics_violin(results_root: Path, model: str, output_path: Path
     fig.legend(legend_handles, ["original", "model"], title="Dataset", loc="upper center", ncol=2, bbox_to_anchor=(0.5, 1.02), frameon=True)
     fig.suptitle("Basic Metric Distributions: Original vs Model", y=1.04)
     fig.tight_layout(rect=(0, 0, 1, 0.96))
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(output_path, dpi=180, bbox_inches="tight")
-    plt.close(fig)
-    print(f"Wrote {output_path}")
+    save_figure(fig, output_path)
 
 def graph_feature_histograms(results_root: Path, model: str, output_dir: Path) -> None:
-    summary = safe_read_csv(feature_summary_csv(results_root, model))
+    summary = safe_read_csv(result_file(results_root, model, "distrib_baselines_summary.csv"))
     if summary is None or "feature" not in summary.columns:
         print("[WARN] No explainable feature summary found; skipping per-feature histograms.")
         return
@@ -443,25 +405,23 @@ def graph_feature_histograms(results_root: Path, model: str, output_dir: Path) -
     print(f"Wrote per-feature histograms to {output_dir}")
 
 
-def stance_polarity(score: float) -> Optional[str]:
-    if pd.isna(score) or score == 0:
-        return None
-    return "positive" if score > 0 else "negative"
-
-
-def stance_label_for_group(qidx: int, group: pd.DataFrame) -> str:
-    for column in ["target_category", "stance_related_categories", "stance_question"]:
-        if column not in group:
-            continue
-        values = group[column].dropna().astype(str).str.strip()
-        values = values[values != ""]
-        if not values.empty:
-            return values.iloc[0].replace("|", " / ")
-    return f"Q{qidx}"
-
-
 def graph_stances(results_root: Path, model: str, output_path: Path) -> None:
-    frame = safe_read_csv(merged_stances_csv(results_root, model, "improvised"))
+    def stance_polarity(score: float) -> Optional[str]:
+        if pd.isna(score) or score == 0:
+            return None
+        return "positive" if score > 0 else "negative"
+
+    def label_for_group(qidx: int, group: pd.DataFrame) -> str:
+        for column in ["target_category", "stance_related_categories", "stance_question"]:
+            if column not in group:
+                continue
+            values = group[column].dropna().astype(str).str.strip()
+            values = values[values != ""]
+            if not values.empty:
+                return values.iloc[0].replace("|", " / ")
+        return f"Q{qidx}"
+
+    frame = safe_read_csv(result_file(results_root, model, "test", "improvised", "merged_stances.csv"))
     if frame is None or not {"question_index", "score_original", "score_llm"}.issubset(frame.columns):
         print("[WARN] Missing STANCE merged scores; skipping stances.png.")
         return
@@ -475,7 +435,7 @@ def graph_stances(results_root: Path, model: str, output_path: Path) -> None:
     frame["original_polarity"] = frame["score_original"].map(stance_polarity)
     frame["model_polarity"] = frame["score_llm"].map(stance_polarity)
     questions = sorted(frame["question_index"].unique())
-    stance_labels = {qidx: stance_label_for_group(qidx, group) for qidx, group in frame.groupby("question_index", sort=True)}
+    stance_labels = {qidx: label_for_group(qidx, group) for qidx, group in frame.groupby("question_index", sort=True)}
     polarity_labels = ["negative", "positive"]
 
     ncols = min(5, max(1, len(questions)))
@@ -506,10 +466,7 @@ def graph_stances(results_root: Path, model: str, output_path: Path) -> None:
     fig.suptitle("STANCE Polarity Confusion Matrices: Original vs Model", y=1.02)
     fig.text(0.5, 0.01, "Neutral scores (0) are excluded from the positive/negative polarity counts.", ha="center", fontsize=11)
     fig.tight_layout(rect=(0, 0.03, 1, 0.98))
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(output_path, dpi=180, bbox_inches="tight")
-    plt.close(fig)
-    print(f"Wrote {output_path}")
+    save_figure(fig, output_path)
 
 
 def parse_score_vector(value) -> Optional[List[float]]:
@@ -531,7 +488,7 @@ def parse_score_vector(value) -> Optional[List[float]]:
 
 
 def load_dialect_frame(results_root: Path, model: str, subset: str) -> Optional[pd.DataFrame]:
-    frame = safe_read_csv(dialect_id_csv(results_root, model, subset))
+    frame = safe_read_csv(result_file(results_root, model, "test", subset, "dialect_id.csv"))
     if frame is None:
         return None
     required = {"dialect", "answer_dialect"}
@@ -576,16 +533,13 @@ def graph_dialect_confusion(results_root: Path, model: str, output_path: Path) -
         ax.tick_params(axis="y", rotation=0, labelsize=8)
     fig.suptitle("Dialect Changes from Question to Answer", y=1.02)
     fig.tight_layout()
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(output_path, dpi=180, bbox_inches="tight")
-    plt.close(fig)
-    print(f"Wrote {output_path}")
+    save_figure(fig, output_path)
 
 
 def graph_dialect_scores(results_root: Path, model: str, output_path: Path) -> None:
     rows = []
     for subset in SUBSETS:
-        frame = safe_read_csv(dialect_id_csv(results_root, model, subset))
+        frame = safe_read_csv(result_file(results_root, model, "test", subset, "dialect_id.csv"))
         if frame is None or not {"dialect_score", "answer_dialect_score"}.issubset(frame.columns):
             continue
         for score_column, field in [("dialect_score", "question"), ("answer_dialect_score", "answer")]:
@@ -628,8 +582,7 @@ def graph_dialect_scores(results_root: Path, model: str, output_path: Path) -> N
         handles, labels = ax.get_legend_handles_labels()
         if handles and legend_handles is None:
             legend_handles, legend_labels = handles, labels
-        if ax.get_legend() is not None:
-            ax.get_legend().remove()
+        remove_axis_legend(ax)
         ax.set_title(subset.title())
         ax.set_xscale("log")
         # ax.set_xlim(score_floor, 1.0)
@@ -642,21 +595,14 @@ def graph_dialect_scores(results_root: Path, model: str, output_path: Path) -> N
         fig.legend(legend_handles, legend_labels, title="Field", loc="upper center", ncol=2, bbox_to_anchor=(0.5, 1.01), frameon=True)
     fig.suptitle("Dialect Score Distributions: Question vs Answer", y=1.035)
     fig.tight_layout(rect=(0, 0, 1, 0.98))
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(output_path, dpi=180, bbox_inches="tight")
-    plt.close(fig)
-    print(f"Wrote {output_path}")
-
-
-def normalize_emotion_score(values: pd.Series) -> pd.Series:
-    return (numeric(values) * 2.0 - 1.0).clip(-1.0, 1.0)
+    save_figure(fig, output_path)
 
 
 def load_emotion_scatter_values(results_root: Path, model: str) -> Optional[pd.DataFrame]:
     rows = []
     for subset in SUBSETS:
         for label_model, label in [(ORIGINAL, "original"), (model, "model")]:
-            frame = safe_read_csv(ser_avd_csv(results_root, label_model, subset))
+            frame = safe_read_csv(result_file(results_root, label_model, "test", subset, "SER_AVD.csv"))
             if frame is None:
                 continue
             for emotion in ["arousal", "dominance", "valence"]:
@@ -666,8 +612,8 @@ def load_emotion_scatter_values(results_root: Path, model: str) -> Optional[pd.D
                     continue
                 pairs = pd.DataFrame(
                     {
-                        "question": normalize_emotion_score(frame[question_col]),
-                        "answer": normalize_emotion_score(frame[answer_col]),
+                        "question": (numeric(frame[question_col]) * 2.0 - 1.0).clip(-1.0, 1.0),
+                        "answer": (numeric(frame[answer_col]) * 2.0 - 1.0).clip(-1.0, 1.0),
                         "dataset": label,
                         "subset": subset,
                         "emotion": emotion,
@@ -764,8 +710,7 @@ def graph_emotion_scatter(results_root: Path, model: str, output_path: Path) -> 
             handles, labels = ax.get_legend_handles_labels()
             if handles and legend_handles is None:
                 legend_handles, legend_labels = handles, labels
-            if ax.get_legend() is not None:
-                ax.get_legend().remove()
+            remove_axis_legend(ax)
             ax.plot([-1, 1], [-1, 1], color="#666666", linestyle="--", linewidth=1.0, alpha=0.55)
             draw_correlation_lines(ax, sub, DATASET_PALETTE)
             ax.set_xlim(-1.02, 1.02)
@@ -779,17 +724,113 @@ def graph_emotion_scatter(results_root: Path, model: str, output_path: Path) -> 
         fig.legend(legend_handles, legend_labels, title="Dataset", loc="upper center", ncol=2, bbox_to_anchor=(0.5, 1.015), frameon=True)
     fig.suptitle("Question vs Answer VoxProfile Emotion Scores", y=1.035)
     fig.tight_layout(rect=(0, 0, 1, 0.98))
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(output_path, dpi=180, bbox_inches="tight")
-    plt.close(fig)
-    print(f"Wrote {output_path}")
+    save_figure(fig, output_path)
+
+
+def load_naturalness_relationship_values(results_root: Path, model: str) -> Optional[pd.DataFrame]:
+    frames = []
+    subset = "naturalistic"
+    for label_model, label in [(ORIGINAL, "original"), (model, "model")]:
+        scores = safe_read_csv(result_file(results_root, label_model, "test", subset, "naturalness_scores.csv"))
+        inference = safe_read_csv(result_file(results_root, label_model, "test", subset, "naturalness_inference_input.csv"))
+        if scores is None or inference is None:
+            continue
+        if "naturalness_logit" not in scores.columns or "rel_detail" not in inference.columns:
+            print(f"[WARN] Missing naturalness_logit or rel_detail for {label_model}/{subset}; skipping relationship violin rows.")
+            continue
+
+        joined = scores.copy().reset_index(drop=True)
+        rels = inference.copy().reset_index(drop=True)
+        if "row_idx" in joined.columns and "row_idx" in rels.columns:
+            joined["_row_idx"] = numeric(joined["row_idx"])
+            rels["_row_idx"] = numeric(rels["row_idx"])
+            joined = joined.merge(rels[["_row_idx", "rel_detail"]], on="_row_idx", how="left")
+        else:
+            joined["rel_detail"] = rels["rel_detail"].reindex(joined.index).values
+
+        joined["relationship"] = joined["rel_detail"].astype(str).str.strip()
+        joined["naturalness_logit"] = numeric(joined["naturalness_logit"])
+        joined = joined[joined["relationship"].isin(RELATIONSHIP_ORDER)]
+        joined = joined.dropna(subset=["naturalness_logit"])
+        if joined.empty:
+            continue
+        frames.append(
+            pd.DataFrame(
+                {
+                    "naturalness_logit": joined["naturalness_logit"],
+                    "relationship": joined["relationship"],
+                    "dataset": label,
+                }
+            )
+        )
+    if not frames:
+        return None
+    return pd.concat(frames, ignore_index=True)
+
+
+def graph_emotional_naturalness_by_relationship(results_root: Path, model: str, output_path: Path) -> None:
+    data = load_naturalness_relationship_values(results_root, model)
+    if data is None or data.empty:
+        print("[WARN] Missing naturalistic naturalness relationship rows; skipping emo_naturalness_by_relationship.png.")
+        return
+
+    dataset_order = ["original", "model"]
+    relationship_order = [relationship for relationship in RELATIONSHIP_ORDER if relationship in set(data["relationship"])]
+    fig_height = max(5.0, 1.05 * len(relationship_order) + 1.8)
+    fig, ax = plt.subplots(figsize=(12, fig_height))
+
+    sns.violinplot(
+        data=data,
+        x="naturalness_logit",
+        y="relationship",
+        hue="dataset",
+        order=relationship_order,
+        hue_order=dataset_order,
+        palette=DATASET_PALETTE,
+        inner="quartile",
+        cut=0,
+        linewidth=1.1,
+        orient="h",
+        ax=ax,
+    )
+    sns.stripplot(
+        data=data,
+        x="naturalness_logit",
+        y="relationship",
+        hue="dataset",
+        order=relationship_order,
+        hue_order=dataset_order,
+        dodge=True,
+        palette={label: "#202020" for label in dataset_order},
+        alpha=0.14,
+        size=1.8,
+        jitter=0.18,
+        orient="h",
+        legend=False,
+        ax=ax,
+    )
+
+    handles, labels = ax.get_legend_handles_labels()
+    deduped = dict(zip(labels, handles))
+    ax.legend(
+        [deduped[label] for label in dataset_order if label in deduped],
+        [label for label in dataset_order if label in deduped],
+        title="Dataset",
+        loc="upper right",
+        frameon=True,
+    )
+    ax.set_title("Naturalistic Emotional Naturalness by Relationship")
+    ax.set_xlabel("Emotional naturalness logit")
+    ax.set_ylabel("Relationship")
+    fig.tight_layout()
+    save_figure(fig, output_path)
 
 
 def graph_emotional_naturalness(results_root: Path, model: str, output_path: Path) -> None:
     subset_frames = []
     for subset in SUBSETS:
         for label_model, label in [(ORIGINAL, "original"), (model, "model")]:
-            frame = safe_read_csv(naturalness_csv(results_root, label_model, subset))
+            frame = safe_read_csv(result_file(results_root, label_model, "test", subset, "naturalness_scores.csv"))
             if frame is None or "naturalness_logit" not in frame.columns:
                 continue
             values = numeric(frame["naturalness_logit"]).dropna()
@@ -822,10 +863,7 @@ def graph_emotional_naturalness(results_root: Path, model: str, output_path: Pat
         ax.set_xlabel("naturalness_logit")
         ax.set_ylabel("Density")
     fig.tight_layout()
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(output_path, dpi=180, bbox_inches="tight")
-    plt.close(fig)
-    print(f"Wrote {output_path}")
+    save_figure(fig, output_path)
 
 
 def significance_stars(pvalue) -> str:
@@ -846,16 +884,8 @@ def significance_stars(pvalue) -> str:
 
 
 
-def cluster_feature_csv(results_root: Path, model: str, subset: str, threshold: str = "0p8") -> Path:
-    return results_root / model / "test" / subset / f"correlation_cluster_features_rho{threshold}.csv"
-
-
-def cluster_groups_csv(results_root: Path, model: str, subset: str, threshold: str = "0p8") -> Path:
-    return results_root / model / "test" / subset / f"correlation_feature_groups_rho{threshold}.csv"
-
-
 def cluster_feature_labels(results_root: Path, model: str, subset: str, threshold: str = "0p8") -> Dict[str, str]:
-    groups = safe_read_csv(cluster_groups_csv(results_root, model, subset, threshold))
+    groups = safe_read_csv(result_file(results_root, model, "test", subset, f"correlation_feature_groups_rho{threshold}.csv"))
     if groups is None or not {"cluster_feature", "features"}.issubset(groups.columns):
         return {}
     labels = {}
@@ -871,7 +901,7 @@ def load_cluster_feature_values(results_root: Path, model: str, general: bool) -
     frames = []
     for subset in SUBSETS:
         for label_model, label in [(ORIGINAL, "original"), (model, "model")]:
-            path = cluster_feature_csv(results_root, label_model, subset)
+            path = result_file(results_root, label_model, "test", subset, "correlation_cluster_features_rho0p8.csv")
             frame = safe_read_csv(path)
             if frame is None:
                 continue
@@ -924,8 +954,7 @@ def graph_cluster_feature_violins(results_root: Path, model: str, output_path: P
         handles, labels = ax.get_legend_handles_labels()
         if handles and legend_handles is None:
             legend_handles, legend_labels = handles, labels
-        if ax.get_legend() is not None:
-            ax.get_legend().remove()
+        remove_axis_legend(ax)
         ax.set_title(subset.title())
         ax.set_xlabel("PCA cluster feature value")
         ax.set_ylabel("Cluster feature" if ax is axes[0, 0] else "")
@@ -936,10 +965,7 @@ def graph_cluster_feature_violins(results_root: Path, model: str, output_path: P
         fig.legend(legend_handles, legend_labels, title="Dataset", loc="upper center", ncol=2, bbox_to_anchor=(0.5, 1.01))
     fig.suptitle("Correlation Cluster Explainable Features", y=1.035)
     fig.tight_layout(rect=(0, 0, 1, 0.98))
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(output_path, dpi=180, bbox_inches="tight")
-    plt.close(fig)
-    print(f"Wrote {output_path}")
+    save_figure(fig, output_path)
 
 
 def graph_general_explainable_histogram(results_root: Path, model: str, output_path: Path) -> None:
@@ -970,13 +996,10 @@ def graph_general_explainable_histogram(results_root: Path, model: str, output_p
         ax.set_ylabel("Density")
     fig.suptitle("General Explainable Feature", y=1.03)
     fig.tight_layout()
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(output_path, dpi=180, bbox_inches="tight")
-    plt.close(fig)
-    print(f"Wrote {output_path}")
+    save_figure(fig, output_path)
 
 def graph_explainable_scatter(results_root: Path, model: str, output_path: Path) -> None:
-    summary = safe_read_csv(feature_summary_csv(results_root, model))
+    summary = safe_read_csv(result_file(results_root, model, "distrib_baselines_summary.csv"))
     if summary is None or "feature" not in summary.columns:
         print("[WARN] Missing explainable feature summary; skipping explainables.png.")
         return
@@ -990,8 +1013,8 @@ def graph_explainable_scatter(results_root: Path, model: str, output_path: Path)
 
     rows = []
     for subset in SUBSETS:
-        original = safe_read_csv(feature_csv(results_root, ORIGINAL, "test", subset))
-        model_frame = safe_read_csv(feature_csv(results_root, model, "test", subset))
+        original = safe_read_csv(result_file(results_root, ORIGINAL, "test", subset, "distrib_baselines_features.csv"))
+        model_frame = safe_read_csv(result_file(results_root, model, "test", subset, "distrib_baselines_features.csv"))
         if original is None or model_frame is None:
             continue
 
@@ -1100,8 +1123,7 @@ def graph_explainable_scatter(results_root: Path, model: str, output_path: Path)
         handles, labels = ax.get_legend_handles_labels()
         if handles and legend_handles is None:
             legend_handles, legend_labels = handles, labels
-        if ax.get_legend() is not None:
-            ax.get_legend().remove()
+        remove_axis_legend(ax)
         ax.set_title(subset.title())
         ax.set_xlabel("Feature value normalized to [0, 1]")
         ax.set_ylabel("Feature" if ax is axes[0, 0] else "")
@@ -1115,10 +1137,7 @@ def graph_explainable_scatter(results_root: Path, model: str, output_path: Path)
     fig.suptitle("Explainable Feature Distributions: Original vs Model", y=1.035)
     fig.text(0.5, 0.005, "Significance: * p<0.05, ** p<0.01, *** p<0.001; orange background p<0.05, red background p<0.001", ha="center", fontsize=11)
     fig.tight_layout(rect=(0, 0.02, 1, 0.98))
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(output_path, dpi=180, bbox_inches="tight")
-    plt.close(fig)
-    print(f"Wrote {output_path}")
+    save_figure(fig, output_path)
 
 
 def main() -> int:
@@ -1136,6 +1155,7 @@ def main() -> int:
     graph_feature_histograms(args.results_root, args.model, graphs_dir / "feat_graphs")
     graph_stances(args.results_root, args.model, graphs_dir / "stances.png")
     graph_emotional_naturalness(args.results_root, args.model, graphs_dir / "emo_naturalness.png")
+    graph_emotional_naturalness_by_relationship(args.results_root, args.model, graphs_dir / "emo_naturalness_by_relationship.png")
     graph_emotion_scatter(args.results_root, args.model, graphs_dir / "emotion_scatter.png")
     graph_dialect_confusion(args.results_root, args.model, graphs_dir / "dialect_confusion.png")
     graph_dialect_scores(args.results_root, args.model, graphs_dir / "dialect_scores.png")

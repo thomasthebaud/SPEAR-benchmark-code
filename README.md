@@ -115,7 +115,8 @@ Important fields:
 - `seamless_assets_dir`: path to the benchmark assets directory, usually `data/seamless_assets`.
 - `protocol`: name of the benchmark protocol to create and evaluate. The current default is `seamless_2t_2s_questions`.
 - `data_dir`: derived output data directory for the selected protocol.
-- `llm_model`: speech-to-speech LLM used to generate answers. Current proxy files include `gpt-audio-1.5`, `gpt-realtime-2`, and the older `gpt-4o-audio-preview-2025-06-03`.
+- `llm_model`: speech-to-speech LLM used by single-model stages such as LLM inference and per-model report generation. Current proxy files include `gpt-audio-1.5`, `gpt-realtime-2`, `Qwen3-Omni-30B-A3B-Instruct`, `Qwen2.5-Omni-7B`, and the older `gpt-4o-audio-preview-2025-06-03`.
+- `eval_models`: model list used by multi-model evaluation scripts such as naturalness scoring, STANCE metric aggregation, missing-file checks, report-line generation, and benchmark-table merging.
 - `language_id_model`: Hugging Face audio language ID model, currently `facebook/mms-lid-126`.
 - `dialect_id_model`: VoxLect dialect model used by the language/dialect stage.
 - `asr`: ASR model name used in report labels. Transcription currently runs both `Qwen3-ASR-0.6B` and `whisper-large-v3`.
@@ -148,8 +149,8 @@ $(python_cmd SB51-S3 --cpu) bin/reports/generate_html_report.py --protocol "$pro
 With the current `cmd.sh`, these expand to commands like:
 
 ```bash
-srun -p gpu --gpus 1 --exclude=c19,c21,octopod --job-name SB10-S1 python3
-srun -p cpu --cpus-per-task 4 --exclude=c19,c21,octopod --job-name SB51-S3 python3
+srun -p gpu --gpus 1 --exclude=octopod --job-name SB10-S1 python3
+srun -p cpu --cpus-per-task 4 --exclude=octopod --job-name SB51-S3 python3
 ```
 
 Use `python_cmd` for Python stages. `srun_cmd JOB_NAME --cpu|--gpu` is also available when a script needs the Slurm prefix without automatically appending `python3`. Edit `cmd.sh` if the cluster partition, GPU count, CPU count, or excluded nodes need to change.
@@ -287,17 +288,26 @@ Dialect prediction uses language predictions to decide whether an utterance shou
 
 ### `20_naturalness_feats.sh`
 
-Extracts VoxProfile-style Whisper emotion features used by the naturalness model for `dev` and `test`, both subsets, and both `original` and `$llm_model` outputs. With no flags it runs both stages; use `--extract`/`--stage1` for only feature extraction and `--aggregate`/`--stage2` for only SER_AVD aggregation.
+Extracts VoxProfile-style Whisper emotion features used by the naturalness model for `dev` and `test`, both subsets, and `original` plus every model in `eval_models`. With no flags it runs both stages; use `--extract`/`--stage1` for only feature extraction and `--aggregate`/`--stage2` for only SER_AVD aggregation.
 
-`bin/naturalness/extract_features.py` now handles the split question/answer layout. For each metadata row it:
+Feature extraction accepts variable chunk sizes:
 
-- loads the question from `audio_path`, using only `context_end_time` through the end of the question file;
+```bash
+bash 20_naturalness_feats.sh --extract --chunk-size 3.0 --hop-size 1.0
+bash 20_naturalness_feats.sh --extract --chunk-size 0
+```
+
+`--chunk-size 0` tells `bin/naturalness/extract_features.py` to process each full question turn and each full answer turn as one chunk. Without CLI flags, script `20` uses `naturalness_chunk_size=${naturalness_chunk_size:-3.0}` and `naturalness_chunk_hop_size=${naturalness_chunk_hop_size:-1.0}`, so those can also be set in the environment or `config.sh`.
+
+`bin/naturalness/extract_features.py` handles the split question/answer layout. For each metadata row it:
+
+- loads the question from `audio_path`, using `context_end_time` through `question_end_time`;
 - loads the full answer from `answer_audio_path`;
-- chunks each turn separately with the configured sliding 3 second windows;
+- chunks each turn separately with the configured sliding window, or as one full-turn chunk when `--win-sec 0`;
 - computes question embeddings and answer embeddings separately;
 - concatenates the resulting embeddings and saves them under a single base key, so downstream scoring sees one sequence for the row;
 - skips rows where all expected embedding chunks already exist;
-- skips questions shorter than `--min-len-question`, currently set to `3.0` by the shell script.
+- skips questions shorter than `--min-len-question`, currently set to `1.0` by the shell script.
 
 Features are saved under:
 
@@ -328,7 +338,7 @@ Scores utterances with the trained naturalness model. It combines precomputed au
 results/$protocol/$model/$split/$subset/
 ```
 
-The current shell script runs this scoring stage for both `test` and `dev`, across both subsets and both `original` and `$llm_model`.
+The current shell script runs this scoring stage for both `test` and `dev`, across both subsets, for `original` and every model in `eval_models`. It launches `bin/naturalness/score.py` with `$(python_cmd 'SB22' --gpu)`. The scorer defaults to `--device auto`, which uses CUDA when a GPU is visible, honors `LOCAL_RANK` when set, and falls back to CPU when CUDA is unavailable. You can override this manually with `--device cpu`, `--device cuda`, or `--device cuda:0` when invoking `score.py` directly.
 
 Scripts `20`, `21`, and `22` are based on the TRACE emotional naturalness pipeline. See [References](#references) for the paper citation and full implementation.
 
@@ -437,23 +447,23 @@ If no option is passed, the script runs all stages.
 The short report reads base metrics, naturalness scores, merged STANCE metrics, explainable baseline outputs, and script `41` correlation-cluster PCA features. It writes:
 
 ```text
-reports/$llm_model/report.txt
-reports/$llm_model/metrics-improvised.csv
-reports/$llm_model/metrics-naturalistic.csv
+reports/$protocol/$llm_model/report.txt
+reports/$protocol/$llm_model/metrics-improvised.csv
+reports/$protocol/$llm_model/metrics-naturalistic.csv
 ```
 
 The graph stage writes plots under:
 
 ```text
-reports/$llm_model/graphs/
+reports/$protocol/$llm_model/graphs/
 ```
 
-It includes `emotion_scatter.png`, a 2x3 grid comparing full-question vs full-answer Arousal, Dominance, and Valence from `SER_AVD.csv`. Columns are Arousal, Dominance, and Valence; rows are improvised and naturalistic.
+It includes `emotion_scatter.png`, a 2x3 grid comparing full-question vs full-answer Arousal, Dominance, and Valence from `SER_AVD.csv`. Columns are Arousal, Dominance, and Valence; rows are improvised and naturalistic. It also includes `emo_naturalness_by_relationship.png`, a single horizontal violin plot comparing original and model emotional-naturalness logits across naturalistic relationship categories.
 
 The long report stage writes:
 
 ```text
-reports/$llm_model/detailed_report.html
+reports/$protocol/$llm_model/detailed_report.html
 ```
 
 Report generation uses `statistical_test` from `config.sh`, defaulting to Welch t-test if the variable is unset. Explainable features listed in `ignored_explainable_features` are omitted from the short report tables, long report tables, and graphs. The long report includes a dedicated table for `corr_cluster_*` and `general_explainable_feature_*` rows from script `41`.
@@ -511,13 +521,13 @@ distrib_baselines_features.csv
 distrib_baselines_feature_scores.csv
 ```
 
-Final report artifacts are written under:
+Per-model report artifacts are written under:
 
 ```text
-reports/$llm_model/
+reports/$protocol/$llm_model/
 ```
 
-Typical report outputs include:
+Typical per-model report outputs include:
 
 ```text
 report.txt
@@ -525,8 +535,13 @@ metrics-improvised.csv
 metrics-naturalistic.csv
 graphs/
 detailed_report.html
-benchmark/$model.csv
-benchmark.csv
+```
+
+Benchmark-table artifacts from script `52` are written under:
+
+```text
+reports/$protocol/benchmark/$model.csv
+reports/$protocol/benchmark.csv
 ```
 
 ## Current Benchmark Summary
@@ -535,9 +550,11 @@ The table below mirrors `reports/seamless_2t_2s_questions/benchmark.csv`.
 
 | protocol | model | avg_latency | avg_UTMOS | avg_WER | WER_std_between_asr_models | interrupted_pct | avg_interruption_time | EN_lang_% | same_dialect_% | NA_dialect_% | avg_emo_naturalness_logit | same_stance_as_question_% | more_negative_stance_% | more_positive_stance_% | avg_general_expl_feat |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| seamless_2t_2s_questions | gpt-audio-1.5 | 131.544 | 4.362 | 0.058 | 0.004 | 0.000 |  | 100.000 | 74.633 | 97.379 | -4.422 | 95.122 | 2.439 | 2.962 | -1.257 |
-| seamless_2t_2s_questions | gpt-realtime-2 | 104.820 | 4.274 | 0.150 | 0.006 | 29.922 | 11260.979 | 99.844 | 75.133 | 98.027 | -4.438 | 94.889 | 3.066 | 2.385 | -0.622 |
-| seamless_2t_2s_questions | original | 752.525 | 2.217 | 5.729 | 0.228 | 40.305 | 2495.889 | 97.818 | 74.124 | 76.641 | -4.405 | 100.000 | 0.000 | 0.000 | 0.950 |
+| seamless_2t_2s_questions | gpt-audio-1.5 | 131.544 | 4.362 | 0.058 | 0.004 | 0.000 |  | 100.000 | 74.633 | 97.379 | -4.369 | 95.122 | 2.439 | 2.962 | -1.257 |
+| seamless_2t_2s_questions | gpt-realtime-2 | 104.820 | 4.274 | 0.150 | 0.006 | 29.922 | 11260.979 | 99.844 | 75.133 | 98.027 | -4.378 | 94.889 | 3.066 | 2.385 | -0.622 |
+| seamless_2t_2s_questions | original | 752.525 | 2.217 | 5.729 | 0.228 | 40.305 | 2495.889 | 97.818 | 74.124 | 76.641 | -4.368 | 100.000 | 0.000 | 0.000 | -0.670 |
+| seamless_2t_2s_questions | Qwen2.5-Omni-7B | 277.120 | 4.195 | 0.193 | 0.018 | 0.000 |  | 95.231 | 52.144 | 65.565 | -5.082 | 96.567 | 2.146 | 1.717 | 1.040 |
+| seamless_2t_2s_questions | Qwen3-Omni-30B-A3B-Instruct | 27.743 | 4.337 | 0.079 | 0.011 | 0.000 |  | 90.461 | 69.504 | 89.593 | -4.371 | 96.610 | 1.695 | 2.684 | -0.134 |
 
 ## Notes and Current Assumptions
 
@@ -546,7 +563,7 @@ The table below mirrors `reports/seamless_2t_2s_questions/benchmark.csv`.
 - Audio metadata paths are stored as relative paths under the benchmark directory in the generated CSVs.
 - LLM output audio is answer-only. Scripts that need the full interaction reconstruct it from `audio_path`, `answer_audio_path`, and `answer_start_time`.
 - STANCE currently runs on `improvised` only.
-- Naturalness feature extraction skips already-computed embedding chunks; remove the existing `naturalness/voxprofile_features` directory if you need a clean recompute.
+- Naturalness feature extraction skips already-computed embedding chunks; remove the existing `naturalness/voxprofile_features` directory if you need a clean recompute, especially after changing `--chunk-size` or `--hop-size`.
 
 
 ## References

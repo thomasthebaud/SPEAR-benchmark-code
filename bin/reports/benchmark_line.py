@@ -12,9 +12,10 @@ import pandas as pd
 SUBSETS = ["improvised", "naturalistic"]
 
 
-def safe_read_csv(path: Path) -> Optional[pd.DataFrame]:
+def safe_read_csv(path: Path, *, warn_missing: bool = True) -> Optional[pd.DataFrame]:
     if not path.exists():
-        print(f"[WARN] Missing CSV: {path}")
+        if warn_missing:
+            print(f"[WARN] Missing CSV: {path}")
         return None
     try:
         return pd.read_csv(path)
@@ -206,7 +207,7 @@ def stance_metrics(results_root: Path, model: str, subsets: list[str]) -> tuple[
     comparison_denominator = 0
 
     for subset in subsets:
-        frame = safe_read_csv(stances_path(results_root, model, subset))
+        frame = safe_read_csv(stances_path(results_root, model, subset), warn_missing=(subset != "naturalistic"))
         if frame is None or not {"score_original", "score_llm"}.issubset(frame.columns):
             continue
         original = numeric(frame["score_original"])

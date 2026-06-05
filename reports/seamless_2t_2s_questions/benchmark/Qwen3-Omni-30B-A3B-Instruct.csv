@@ -1,2 +1,2 @@
 protocol,model,avg_latency,avg_UTMOS,avg_WER,WER_std_between_asr_models,interrupted_pct,avg_interruption_time,EN_lang_%,same_dialect_%,NA_dialect_%,avg_emo_naturalness_logit,same_stance_as_question_%,more_negative_stance_%,more_positive_stance_%,avg_general_expl_feat
-seamless_2t_2s_questions,gpt-4o-audio-preview-2025-06-03,,,,,,,,,,,,,,
+seamless_2t_2s_questions,Qwen3-Omni-30B-A3B-Instruct,27.743,4.337,0.079,0.011,0.000,,90.461,69.504,89.593,-4.371,96.610,1.695,2.684,-0.134
