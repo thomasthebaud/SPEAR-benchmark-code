@@ -47,22 +47,32 @@ EOF
 done
 
 if [[ "$run_scores" -eq 1 ]]; then
-  echo "Stage 1: train dev-set explainable-feature baselines and score test utterances for model:$llm_model"
-  $(python_cmd 'SB41-S1' --cpu) bin/distrib_baselines/compute_features_scores.py \
-      --results-root "results/$protocol" \
-      --model "$llm_model" \
-      --subsets improvised naturalistic \
-      --ignore-features "${ignored_explainable_features[@]:-}"
+  echo "Stage 1: train dev-set explainable-feature baselines and score test utterances for model:"${eval_models[@]}""
+  for model in "${eval_models[@]}"; do
+    $(python_cmd 'SB41-S1' --cpu) bin/distrib_baselines/compute_features_scores.py \
+        --results-root "results/$protocol" \
+        --model $model \
+        --subsets improvised naturalistic \
+        --ignore-features "${ignored_explainable_features[@]:-}" &
+  done
+  wait
+  echo "All explainable-feature baseline scores computed for ${eval_models[@]} outputs."
+
 fi
 
 if [[ "$run_clusters" -eq 1 ]]; then
-  echo "Stage 2: analyze explainable-feature correlations jointly for original and model:$llm_model"
+  echo "Stage 2: analyze explainable-feature correlations jointly for original and model:"${eval_models[@]}""
+  for model in "${eval_models[@]}"; do
     $(python_cmd 'SB41-S2' --cpu) bin/distrib_baselines/analyse_correlations.py \
         --results-root "results/$protocol" \
-        --model "$llm_model" \
+        --model $model \
         --subsets improvised naturalistic \
         --thresholds 0.8 \
-        --ignore-features "${ignored_explainable_features[@]:-}"
+        --ignore-features "${ignored_explainable_features[@]:-}" &
+
+  done
+  wait
+  echo "All explainable-feature correlations analyzed for ${eval_models[@]} outputs."
 
 fi
 

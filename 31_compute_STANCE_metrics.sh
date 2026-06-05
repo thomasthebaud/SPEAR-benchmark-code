@@ -8,7 +8,7 @@ source cmd.sh
 
 for split in 'test' 'dev'; do
     for subset in 'improvised'; do
-        for model in 'original' $llm_model; do
+        for model in "original" "${eval_models[@]}"; do
             echo "### Merging STANCE metrics for $model $split $subset ###"
             metrics="results/$protocol/$model/$split/$subset"
                 
@@ -22,6 +22,6 @@ for split in 'test' 'dev'; do
 done
 
 wait
-echo "All STANCE metrics computed for original and $llm_model outputs."
+echo "All STANCE metrics computed for original and "${eval_models[@]}" outputs."
 exit
   

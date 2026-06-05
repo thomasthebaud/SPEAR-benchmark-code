@@ -85,7 +85,7 @@ if [[ "$run_DialectID" -eq 1 ]];then
     # Stage 2: predict the dialect of each model output.
     for split in 'test' 'dev'; do
         for subset in 'improvised' 'naturalistic'; do
-            for model in 'original' $llm_model; do
+            for model in $llm_model; do
                 echo "### Running dialect ID for $model $split $subset ###"
                 metadata=data/$protocol/outputs/$model/$split/$subset/metadata.csv
                 output_dir=results/$protocol/$model/$split/$subset

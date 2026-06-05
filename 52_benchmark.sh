@@ -60,7 +60,7 @@ benchmark_dir="reports/$protocol/benchmark"
 benchmark_csv="reports/$protocol/benchmark.csv"
 
 if [[ "$run_lines" -eq 1 ]]; then
-  for llm_model in "original" "gpt-audio-1.5" "gpt-realtime-2"
+  for llm_model in "original" "gpt-audio-1.5" "gpt-realtime-2" "Qwen3-Omni-30B-A3B-Instruct" "Qwen2.5-Omni-7B";
   do
       echo "Generating the benchmark line for model $llm_model"
       $(python_cmd 'SB52' --cpu) bin/reports/benchmark_line.py \

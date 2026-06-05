@@ -6,7 +6,7 @@ source config.sh
 source cmd.sh
 for split in 'test' 'dev'; do
     for subset in 'improvised' 'naturalistic'; do
-        for model in 'original' $llm_model; do
+        for model in 'original' "${eval_models[@]}"; do
           metadata=data/$protocol/outputs/$model/$split/$subset/metadata.csv
           metrics=results/$protocol/$model/$split/$subset
           pickle_dir=data/$protocol/inputs/$split/$subset
@@ -17,7 +17,8 @@ for split in 'test' 'dev'; do
               --metadata $metadata \
               --outputs $metrics \
               --pickle-dir $pickle_dir \
-              --assets-dir $seamless_assets_dir &
+              --assets-dir $seamless_assets_dir \
+              --model-path models/naturalness/last_model.pt &
 
 
         done
@@ -25,4 +26,4 @@ for split in 'test' 'dev'; do
 done
 
 wait
-echo "All naturalness scores computed for original and $llm_model outputs."
+echo "All naturalness scores computed for original and ${eval_models[@]} outputs."

@@ -7,7 +7,7 @@ source cmd.sh
 
 for split in 'test' 'dev'; do
   for subset in 'improvised' 'naturalistic'; do
-    for model in 'original' $llm_model; do
+    for model in 'original' "${eval_models[@]}"; do
       metadata=data/$protocol/outputs/$model/$split/$subset/metadata.csv
       output=results/$protocol/$model/$split/$subset/distrib_baselines_features.csv
 

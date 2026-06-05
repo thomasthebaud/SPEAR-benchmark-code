@@ -6,7 +6,7 @@ source config.sh
 
 splits=(test dev)
 subsets=(improvised naturalistic)
-models=(original "$llm_model")
+models=(original "${eval_models[@]}")
 asr_models=(Qwen3-ASR-0.6B whisper-large-v3)
 stance_indices=(0) #(0 1 2 3 4 5 6 7 8 9), reduced for readability
 stance_indices=(0 1 2 3 4 5 6 7 8 9)
@@ -47,8 +47,10 @@ done
 # 02_run_LLM_inference.sh: generate answer audio and metadata for the configured LLM.
 for split in "${splits[@]}"; do
   for subset in "${subsets[@]}"; do
-    check_files "02" "$llm_model" "$split/$subset" \
-      "data/$protocol/outputs/$llm_model/$split/$subset/metadata.csv"
+    for model in "${eval_models[@]}"; do
+      check_files "02" "$model" "$split/$subset" \
+        "data/$protocol/outputs/$model/$split/$subset/metadata.csv"
+      done
   done
 done
 
@@ -133,8 +135,10 @@ done
 # 31_compute_STANCE_metrics.sh: merge original and LLM STANCE outputs for comparison.
 for split in "${splits[@]}"; do
   subset=improvised
-  check_files "31" "$llm_model" "$split/$subset" \
-    "results/$protocol/$llm_model/$split/$subset/merged_stances.csv"
+  for model in "${models[@]}"; do
+    check_files "31" "$model" "$split/$subset" \
+      "results/$protocol/$model/$split/$subset/merged_stances.csv"
+  done
 done
 
 # 40_extract_explainable_features.sh: extract explainable distributional baseline features.
@@ -149,9 +153,11 @@ done
 
 # 41_use_features_for_baseline.sh --scores: train dev-set baselines and score test utterances.
 for subset in "${subsets[@]}"; do
-  check_files "41-S1" "$llm_model" "test/$subset" \
-    "results/$protocol/$llm_model/test/$subset/distrib_baselines_feature_scores.csv" \
-    "results/$protocol/$llm_model/distrib_baselines_summary.csv"
+  for model in "${models[@]}"; do
+    check_files "41-S1" "$model" "test/$subset" \
+      "results/$protocol/$model/test/$subset/distrib_baselines_feature_scores.csv" \
+      "results/$protocol/$model/distrib_baselines_summary.csv"
+  done
 done
 
 # 41_use_features_for_baseline.sh --clusters: compute correlation groups and PCA cluster features.
