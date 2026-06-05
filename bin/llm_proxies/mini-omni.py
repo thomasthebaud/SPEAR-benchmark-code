@@ -3,6 +3,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import threading
 import wave
 from pathlib import Path
 from typing import Optional
@@ -23,6 +24,7 @@ OUTPUT_SAMPLE_RATE = 24000
 
 _CLIENT = None
 _CLIENT_CONFIG: tuple[str, str] | None = None
+_CLIENT_LOCK = threading.Lock()
 
 
 def convert_to_wav_strict(input_path: Path) -> Path:
@@ -128,6 +130,33 @@ def pcm16_to_wav_bytes(pcm_bytes: bytes, sample_rate: int = OUTPUT_SAMPLE_RATE) 
     return buffer.getvalue()
 
 
+def clear_mini_omni_runtime(client) -> None:
+    try:
+        client.model.clear_kv_cache()
+    except Exception:
+        pass
+
+    try:
+        import torch
+
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+    except Exception:
+        pass
+
+
+def maybe_synchronize_cuda() -> None:
+    if os.environ.get("MINI_OMNI_SYNC_CUDA", "0") != "1":
+        return
+    try:
+        import torch
+
+        if torch.cuda.is_available():
+            torch.cuda.synchronize()
+    except Exception:
+        pass
+
+
 def infer_one_audio(
     audio_path: Path,
     *,
@@ -147,16 +176,23 @@ def infer_one_audio(
         if not is_wav_long_enough(wav_path):
             raise ValueError(f"Input audio is too short after WAV conversion: {audio_path}")
         pcm_chunks = []
-        for chunk in client.run_AT_batch_stream(
-            str(wav_path),
-            stream_stride=stream_stride,
-            max_returned_tokens=max_tokens,
-            temperature=temperature,
-            top_k=top_k,
-            top_p=top_p,
-        ):
-            if chunk:
-                pcm_chunks.append(chunk)
+        try:
+            with _CLIENT_LOCK:
+                maybe_synchronize_cuda()
+                for chunk in client.run_AT_batch_stream(
+                    str(wav_path),
+                    stream_stride=stream_stride,
+                    max_returned_tokens=max_tokens,
+                    temperature=temperature,
+                    top_k=top_k,
+                    top_p=top_p,
+                ):
+                    if chunk:
+                        pcm_chunks.append(chunk)
+                maybe_synchronize_cuda()
+        except Exception as exc:
+            clear_mini_omni_runtime(client)
+            raise RuntimeError(f"Mini-Omni inference failed for {audio_path}: {exc}") from exc
     finally:
         try:
             wav_path.unlink(missing_ok=True)

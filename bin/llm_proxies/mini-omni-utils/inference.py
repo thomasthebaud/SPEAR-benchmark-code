@@ -86,7 +86,9 @@ def get_input_ids_whisper(
     with torch.no_grad():
         mel = mel.unsqueeze(0).to(device)
         # audio_feature = whisper.decode(whispermodel,mel, options).audio_features
-        audio_feature = whispermodel.embed_audio(mel)[0][:leng]
+        audio_feature = whispermodel.embed_audio(mel)[0]
+        leng = min(int(leng), audio_feature.size(0))
+        audio_feature = audio_feature[:leng]
 
     T = audio_feature.size(0)
     input_ids = []
@@ -105,7 +107,9 @@ def get_input_ids_whisper_ATBatch(mel, leng, whispermodel, device):
     with torch.no_grad():
         mel = mel.unsqueeze(0).to(device)
         # audio_feature = whisper.decode(whispermodel,mel, options).audio_features
-        audio_feature = whispermodel.embed_audio(mel)[0][:leng]
+        audio_feature = whispermodel.embed_audio(mel)[0]
+        leng = min(int(leng), audio_feature.size(0))
+        audio_feature = audio_feature[:leng]
     T = audio_feature.size(0)
     input_ids_AA = []
     for i in range(7):
@@ -138,7 +142,7 @@ def get_input_ids_whisper_ATBatch(mel, leng, whispermodel, device):
 
 def load_audio(path):
     audio = whisper.load_audio(path)
-    duration_ms = (len(audio) / 16000) * 1000
+    duration_ms = min((len(audio) / 16000) * 1000, 30000.0)
     audio = whisper.pad_or_trim(audio)
     mel = whisper.log_mel_spectrogram(audio)
     return mel, int(duration_ms / 20) + 1
@@ -406,7 +410,11 @@ class OmniInference:
         T = input_ids[0].size(1)
         device = input_ids[0].device
 
-        assert max_returned_tokens > T, f"max_returned_tokens {max_returned_tokens} should be greater than audio length {T}"
+        if max_returned_tokens <= T:
+            raise ValueError(
+                f"max_returned_tokens {max_returned_tokens} should be greater than audio token length {T}. "
+                "Increase MINI_OMNI_MAX_TOKENS or use a shorter input audio."
+            )
 
         if model.max_seq_length < max_returned_tokens - 1:
             raise NotImplementedError(
@@ -447,7 +455,7 @@ class OmniInference:
         nums_generate = stream_stride
         begin_generate = False
         current_index = 0
-        for _ in tqdm(range(2, max_returned_tokens - T + 1)):
+        for _ in range(2, max_returned_tokens - T + 1):
             tokens_A, token_T = next_token_batch(
                 model,
                 None,
@@ -463,10 +471,10 @@ class OmniInference:
             if text_end:
                 token_T = torch.tensor([_pad_t], device=device)
 
-            if tokens_A[-1] == eos_id_a:
+            if tokens_A[-1].item() == eos_id_a:
                 break
 
-            if token_T == eos_id_t:
+            if token_T.item() == eos_id_t:
                 text_end = True
 
             for i in range(7):
