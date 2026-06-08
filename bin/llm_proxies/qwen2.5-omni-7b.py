@@ -18,9 +18,7 @@ USE_AUDIO_IN_VIDEO = True
 MAX_NEW_TOKENS = 8192
 
 DEFAULT_SYSTEM_PROMPT = (
-    "You are Qwen, a virtual human developed by the Qwen Team, Alibaba Group, "
-    "capable of perceiving auditory and visual inputs, as well as generating "
-    "text and speech."
+    "You are Qwen, a virtual human capable of perceiving auditory and visual inputs, as well as generating text and speech."
 )
 
 _MODEL_BUNDLE = None

@@ -84,6 +84,7 @@ if __name__ == "__main__":
     parser.add_argument("--subset",default='improvised', help="Data subset to run inference on (e.g., 'improvised', 'naturalistic')")
     parser.add_argument("--openai-api-key",type=str, help="")
     parser.add_argument("--org",type=str, help="")
+    parser.add_argument("--stop-on-fail", action="store_true", help="Stop at the first failed inference instead of skipping failed rows.")
 
     args = parser.parse_args()
     model_proxy = load_proxy_module(args.model)
@@ -117,7 +118,7 @@ if __name__ == "__main__":
 
     remaining = metadata[~metadata["audio_path"].astype(str).isin(processed_audio_paths)]
 
-    for idx, row in tqdm(remaining.iterrows(), total=remaining.shape[0]):
+    for idx, row in tqdm(remaining.iterrows(), total=remaining.shape[0], desc=f"Processing {args.split}/{args.subset}"):
         input_audio_path = Path(row['audio_path'])
         output_path = output_dir / f"audio/{input_audio_path.stem}.wav"
         try:
@@ -134,6 +135,8 @@ if __name__ == "__main__":
                     failed_indices[finish_reason] = []
                 failed_indices[finish_reason].append(idx)
                 print(f"Warning: failed to process {input_audio_path} because {finish_reason}" , flush=True)
+                if args.stop_on_fail:
+                    raise RuntimeError(f"Failed to process {input_audio_path} because {finish_reason}")
                 continue
         except Exception as exc:
             print(f"Warning: failed to process {input_audio_path}: {exc}", flush=True)
@@ -141,6 +144,8 @@ if __name__ == "__main__":
             if finish_reason not in failed_indices:
                 failed_indices[finish_reason] = []
             failed_indices[finish_reason].append(idx)
+            if args.stop_on_fail:
+                raise
             continue
         # print("finish reason", finish_reason, "transcript:", transcript_answer)
         # save the answer

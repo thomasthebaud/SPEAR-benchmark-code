@@ -508,7 +508,7 @@ class OmniInference:
             input_pos = input_pos.add_(1)
             index += 1
         text = self.text_tokenizer.decode(torch.tensor(list_output[-1]))
-        print(f"text output: {text}")
+        # print(f"text output: {text}")
         model.clear_kv_cache()
         return list_output
 
