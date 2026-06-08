@@ -44,7 +44,7 @@ fi
 if [[ $run_extract == true ]]; then
     for split in 'test' 'dev'; do
         for subset in 'improvised' 'naturalistic'; do
-            for model in 'original' "${eval_models[@]}"; do
+            for model in $llm_model; do #"${eval_models[@]}"; do
               metadata=data/$protocol/outputs/$model/$split/$subset/metadata.csv
 
               echo "Extract features for split $split subset $subset model $model"
@@ -69,7 +69,7 @@ fi
 if [[ $run_aggregate == true ]]; then
     for split in 'test' 'dev'; do
         for subset in 'improvised' 'naturalistic'; do
-            for model in 'original' "${eval_models[@]}"; do
+            for model in $llm_model; do #"${eval_models[@]}"; do
               metadata=data/$protocol/outputs/$model/$split/$subset/metadata.csv
               metrics=results/$protocol/$model/$split/$subset
 

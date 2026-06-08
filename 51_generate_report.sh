@@ -48,7 +48,6 @@ EOF
 done
 
 
-
 if [[ "$run_short" -eq 1 ]]; then
   for model in "${eval_models[@]}"; do
     report_dir="reports/$protocol/$model"

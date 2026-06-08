@@ -10,7 +10,7 @@ echo "data directory: $data_dir"
 
 for split in 'test' 'dev'; do
     for subset in 'improvised' 'naturalistic'; do
-        for model in "${eval_models[@]}"; do
+        for model in "original";do #"${eval_models[@]}"; do
             for asr in 'Qwen3-ASR-0.6B' 'whisper-large-v3'; do
                 echo "running analysis for $model $split $subset ASR model=$asr"
                 data_dir="data/$protocol/outputs/$model"

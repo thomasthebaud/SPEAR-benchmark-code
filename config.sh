@@ -13,6 +13,7 @@ llm_model="Qwen2.5-Omni-7B"
 llm_model="mini-omni" #https://huggingface.co/gpt-omni/mini-omni
 
 eval_models=("gpt-audio-1.5" "gpt-realtime-2" "Qwen3-Omni-30B-A3B-Instruct" "Qwen2.5-Omni-7B")
+# eval_models=($llm_model)
 
 language_id_model=facebook/mms-lid-126
 dialect_id_model=tiantiaf/voxlect-english-dialect-whisper-large-v3
