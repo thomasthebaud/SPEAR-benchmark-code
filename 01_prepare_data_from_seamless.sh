@@ -20,8 +20,9 @@ for split in 'test' 'dev'; do
             --min_speakers 2 \
             --method 'end_with_question' \
             --split $split \
-            --subset $subset
-        exit
+            --subset $subset &
+
+        sleep 1
         
     done
 done
@@ -31,7 +32,17 @@ wait
 for split in 'test' 'dev'; do
     for subset in 'improvised' 'naturalistic'; do
         python3 bin/data_prep_summary.py \
-            --answers_output_dir $data_dir/outputs/original/${split}/${subset}
-            
+            --answers_output_dir $data_dir/outputs/original/${split}/${subset} \
+            --original_data_csv $seamless_assets_dir/dyad_lookup.csv \
+            --data_dir $seamless_data_dir \
+            --split $split \
+            --subset $subset
     done
 done
+
+echo "LaTeX data preparation summary:"
+python3 bin/data_prep_summary.py \
+    --latex-table \
+    --answers_root $data_dir/outputs/original \
+    --original_data_csv $seamless_assets_dir/dyad_lookup.csv \
+    --data_dir $seamless_data_dir

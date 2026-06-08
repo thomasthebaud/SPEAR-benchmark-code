@@ -136,7 +136,7 @@ def get_end_with_question(transcripts: dict[str, list[dict]], audios: dict[str, 
                 selected_audio['end_audio'] = end_audio
                 selected_audio['context_end_time'] = turns[row]["start"] - start_audio
                 selected_audio['question_end_time'] = turns[row]["end"] - start_audio
-                answer_duration = end_audio - turns[row]["end"]
+                answer_duration = end_audio - turns[row+1]["start"]
                 if answer_duration < MIN_ANSWER_DURATION_SECONDS:
                     continue
                 selected_audio['answer_duration'] = answer_duration
@@ -150,7 +150,7 @@ def get_end_with_question(transcripts: dict[str, list[dict]], audios: dict[str, 
                 filtered_transcripts[key+f'_{idx}'] = (turns[start_row:row+1], turns[row+1:row + K])
                 idx += 1
 
-    print(f"Keeping the answers as well: {len(filtered_transcripts)} answers kept.")
+    print(f"Answers kept: {len(filtered_transcripts)}")
     return filtered_transcripts, filtered_audios
 
 def extract_questions(transcripts: dict[str, list[dict]], audios: dict[str, dict]) -> tuple[dict[str, list[dict]], dict[str, dict]]:
@@ -298,7 +298,7 @@ def export_segment_audio_answer(audio_path: Path, audio_info: dict) -> tuple[Pat
             f"{audio_info['spk1']} or {audio_info['spk2']}."
         )
 
-    start_time = float(audio_info["start_audio"]) + float(audio_info["question_end_time"])
+    start_time = float(audio_info["start_audio"]) + float(audio_info["question_end_time"]) + float(audio_info["answer_start_time"])
     end_time = start_time + float(audio_info["answer_duration"])
     target_frames = max(1, round((end_time - start_time) * TARGET_SAMPLE_RATE))
 
