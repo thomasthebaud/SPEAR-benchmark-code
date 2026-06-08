@@ -51,9 +51,8 @@ DIALECT_LABELS = [
 ]
 DIALECT_PROFILE_GROUPS = [
     ("East Asia", ["East Asia"]),
-    ("UK", ["English", "Welsh", "Scottish"]),
+    ("British Isles", ["English", "Welsh", "Scottish","Irish", "Northern Irish"]),
     ("Germanic", ["Germanic"]),
-    ("Irish", ["Irish", "Northern Irish"]),
     ("North America", ["North America"]),
     ("Oceania", ["Oceania"]),
     ("Romance", ["Romance"]),
