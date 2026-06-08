@@ -238,6 +238,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--metadata", help="Directory containing audio files")
     parser.add_argument("--outputs", help="CSV to store the metrics")
+    parser.add_argument("--asr-models", nargs="*", default=[], help="ASR models to compute WER/CER for (e.g., 'Qwen3-ASR-0.6B', 'whisper-large-v3')")
+    parser.add_argument("--VAD-model", type=str, help="Model to use for VAD", default="silero_vad", choices=["silero_vad"])
+    parser.add_argument("--UTMOS-model", type=str, help="Model to use for UTMOS", default="SpeechMOS/utmos22_strong", choices=["SpeechMOS/utmos22_strong"])
     parser.add_argument(
         "--force-recompute",
         nargs="*",
@@ -251,6 +254,7 @@ if __name__ == "__main__":
     force_all_metrics = "all" in force_recompute
     should_force_recompute = lambda metric_name: force_all_metrics or metric_name in force_recompute
     asr_models = {'Qwen3-ASR-0.6B':False, 'whisper-large-v3':False}
+    asr_models = {model:False for model in args.asr_models}
     metadata = pd.read_csv(args.metadata)
     if 'answer_start_time' not in metadata.columns: metadata['answer_start_time'] = 0.0
 
