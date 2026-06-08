@@ -465,6 +465,7 @@ if __name__ == "__main__":
 
     parser.add_argument("--save-segments", action="store_true", help="Save 16k mono segments to out-dir/segments/<dyad>/")
     parser.add_argument("--seg-format", type=str, default="wav", choices=["wav", "flac"])
+    parser.add_argument("--ser-model", type=str, default="tiantiaf/whisper-large-v3-msp-podcast-emotion-dim")
 
     parser.add_argument("--batch-size", type=int, default=16, help="Batch size per GPU.")
     parser.add_argument("--pool", choices=["mean", "max"], default="mean", help="Pool encoder [T,D] -> [D].")
@@ -496,7 +497,7 @@ if __name__ == "__main__":
         warn_old_feature_metadata(output_dir)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = WhisperWrapper.from_pretrained("tiantiaf/whisper-large-v3-msp-podcast-emotion-dim").to(device)
+    model = WhisperWrapper.from_pretrained(args.ser_model).to(device)
     model.eval()
     print("Model Loaded. Starting feature extraction...")
 

@@ -4,7 +4,6 @@ set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")"
 source config.sh
 source cmd.sh
-echo "Transcribing outputs of model $llm_model using $asr"
 echo "data directory: $data_dir"
 
 for split in 'test' 'dev'; do
@@ -16,6 +15,9 @@ for split in 'test' 'dev'; do
             $(python_cmd 'SB10' --gpu) bin/base_metrics.py \
                 --metadata $metadata \
                 --outputs $outputs \
+                --asr-models "${asr_models[@]}" \
+                --VAD-model "$VAD_model" \
+                --UTMOS-model "$UTMOS_model" \
                 --force-recompute 'WER' 'CER' 'interrupt' &
             sleep 1
 

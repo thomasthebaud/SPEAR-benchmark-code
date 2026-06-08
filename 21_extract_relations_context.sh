@@ -14,7 +14,8 @@ for split in 'test' 'dev'; do
         --metadata $metadata \
         --assets-dir $seamless_assets_dir \
         --context-cache-name $output_dir/context_hf_cache.pkl \
-        --rel-cache-name $output_dir/relationship_hf_cache.pkl &
+        --rel-cache-name $output_dir/relationship_hf_cache.pkl \
+        --text-model $sbert_model &
 
   done
 done

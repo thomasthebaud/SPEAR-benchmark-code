@@ -53,6 +53,7 @@ if [[ $run_extract == true ]]; then
                   --metadata $metadata \
                   --win-sec "$naturalness_chunk_size" \
                   --hop-sec "$naturalness_chunk_hop_size" \
+                  --ser-model "$ser_model" \
                   --min-len-question 1.0 \
                   --win-sec 0 &
 

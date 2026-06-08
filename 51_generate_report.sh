@@ -56,6 +56,9 @@ if [[ "$run_short" -eq 1 ]]; then
         --protocol "$protocol" \
         --model "$model" \
         --asr-model "$asr" \
+        --asr-models "${asr_models[@]}" \
+        --language-id-model "$language_id_model" \
+        --dialect-id-model "$dialect_id_model" \
         --stance-model "$stance_llm_model" \
         --sbert-model "${sbert_model:-sentence-transformers/all-MiniLM-L6-v2}" \
         --statistical-test "${statistical_test:-Welch t-test}" \
