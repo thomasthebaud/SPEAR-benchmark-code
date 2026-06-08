@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import html
+import re
 from pathlib import Path
 from typing import Optional
 
@@ -71,9 +72,19 @@ def table_html(frame: Optional[pd.DataFrame], columns=None, max_rows: Optional[i
         view = view[[col for col in columns if col in view.columns]]
     if max_rows is not None:
         view = view.head(max_rows)
-    for col in ["mean_diff", "std_diff", "p_value", "auroc", "accuracy"]:
-        if col in view.columns:
-            view[col] = view[col].map(fmt_float)
+    numeric_display_cols = [
+        col
+        for col in view.columns
+        if col in {"mean_diff", "std_diff", "p_value", "auroc", "accuracy"}
+        or col.startswith("model_mean_")
+        or col.startswith("original_mean_")
+        or col.startswith("diff_")
+    ]
+    for col in numeric_display_cols:
+        non_null = view[col].dropna()
+        if not non_null.empty and non_null.map(lambda value: isinstance(value, str)).all():
+            continue
+        view[col] = view[col].map(fmt_float)
     if "n" in view.columns:
         view["n"] = pd.to_numeric(view["n"], errors="coerce").astype("Int64")
     return view.to_html(index=False, classes="metric-table", escape=True, border=0)
@@ -153,6 +164,90 @@ def render_stage1_report(report_text: str) -> str:
     flush_paragraph()
     return "\n".join(blocks)
 
+
+def extract_named_sections(report_text: str, names: set[str]) -> str:
+    lines = report_text.splitlines()
+    selected: list[str] = []
+    idx = 0
+    while idx < len(lines):
+        line = lines[idx]
+        next_line = lines[idx + 1] if idx + 1 < len(lines) else ""
+        if line.strip() in names and next_line.strip() and set(next_line.strip()) <= {"-", "="}:
+            start = idx
+            idx += 2
+            while idx < len(lines):
+                candidate_next = lines[idx + 1] if idx + 1 < len(lines) else ""
+                if lines[idx].strip() and candidate_next.strip() and set(candidate_next.strip()) <= {"-", "="}:
+                    break
+                idx += 1
+            selected.extend(lines[start:idx])
+            selected.append("")
+            continue
+        idx += 1
+    return "\n".join(selected).strip()
+
+
+def selected_stage1_html(report_text: str, names: set[str]) -> str:
+    selected = extract_named_sections(report_text, names)
+    if not selected:
+        return '<p class="muted">No setup text available.</p>'
+    return render_stage1_report(selected)
+
+
+def section_body_lines(report_text: str, name: str) -> list[str]:
+    lines = report_text.splitlines()
+    for idx, line in enumerate(lines):
+        next_line = lines[idx + 1] if idx + 1 < len(lines) else ""
+        if line.strip() == name and next_line.strip() and set(next_line.strip()) <= {"-", "="}:
+            body: list[str] = []
+            scan = idx + 2
+            while scan < len(lines):
+                candidate_next = lines[scan + 1] if scan + 1 < len(lines) else ""
+                if lines[scan].strip() and candidate_next.strip() and set(candidate_next.strip()) <= {"-", "="}:
+                    break
+                if lines[scan].strip():
+                    body.append(lines[scan].rstrip())
+                scan += 1
+            return body
+    return []
+
+
+def parse_aligned_table(lines: list[str]) -> list[list[str]]:
+    rows: list[list[str]] = []
+    for line in lines:
+        if not line.strip():
+            continue
+        cells = [cell.strip() for cell in re.split(r"\s{2,}", line.strip())]
+        if len(cells) >= 2:
+            rows.append(cells)
+    return rows
+
+
+def report_section_table(report_text: str, name: str) -> str:
+    rows = parse_aligned_table(section_body_lines(report_text, name))
+    if not rows:
+        return '<p class="muted">No data available.</p>'
+    return rows_to_html_table(rows)
+
+
+def data_models_setup_grid(report_text: str) -> str:
+    data = (
+        '<section class="setup-panel setup-panel-data">'
+        '<h3>Data</h3>'
+        f'{report_section_table(report_text, "Data")}'
+        '</section>'
+    )
+    lower_cards = []
+    for name in ["Models", "Setup"]:
+        lower_cards.append(
+            '<section class="setup-panel">'
+            f'<h3>{html.escape(name)}</h3>'
+            f'{report_section_table(report_text, name)}'
+            '</section>'
+        )
+    return data + '<div class="setup-half-grid">' + "\n".join(lower_cards) + '</div>'
+
+
 def metric_rows(metrics: dict[str, Optional[pd.DataFrame]], section: str) -> pd.DataFrame:
     rows = []
     for subset, frame in metrics.items():
@@ -172,17 +267,44 @@ def language_id_summary_table(metrics: dict[str, Optional[pd.DataFrame]]) -> pd.
     rows = []
     for subset in SUBSETS:
         frame = metrics.get(subset)
-        row = {"subset": subset, "% Eng in models' answers": pd.NA, "% Eng in original answers": pd.NA}
+        row = {
+            "subset": subset,
+            "% Eng in models' answers": pd.NA,
+            "% Eng in original answers": pd.NA,
+            "second most spoken language in models' answers": pd.NA,
+            "percentage 2nd language in models' answers": pd.NA,
+            "second most spoken language in original answers": pd.NA,
+            "percentage 2nd language in original answers": pd.NA,
+        }
         if frame is not None and not frame.empty and {"section", "metric", "mean_diff"}.issubset(frame.columns):
-            language = frame[frame["section"] == "Language ID"]
+            language = frame[frame["section"].isin(["Language ID", "Language and Dialect ID"])]
             for _, source in language.iterrows():
                 metric = str(source.get("metric", ""))
-                if "model answers" in metric or "model's answers" in metric or "model answers" in metric:
+                detail = str(source.get("detail", ""))
+                second_language = ""
+                if "language=" in detail:
+                    second_language = detail.split("language=", 1)[1].split(";", 1)[0]
+                if metric == "English language detected in model answers (%)":
                     row["% Eng in models' answers"] = source.get("mean_diff")
-                elif "original answers" in metric or "original's answers" in metric:
+                elif metric == "English language detected in original answers (%)":
                     row["% Eng in original answers"] = source.get("mean_diff")
+                elif metric == "Second most spoken language in model answers":
+                    row["second most spoken language in models' answers"] = second_language
+                    row["percentage 2nd language in models' answers"] = source.get("mean_diff")
+                elif metric == "Second most spoken language in original answers":
+                    row["second most spoken language in original answers"] = second_language
+                    row["percentage 2nd language in original answers"] = source.get("mean_diff")
         rows.append(row)
-    return pd.DataFrame(rows)
+
+    table = pd.DataFrame(rows)
+    for eng_col, second_cols in [
+        ("% Eng in models' answers", ["second most spoken language in models' answers", "percentage 2nd language in models' answers"]),
+        ("% Eng in original answers", ["second most spoken language in original answers", "percentage 2nd language in original answers"]),
+    ]:
+        values = pd.to_numeric(table[eng_col], errors="coerce") if eng_col in table else pd.Series(dtype="float64")
+        if not values.dropna().empty and (values.dropna() >= 100.0).all():
+            table = table.drop(columns=[col for col in second_cols if col in table])
+    return table
 
 
 def dialect_id_summary_table(metrics: dict[str, Optional[pd.DataFrame]]) -> pd.DataFrame:
@@ -193,7 +315,7 @@ def dialect_id_summary_table(metrics: dict[str, Optional[pd.DataFrame]]) -> pd.D
             row = {"Subset": subset, "Question/Answer": label}
             row.update({dialect: pd.NA for dialect in DIALECT_LABELS})
             if frame is not None and not frame.empty and {"section", "metric", "mean_diff"}.issubset(frame.columns):
-                dialect_rows = frame[frame["section"] == "Dialect ID"]
+                dialect_rows = frame[frame["section"].isin(["Dialect ID", "Language and Dialect ID"])]
                 for _, source in dialect_rows.iterrows():
                     metric = str(source.get("metric", ""))
                     if not metric.startswith(prefix):
@@ -226,6 +348,86 @@ def cluster_feature_rows(metrics: dict[str, Optional[pd.DataFrame]]) -> pd.DataF
     metric = frame["metric"].astype(str)
     return frame[metric.str.startswith("corr_cluster_") | metric.str.startswith("general_explainable_feature_")].copy()
 
+
+def split_basic_metric(metric: str) -> tuple[str, str]:
+    metric = str(metric)
+    for prefix in ["CER_", "WER_"]:
+        if metric.startswith(prefix):
+            return prefix[:-1], metric[len(prefix):]
+    return metric, ""
+
+
+def format_basic_table_value(metric: str, value, *, diff: bool = False):
+    if value is None or pd.isna(value):
+        return pd.NA
+    if isinstance(value, str) and "/" in value:
+        return value
+    try:
+        number = float(value)
+    except Exception:
+        return value
+    if metric in {"CER", "WER", "average number of interruptions per dialogues"}:
+        return f"{number:.2f}"
+    if metric == "interrupted time (s)":
+        return f"{number:.3f}"
+    if metric == "number of dialogues with interruption" and diff:
+        return f"{int(round(number))}"
+    return f"{number:.4f}"
+
+
+def basic_display_table(frame: pd.DataFrame) -> pd.DataFrame:
+    columns = [
+        "Metric",
+        "System",
+        "model_mean_naturalistic",
+        "original_mean_naturalistic",
+        "model_mean_improvised",
+        "original_mean_improvised",
+        "diff_improvised",
+        "diff_naturalistic",
+    ]
+    if frame.empty:
+        return pd.DataFrame(columns=columns)
+
+    rows = {}
+    order = []
+    for _, source in frame.iterrows():
+        metric, system = split_basic_metric(source.get("metric", ""))
+        key = (metric, system)
+        if key not in rows:
+            rows[key] = {column: pd.NA for column in columns}
+            rows[key]["Metric"] = metric
+            rows[key]["System"] = system
+            order.append(key)
+        subset = str(source.get("subset", "")).strip().lower()
+        if subset not in {"improvised", "naturalistic"}:
+            continue
+        rows[key][f"model_mean_{subset}"] = format_basic_table_value(metric, source.get("model_value"))
+        rows[key][f"original_mean_{subset}"] = format_basic_table_value(metric, source.get("original_value"))
+        rows[key][f"diff_{subset}"] = format_basic_table_value(metric, source.get("mean_diff"), diff=True)
+
+    return pd.DataFrame([rows[key] for key in order], columns=columns)
+
+
+def stance_description_table(metrics: dict[str, Optional[pd.DataFrame]]) -> pd.DataFrame:
+    frame = metric_rows(metrics, "STANCE Descriptions")
+    if frame.empty:
+        return frame
+    out = frame.copy()
+    out["stance"] = out["metric"].astype(str).str.replace(" stance description", "", regex=False)
+    out = out.rename(columns={"model_value": "positive_original_%", "original_value": "negative_original_%", "detail": "definition"})
+    return out[[col for col in ["stance", "positive_original_%", "negative_original_%", "definition"] if col in out.columns]]
+
+
+def stance_result_table(metrics: dict[str, Optional[pd.DataFrame]]) -> pd.DataFrame:
+    frame = metric_rows(metrics, "STANCE Results")
+    if frame.empty:
+        return frame
+    out = frame.copy()
+    out["dataset"] = out["metric"].astype(str).str.replace("STANCE results: ", "", regex=False)
+    out = out.rename(columns={"mean_diff": "STANCE same sign (%)", "model_value": "More positive (%)", "original_value": "More negative (%)"})
+    return out[[col for col in ["dataset", "STANCE same sign (%)", "More positive (%)", "More negative (%)"] if col in out.columns]]
+
 def img_tag(path: Path, report_dir: Path, alt: str, css_class: str = "figure") -> str:
     if not path.exists():
         return f'<p class="muted">Missing graph: {html.escape(str(path))}</p>'
@@ -256,7 +458,9 @@ def basic_metric_gallery(report_dir: Path) -> str:
     images = []
     for image in sorted(graph_dir.glob("*.png")):
         stem = image.stem
-        if stem == "interruptions" or stem.startswith("WER_") or stem.startswith("CER_"):
+        if stem.startswith("WER_") or stem.startswith("CER_"):
+            continue
+        if stem in {"interrupted", "interruption_segments", "interruptions"}:
             continue
         images.append(image)
     if not images:
@@ -276,14 +480,14 @@ def summary_cards(metrics: dict[str, Optional[pd.DataFrame]]) -> str:
             continue
         emo = frame[frame["section"] == "Emotional Naturalness"] if "section" in frame else pd.DataFrame()
         basic = frame[frame["section"] == "Basic Metrics"] if "section" in frame else pd.DataFrame()
-        language = frame[frame["section"] == "Language ID"] if "section" in frame else pd.DataFrame()
-        dialect = frame[frame["section"] == "Dialect ID"] if "section" in frame else pd.DataFrame()
+        language = frame[frame["section"].isin(["Language ID", "Language and Dialect ID"])] if "section" in frame else pd.DataFrame()
+        dialect = frame[frame["section"].isin(["Dialect ID", "Language and Dialect ID"])] if "section" in frame else pd.DataFrame()
         explain = frame[frame["section"] == "Explainable Features"] if "section" in frame else pd.DataFrame()
         stances = frame[frame["section"] == "STANCEs"] if "section" in frame else pd.DataFrame()
         bits = [f'<h3>{html.escape(subset.title())}</h3>']
         if not emo.empty:
             row = emo.iloc[0]
-            bits.append(f'<p><strong>Emotional naturalness diff:</strong> {fmt_float(row.get("mean_diff"))} (p={fmt_float(row.get("p_value"))})</p>')
+            bits.append(f'<p><strong>Emotional naturalness normalized-logit diff:</strong> {fmt_float(row.get("mean_diff"))} (p={fmt_float(row.get("p_value"))})</p>')
         if not basic.empty:
             bits.append(f'<p><strong>Basic metrics:</strong> {len(basic)} metrics summarized</p>')
         if not language.empty:
@@ -312,10 +516,11 @@ def summary_cards(metrics: dict[str, Optional[pd.DataFrame]]) -> str:
 def build_html(args, metrics: dict[str, Optional[pd.DataFrame]], report_text: str) -> str:
     report_dir = args.report_dir
     emo_table = metric_rows(metrics, "Emotional Naturalness")
-    basic_table = metric_rows(metrics, "Basic Metrics")
+    basic_table = metric_rows(metrics, "Intelligibility and Interruption Metrics")
     language_table = language_id_summary_table(metrics)
     dialect_table = dialect_id_summary_table(metrics)
-    stance_table = metric_rows(metrics, "STANCEs")
+    stance_desc_table = metric_rows(metrics, "STANCE Descriptions")
+    stance_results_table = metric_rows(metrics, "STANCE Results")
     cluster_feature_table = cluster_feature_rows(metrics)
 
     explain_sections = []
@@ -344,6 +549,10 @@ def build_html(args, metrics: dict[str, Optional[pd.DataFrame]], report_text: st
     h3 {{ margin-bottom:8px; }}
     .cards {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:16px; margin:18px 0; }}
     .card {{ background:var(--card); border:1px solid var(--line); border-radius:8px; padding:16px; box-shadow:0 1px 2px rgba(0,0,0,0.04); }}
+    .setup-half-grid {{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; align-items:start; margin-top:16px; }}
+    .setup-panel {{ min-width:0; overflow-x:auto; margin:0; }}
+    .setup-panel-data {{ width:100%; }}
+    .setup-panel h3 {{ margin-top:0; }}
     .metric-table {{ width:100%; border-collapse:collapse; font-size:14px; background:white; }}
     .metric-table th, .metric-table td {{ border:1px solid var(--line); padding:7px 9px; text-align:left; vertical-align:top; }}
     .metric-table th {{ background:#eef3f8; font-weight:700; }}
@@ -355,6 +564,7 @@ def build_html(args, metrics: dict[str, Optional[pd.DataFrame]], report_text: st
     .thumb {{ margin:0; background:white; border:1px solid var(--line); border-radius:6px; padding:8px; }}
     .thumb img {{ width:100%; display:block; }}
     .thumb figcaption {{ font-size:12px; color:var(--muted); padding-top:6px; word-break:break-word; }}
+    @media (max-width: 900px) {{ .setup-half-grid {{ grid-template-columns:1fr; }} }}
   </style>
 </head>
 <body>
@@ -364,38 +574,27 @@ def build_html(args, metrics: dict[str, Optional[pd.DataFrame]], report_text: st
 </header>
 <main>
   <section>
-    <h2>Executive Summary</h2>
-    <p>This report combines the simplified text report, Stage 1 metric tables, and Stage 2 figures into a browsable HTML document.</p>
-    {summary_cards(metrics)}
+    <h2>Data, Models, and Setup</h2>
+    {data_models_setup_grid(report_text)}
   </section>
 
-
   <section>
-    <h2>Basic Metrics</h2>
-    <p>Basic metrics come from script 10 and include ASR-specific CER/WER columns, UTMOS, latency, interruption counts, and interruption overlap duration when available. If original base metrics were not generated, the table reports model means and standard deviations.</p>
-    {table_html(basic_table, columns=["subset", "metric", "mean_diff", "std_diff", "p_value", "n", "detail"])}
-    {img_tag(report_dir / "graphs" / "basic_metrics.png", report_dir, "Basic metric violin plots")}
+    <h2>Intelligibility and Interruption Metrics</h2>
+    {table_html(basic_display_table(basic_table), columns=["Metric", "System", "model_mean_naturalistic", "original_mean_naturalistic", "model_mean_improvised", "original_mean_improvised"])}
+    {img_tag(report_dir / "graphs" / "basic_metrics.png", report_dir, "Intelligibility and interruption metric histograms with KDE")}
     {basic_metric_gallery(report_dir)}
   </section>
 
   <section>
-    <h2>Language ID</h2>
-    <p>Language ID reports the percentage of answer audio rows whose detected language is English (<code>eng</code>) in <code>language_id.csv</code>.</p>
-    {table_html(language_table, columns=["subset", "% Eng in models' answers", "% Eng in original answers"])}
-  </section>
-
-  <section>
-    <h2>Dialect ID</h2>
-    <p>Dialect ID reports the percentage of question and answer rows assigned to each VoxLect dialect class. The confusion matrix counts question-to-answer dialect changes; the box plot compares the full question and answer score vectors for each class.</p>
+    <h2>Language and Dialect ID</h2>
+    {table_html(language_table, columns=["subset", "% Eng in models' answers", "% Eng in original answers", "second most spoken language in models' answers", "percentage 2nd language in models' answers", "second most spoken language in original answers", "percentage 2nd language in original answers"])}
     {table_html(dialect_table, columns=["Subset", "Question/Answer", *DIALECT_LABELS])}
     {img_tag(report_dir / "graphs" / "dialect_confusion.png", report_dir, "Dialect question-to-answer confusion matrix")}
-    {img_tag(report_dir / "graphs" / "dialect_scores.png", report_dir, "Dialect score distributions for question and answer fields")}
+    {img_tag(report_dir / "graphs" / "dialect_scores.png", report_dir, "Dialect score spider profiles for question and answer fields")}
   </section>
 
   <section>
     <h2>Emotional Naturalness</h2>
-    <p>Naturalness is summarized as the paired test-set logit difference between model and original utterances. Positive values mean higher model logits than original logits.</p>
-    {table_html(emo_table, columns=["subset", "metric", "mean_diff", "std_diff", "p_value", "n"])}
     {img_tag(report_dir / "graphs" / "emo_naturalness.png", report_dir, "Emotional naturalness distributions")}
     <p>The relationship violin plot breaks naturalistic emotional naturalness logits down by relationship label.</p>
     {img_tag(report_dir / "graphs" / "emo_naturalness_by_relationship.png", report_dir, "Naturalistic emotional naturalness violins by relationship")}
@@ -404,9 +603,11 @@ def build_html(args, metrics: dict[str, Optional[pd.DataFrame]], report_text: st
   </section>
 
   <section>
-    <h2>STANCEs</h2>
-    <p>STANCE metrics compare LLM and original scores for each STANCE question. Naturalistic STANCEs are omitted because they are not computed in this benchmark pipeline.</p>
-    {table_html(stance_table, columns=["subset", "metric", "mean_diff", "std_diff", "p_value", "n", "detail"])}
+    <h2>STANCE</h2>
+    <h3>Stance Descriptions</h3>
+    {table_html(stance_description_table(metrics), columns=["stance", "positive_original_%", "negative_original_%", "definition"])}
+    <h3>Results</h3>
+    {table_html(stance_result_table(metrics), columns=["dataset", "STANCE same sign (%)", "More positive (%)", "More negative (%)"])}
     {img_tag(report_dir / "graphs" / "stances.png", report_dir, "STANCE score distributions")}
   </section>
 

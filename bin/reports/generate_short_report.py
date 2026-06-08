@@ -49,6 +49,12 @@ def numeric(series: pd.Series) -> pd.Series:
     return pd.to_numeric(series, errors="coerce").replace([np.inf, -np.inf], np.nan)
 
 
+def prepared_dialogue_ids(metadata: pd.DataFrame) -> set[str]:
+    if "conversation_id" in metadata.columns:
+        return set(metadata["conversation_id"].dropna().astype(str))
+    return set()
+
+
 def fmt(value: Any, digits: int = 4) -> str:
     if value is None or pd.isna(value):
         return "nan"
@@ -76,10 +82,14 @@ def metric_row(
     accuracy: Any = np.nan,
     section: str = "",
     detail: str = "",
+    model_value: Any = np.nan,
+    original_value: Any = np.nan,
 ) -> Dict[str, Any]:
     return {
         "metric": metric,
         "section": section,
+        "model_value": model_value,
+        "original_value": original_value,
         "mean_diff": mean_diff,
         "std_diff": std_diff,
         "p_value": p_value,
@@ -168,9 +178,78 @@ def append_percentage_metric(
 
 
 def setup_section(args, text_lines: List[str]) -> None:
+    text_lines.append("Models")
+    text_lines.append("------")
+    text_lines.append("parameter	value")
+    setup_items = {
+        "LLM model used for inference": args.model,
+        "ASR models used": ", ".join(args.asr_models),
+        "Language ID model": args.language_id_model,
+        "Dialect ID model": args.dialect_id_model,
+        "LLM used for stance": args.stance_model,
+        "Statistical tests used for p-values": args.statistical_test,
+        "UTMOS model": args.utmos_model,
+        "VAD model": args.vad_model,
+    }
+    for key, value in setup_items.items():
+        text_lines.append(f"{key}	{value}")
+    text_lines.append("")
+
+
+def data_statistics_section(args, text_lines: List[str]) -> None:
+    text_lines.append("Data")
+    text_lines.append("----")
+    columns = [("improvised", "dev"), ("improvised", "test"), ("naturalistic", "dev"), ("naturalistic", "test")]
+    summaries: Dict[Tuple[str, str], Dict[str, Any]] = {}
+    for subset, split in columns:
+        original_path = args.data_root / "outputs" / ORIGINAL / split / subset / "metadata.csv"
+        model_path = args.data_root / "outputs" / args.model / split / subset / "metadata.csv"
+        original = safe_read_csv(original_path)
+        model = safe_read_csv(model_path)
+        summaries[(subset, split)] = {
+            "unique_original_dialogues": len(prepared_dialogue_ids(original)) if original is not None else np.nan,
+            "selected_dialogues": len(original) if original is not None else np.nan,
+            "question_hours": numeric(original["question_end_time"]).sum() / 3600.0 if original is not None and "question_end_time" in original else np.nan,
+            "original_answer_hours": numeric(original["answer_duration"]).sum() / 3600.0 if original is not None and "answer_duration" in original else np.nan,
+            "original_total_hours": (
+                (numeric(original["question_end_time"]).sum() + numeric(original["answer_duration"]).sum()) / 3600.0
+                if original is not None and {"question_end_time", "answer_duration"}.issubset(original.columns)
+                else np.nan
+            ),
+            "generated_answer_hours": numeric(model["answer_duration"]).sum() / 3600.0 if model is not None and "answer_duration" in model else np.nan,
+            "original_answer_mean_seconds": numeric(original["answer_duration"]).mean() if original is not None and "answer_duration" in original else np.nan,
+            "generated_answer_mean_seconds": numeric(model["answer_duration"]).mean() if model is not None and "answer_duration" in model else np.nan,
+        }
+
+    def total_for(values: List[Any]) -> float:
+        valid = [float(value) for value in values if pd.notna(value)]
+        return float(np.sum(valid)) if valid else np.nan
+
+    def row_values(key: str, digits: int = 2, suffix: str = "") -> List[str]:
+        vals = [summaries[item][key] for item in columns]
+        output = [fmt(value, digits) + suffix if pd.notna(value) else "missing" for value in vals]
+        total = total_for(vals)
+        output.append(fmt(total, digits) + suffix if pd.notna(total) else "missing")
+        return output
+
+    text_lines.append("metric	Improvised dev	Improvised test	Naturalistic dev	Naturalistic test	Total")
+    text_lines.append("	".join(["Unique original dialogues", *row_values("unique_original_dialogues", 0)]))
+    text_lines.append("	".join(["Selected dialogues", *row_values("selected_dialogues", 0)]))
+    text_lines.append("	".join(["Hours of questions", *row_values("question_hours", 2, "h")]))
+    text_lines.append("	".join(["Hours of original answers", *row_values("original_answer_hours", 2, "h")]))
+    text_lines.append("	".join(["Original total hours", *row_values("original_total_hours", 2, "h")]))
+    text_lines.append("	".join(["Hours of generated answers", *row_values("generated_answer_hours", 2, "h")]))
+    original_mean_values = [summaries[item]["original_answer_mean_seconds"] for item in columns]
+    text_lines.append("	".join(["Mean original answer length", *(fmt(value, 2) + "s" if pd.notna(value) else "missing" for value in original_mean_values), ""]))
+    mean_values = [summaries[item]["generated_answer_mean_seconds"] for item in columns]
+    text_lines.append("	".join(["Mean generated answer length", *(fmt(value, 2) + "s" if pd.notna(value) else "missing" for value in mean_values), ""]))
+    text_lines.append("")
+
+
+def setup_details_section(args, text_lines: List[str]) -> None:
     text_lines.append("Setup")
     text_lines.append("-----")
-    text_lines.append("parameter\tvalue")
+    text_lines.append("parameter	value")
     setup_items = {
         "protocol": args.protocol,
         "selection_method": args.selection_method,
@@ -178,38 +257,12 @@ def setup_section(args, text_lines: List[str]) -> None:
         "min_speakers": args.min_speakers,
         "splits": "dev,test",
         "subsets": ",".join(SUBSETS),
-        "asr_model": args.asr_model,
-        "evaluated_llm_model": args.model,
-        "stance_llm_model": args.stance_model,
-        "sbert_model_for_naturalness_context": args.sbert_model,
-        "statistical_test": args.statistical_test,
         "data_root": str(args.data_root),
         "results_root": str(args.results_root),
     }
     for key, value in setup_items.items():
-        text_lines.append(f"{key}\t{value}")
+        text_lines.append(f"{key}	{value}")
     text_lines.append("")
-
-
-def data_statistics_section(args, text_lines: List[str]) -> None:
-    text_lines.append("Data Statistics")
-    text_lines.append("---------------")
-    text_lines.append("model	split	subset	utterances	total_audio_hours")
-    for model in [ORIGINAL, args.model]:
-        for split in SPLITS:
-            for subset in SUBSETS:
-                path = args.data_root / "outputs" / model / split / subset / f"{split}_{subset}_metadata.csv"
-                frame = safe_read_csv(path)
-                if frame is None:
-                    text_lines.append(f"{model}	{split}	{subset}	missing	missing")
-                    continue
-
-                n_rows = len(frame)
-                duration = numeric(frame["total_duration"]).sum() if "total_duration" in frame else np.nan
-                text_lines.append(f"{model}	{split}	{subset}	{n_rows}	{duration / 3600.0:.2f}")
-    text_lines.append("")
-
-
 
 def base_metrics_csv(args, model: str, subset: str) -> Path:
     return args.results_root / model / "test" / subset / "base_metrics.csv"
@@ -223,20 +276,94 @@ def dialect_id_csv(args, model: str, subset: str) -> Path:
     return args.results_root / model / "test" / subset / "dialect_id.csv"
 
 
-def english_language_count(frame: pd.DataFrame) -> Tuple[int, int]:
+
+LANGUAGE_NAME_OVERRIDES = {
+    "eng": "English",
+    "fra": "French",
+    "fre": "French",
+    "spa": "Spanish",
+    "deu": "German",
+    "ger": "German",
+    "ita": "Italian",
+    "por": "Portuguese",
+    "nld": "Dutch",
+    "dut": "Dutch",
+    "rus": "Russian",
+    "zho": "Chinese",
+    "chi": "Chinese",
+    "cmn": "Mandarin Chinese",
+    "jpn": "Japanese",
+    "kor": "Korean",
+    "ara": "Arabic",
+    "hin": "Hindi",
+    "urd": "Urdu",
+    "ben": "Bengali",
+    "tur": "Turkish",
+    "vie": "Vietnamese",
+    "tha": "Thai",
+    "ind": "Indonesian",
+    "msa": "Malay",
+    "tgl": "Tagalog",
+    "fil": "Filipino",
+}
+
+
+def language_display_name(code: str) -> str:
+    code = str(code).strip().lower()
+    if not code:
+        return ""
+    if code in LANGUAGE_NAME_OVERRIDES:
+        return LANGUAGE_NAME_OVERRIDES[code]
+    try:
+        import pycountry
+
+        language = pycountry.languages.get(alpha_3=code) or pycountry.languages.get(alpha_2=code)
+        if language is not None:
+            return getattr(language, "name", code)
+    except Exception:
+        pass
+    return code
+
+
+def language_counts(frame: pd.DataFrame) -> Tuple[pd.Series, int]:
     if "language" not in frame.columns:
-        return 0, 0
+        return pd.Series(dtype=int), 0
     languages = frame["language"].astype(str).str.strip().str.lower()
     valid = languages.notna() & (languages != "") & (languages != "nan")
-    return int((languages.loc[valid] == "eng").sum()), int(valid.sum())
+    valid &= ~languages.str.startswith(("unknown", "unkown"), na=False)
+    counts = languages.loc[valid].value_counts()
+    return counts, int(valid.sum())
+
+
+def english_language_count(frame: pd.DataFrame) -> Tuple[int, int]:
+    counts, denominator = language_counts(frame)
+    return int(counts.get("eng", 0)), denominator
+
+
+def second_language_stats(frame: pd.DataFrame) -> Tuple[str, float, int, int]:
+    counts, denominator = language_counts(frame)
+    if denominator == 0 or len(counts) < 2:
+        return "", np.nan, 0, denominator
+    language = str(counts.index[1])
+    numerator = int(counts.iloc[1])
+    return language_display_name(language), 100.0 * numerator / denominator, numerator, denominator
 
 
 def language_id_section(args, metrics_by_subset: Dict[str, List[Dict[str, Any]]], text_lines: List[str]) -> None:
-    text_lines.append("Language ID")
-    text_lines.append("-----------")
-    text_lines.append("subset	% Eng in models' answers	% Eng in original answers")
+    text_lines.append("Language and Dialect ID")
+    text_lines.append("-----------------------")
+    rows: List[Dict[str, Any]] = []
+
     for subset in SUBSETS:
-        percentages: Dict[str, Any] = {"model": np.nan, "original": np.nan}
+        row: Dict[str, Any] = {
+            "subset": subset,
+            "model_eng": np.nan,
+            "original_eng": np.nan,
+            "model_second_language": "",
+            "model_second_percentage": np.nan,
+            "original_second_language": "",
+            "original_second_percentage": np.nan,
+        }
         for model, label in [(ORIGINAL, "original"), (args.model, "model")]:
             frame = safe_read_csv(language_id_csv(args, model, subset))
             metric = f"English language detected in {label} answers (%)"
@@ -244,20 +371,52 @@ def language_id_section(args, metrics_by_subset: Dict[str, List[Dict[str, Any]]]
                 continue
             numerator, denominator = english_language_count(frame)
             percentage = (100.0 * numerator / denominator) if denominator else np.nan
-            percentages[label] = percentage
-            row = metric_row(
-                metric,
-                percentage,
-                np.nan,
-                np.nan,
-                n=denominator,
-                section="Language ID",
-                detail=f"percentage of language_id.csv rows with language=eng; numerator={numerator}; denominator={denominator}",
+            row[f"{label}_eng"] = percentage
+            metrics_by_subset[subset].append(
+                metric_row(
+                    metric,
+                    percentage,
+                    np.nan,
+                    np.nan,
+                    n=denominator,
+                    section="Language and Dialect ID",
+                    detail=f"percentage of language_id.csv rows with language=eng; numerator={numerator}; denominator={denominator}",
+                )
             )
-            metrics_by_subset[subset].append(row)
-        text_lines.append(f"{subset}	{fmt(percentages['model'])}	{fmt(percentages['original'])}")
-    text_lines.append("")
 
+            language, second_percentage, second_numerator, second_denominator = second_language_stats(frame)
+            row[f"{label}_second_language"] = language
+            row[f"{label}_second_percentage"] = second_percentage
+            metrics_by_subset[subset].append(
+                metric_row(
+                    f"Second most spoken language in {label} answers",
+                    second_percentage,
+                    np.nan,
+                    np.nan,
+                    n=second_denominator,
+                    section="Language and Dialect ID",
+                    detail=f"language={language}; numerator={second_numerator}; denominator={second_denominator}",
+                )
+            )
+        rows.append(row)
+
+    include_model_second = any(pd.notna(row["model_eng"]) and float(row["model_eng"]) < 100.0 for row in rows)
+    include_original_second = any(pd.notna(row["original_eng"]) and float(row["original_eng"]) < 100.0 for row in rows)
+    headers = ["subset", "% Eng in models' answers", "% Eng in original answers"]
+    if include_model_second:
+        headers.extend(["second most spoken language in models' answers", "percentage 2nd language in models' answers"])
+    if include_original_second:
+        headers.extend(["second most spoken language in original answers", "percentage 2nd language in original answers"])
+    text_lines.append("	".join(headers))
+
+    for row in rows:
+        cells = [row["subset"], fmt(row["model_eng"]), fmt(row["original_eng"])]
+        if include_model_second:
+            cells.extend([str(row["model_second_language"]), fmt(row["model_second_percentage"])])
+        if include_original_second:
+            cells.extend([str(row["original_second_language"]), fmt(row["original_second_percentage"])])
+        text_lines.append("	".join(cells))
+    text_lines.append("")
 
 def append_dialect_percentage_rows(
     metrics_by_subset: Dict[str, List[Dict[str, Any]]],
@@ -281,7 +440,7 @@ def append_dialect_percentage_rows(
             np.nan,
             np.nan,
             n=denominator,
-            section="Dialect ID",
+            section="Language and Dialect ID",
             detail=f"percentage of dialect_id.csv rows where {column}={dialect}; numerator={numerator}; denominator={denominator}",
         )
         metrics_by_subset[subset].append(row)
@@ -289,8 +448,8 @@ def append_dialect_percentage_rows(
 
 
 def dialect_id_section(args, metrics_by_subset: Dict[str, List[Dict[str, Any]]], text_lines: List[str]) -> None:
-    text_lines.append("Dialect ID")
-    text_lines.append("----------")
+    text_lines.append("Dialect distribution")
+    text_lines.append("~~~~~~~~~~~~~~~~~~~~")
     text_lines.append("	".join(["Subset", "Question/Answer", *DIALECT_LABELS]))
     for subset in SUBSETS:
         frame = safe_read_csv(dialect_id_csv(args, args.model, subset))
@@ -332,10 +491,41 @@ def asr_error_metric_columns(*frames: Optional[pd.DataFrame]) -> List[str]:
 
 def base_metric_columns(model_frame: pd.DataFrame, original_frame: Optional[pd.DataFrame]) -> List[str]:
     columns = asr_error_metric_columns(model_frame, original_frame)
-    for metric in ["UTMOS", "latency", "interrupted"]:
+    for metric in ["UTMOS", "latency", "interruption_segments", "interrupted"]:
         if metric in model_frame.columns or (original_frame is not None and metric in original_frame.columns):
             columns.append(metric)
     return columns
+
+
+def basic_metric_display_name(metric: str) -> str:
+    if metric == "interruption_segments":
+        return "average number of interruptions per dialogues"
+    if metric == "interrupted":
+        return "interrupted time (s)"
+    if metric == "interruptions count":
+        return "number of dialogues with interruption"
+    return metric
+
+
+def basic_metric_values(metric: str, series: pd.Series) -> pd.Series:
+    values = numeric(series).dropna()
+    if metric.startswith(("CER", "WER")):
+        values = values * 100.0
+    elif metric == "interrupted":
+        values = values / 1000.0
+    return values
+
+
+def basic_metric_fmt(metric: str, value: Any) -> str:
+    if value is None or pd.isna(value):
+        return "nan"
+    if metric == "interruption_segments":
+        return f"{float(value):.2f}"
+    if metric == "interrupted":
+        return f"{float(value):.3f}"
+    if metric.startswith(("CER", "WER")):
+        return f"{float(value):.2f}"
+    return fmt(value)
 
 
 def add_basic_metric_row(
@@ -349,35 +539,30 @@ def add_basic_metric_row(
 ) -> None:
     if metric not in model_frame.columns:
         return
-    model_values = numeric(model_frame[metric]).dropna()
+    model_values = basic_metric_values(metric, model_frame[metric])
     if model_values.empty:
         return
-    detail = "model mean/std; original base_metrics.csv unavailable"
-    mean_value = model_values.mean()
-    std_value = model_values.std()
-    pvalue = np.nan
-    n_value = len(model_values)
+    model_mean = model_values.mean()
+    original_mean = np.nan
     if original_frame is not None and metric in original_frame.columns:
-        original_values = numeric(original_frame[metric]).dropna()
+        original_values = basic_metric_values(metric, original_frame[metric])
         if not original_values.empty:
-            mean_value = model_values.mean() - original_values.mean()
-            std_value = np.sqrt(model_values.var(ddof=1) + original_values.var(ddof=1))
-            pvalue = statistical_pvalue(original_values, model_values, args.statistical_test)
-            n_value = min(len(original_values), len(model_values))
-            detail = f"model-original mean difference; p-value is {args.statistical_test}"
-    if metric == "interrupted":
-        detail += "; interrupted overlap duration in ms, with 0 for non-interruptions"
+            original_mean = original_values.mean()
+    mean_diff = model_mean - original_mean if pd.notna(original_mean) else np.nan
+    display_metric = basic_metric_display_name(metric)
     row = metric_row(
-        metric,
-        mean_value,
-        std_value,
-        pvalue,
-        n=n_value,
-        section="Basic Metrics",
-        detail=detail,
+        display_metric,
+        mean_diff,
+        np.nan,
+        np.nan,
+        n=len(model_values),
+        section="Intelligibility and Interruption Metrics",
+        detail=metric,
+        model_value=model_mean,
+        original_value=original_mean,
     )
     metrics_by_subset[subset].append(row)
-    append_metric_table_line(text_lines, f"{metric} ({subset})", row)
+    text_lines.append("	".join([subset, display_metric, basic_metric_fmt(metric, model_mean), basic_metric_fmt(metric, original_mean), basic_metric_fmt(metric, mean_diff)]))
 
 
 def add_interruption_count_row(
@@ -391,36 +576,38 @@ def add_interruption_count_row(
     if "interruptions" not in model_frame.columns:
         return
     model_values = numeric(model_frame["interruptions"]).fillna(0)
-    model_count = int((model_values > 0).sum())
-    mean_value = model_count
-    detail = f"model interruption count={model_count}"
+    model_value = int((model_values > 0).sum())
+    original_value = np.nan
     if original_frame is not None and "interruptions" in original_frame.columns:
         original_values = numeric(original_frame["interruptions"]).fillna(0)
-        original_count = int((original_values > 0).sum())
-        mean_value = model_count - original_count
-        detail = f"model-original interruption count difference; model_count={model_count}; original_count={original_count}"
+        original_value = int((original_values > 0).sum())
+    mean_diff = model_value - original_value if pd.notna(original_value) else np.nan
+    original_total = len(original_values) if original_frame is not None and "interruptions" in original_frame.columns else np.nan
     row = metric_row(
-        "interruptions count",
-        mean_value,
+        "number of dialogues with interruption",
+        mean_diff,
         np.nan,
         np.nan,
         n=len(model_values),
-        section="Basic Metrics",
-        detail=detail,
+        section="Intelligibility and Interruption Metrics",
+        detail="interruptions count",
+        model_value=f"{model_value}/{len(model_values)}",
+        original_value=f"{original_value}/{original_total}" if pd.notna(original_total) else np.nan,
     )
     metrics_by_subset[subset].append(row)
-    append_metric_table_line(text_lines, f"interruptions count ({subset})", row)
+    original_text = f"{original_value}/{original_total}" if pd.notna(original_total) else "nan"
+    text_lines.append("	".join([subset, "number of dialogues with interruption", f"{model_value}/{len(model_values)}", original_text, fmt(mean_diff, 0)]))
 
 
 def base_metrics_section(args, metrics_by_subset: Dict[str, List[Dict[str, Any]]], text_lines: List[str]) -> None:
-    text_lines.append("Basic Metrics")
-    text_lines.append("-------------")
-    text_lines.append("metric	n	mean_diff	std_diff	p_value	auroc	accuracy")
+    text_lines.append("Intelligibility and Interruption Metrics")
+    text_lines.append("----------------------------------------")
+    text_lines.append("subset	metric	model_mean	original_mean	mean_diff")
     for subset in SUBSETS:
         model_frame = safe_read_csv(base_metrics_csv(args, args.model, subset))
         original_frame = safe_read_csv(base_metrics_csv(args, ORIGINAL, subset))
         if model_frame is None:
-            text_lines.append(f"Basic metrics ({subset})	missing	missing	missing	missing	missing	missing")
+            text_lines.append(f"{subset}	missing	missing	missing	missing")
             continue
         for metric in base_metric_columns(model_frame, original_frame):
             add_basic_metric_row(args, metrics_by_subset, text_lines, subset, metric, model_frame, original_frame)
@@ -428,7 +615,7 @@ def base_metrics_section(args, metrics_by_subset: Dict[str, List[Dict[str, Any]]
     text_lines.append("")
 
 def naturalness_scores_with_relationship(args, model: str, subset: str) -> Optional[pd.DataFrame]:
-    scores_path = args.results_root / model / "test" / subset / "naturalness_scores.csv"
+    scores_path = args.results_root / model / "test" / subset / "naturalness_scores_normalized.csv"
     rel_path = args.results_root / model / "test" / subset / "naturalness_inference_input.csv"
     scores = safe_read_csv(scores_path)
     rels = safe_read_csv(rel_path)
@@ -459,15 +646,13 @@ def naturalness_scores_with_relationship(args, model: str, subset: str) -> Optio
 def emotional_naturalness_section(args, metrics_by_subset: Dict[str, List[Dict[str, Any]]], text_lines: List[str]) -> None:
     text_lines.append("Emotional Naturalness")
     text_lines.append("---------------------")
-    text_lines.append("metric	n	mean_diff	std_diff	p_value	auroc	accuracy")
+    text_lines.append("See detailed report graphs.")
     for subset in SUBSETS:
-        text_lines.append(f"{subset}")
-        original_path = args.results_root / ORIGINAL / "test" / subset / "naturalness_scores.csv"
-        model_path = args.results_root / args.model / "test" / subset / "naturalness_scores.csv"
+        original_path = args.results_root / ORIGINAL / "test" / subset / "naturalness_scores_normalized.csv"
+        model_path = args.results_root / args.model / "test" / subset / "naturalness_scores_normalized.csv"
         original = safe_read_csv(original_path)
         model = safe_read_csv(model_path)
         if original is None or model is None or "naturalness_logit" not in original or "naturalness_logit" not in model:
-            text_lines.append(f"Emotional naturalness ({subset})	missing	missing	missing	missing	missing	missing")
             continue
 
         original_values, model_values, diff = paired_values(original, model, "naturalness_logit")
@@ -479,15 +664,13 @@ def emotional_naturalness_section(args, metrics_by_subset: Dict[str, List[Dict[s
             pvalue,
             n=len(diff),
             section="Emotional Naturalness",
-            detail="naturalness_logit model-original",
+            detail="normalized naturalness_logit model-original",
         )
         metrics_by_subset[subset].append(row)
-        append_metric_table_line(text_lines, f"Emotional naturalness ({subset})", row)
 
         original_rel = naturalness_scores_with_relationship(args, ORIGINAL, subset)
         model_rel = naturalness_scores_with_relationship(args, args.model, subset)
         if original_rel is None or model_rel is None:
-            text_lines.append(f"Emotional naturalness by relationship ({subset})	missing	missing	missing	missing	missing	missing")
             continue
 
         original_grouped = original_rel.groupby("relationship_type")["naturalness_logit"].agg(["mean", "count"]).rename(columns={"mean": "original_mean", "count": "original_n"})
@@ -510,85 +693,81 @@ def emotional_naturalness_section(args, metrics_by_subset: Dict[str, List[Dict[s
                 detail=f"relationship_type={relationship}; original_mean={fmt(original_mean)}; model_mean={fmt(model_mean)}; original_n={fmt(original_n)}; model_n={fmt(model_n)}",
             )
             metrics_by_subset[subset].append(rel_row)
-            append_metric_table_line(text_lines, f"Emotional naturalness {relationship} ({subset})", rel_row)
     text_lines.append("")
 
 
 def stances_section(args, metrics_by_subset: Dict[str, List[Dict[str, Any]]], text_lines: List[str]) -> None:
-    text_lines.append("STANCEs")
-    text_lines.append("-------")
-    text_lines.append("metric\tn\tmean_diff\tstd_diff\tp_value\tauroc\taccuracy")
+    text_lines.append("STANCE")
+    text_lines.append("------")
 
     subset = "improvised"
     path = args.results_root / args.model / "test" / subset / "merged_stances.csv"
     frame = safe_read_csv(path)
-    if frame is None:
-        text_lines.append("STANCE improvised\tmissing\tmissing\tmissing\tmissing\tmissing\tmissing")
+    if frame is None or not {"question_index", "score_original", "score_llm"}.issubset(frame.columns):
+        text_lines.append("STANCE improvised	missing")
         text_lines.append("")
         return
-    if not {"question_index", "score_original", "score_llm"}.issubset(frame.columns):
-        text_lines.append("STANCE improvised\tmissing_columns\tmissing\tmissing\tmissing\tmissing\tmissing")
-        text_lines.append("")
-        return
+
+    frame = frame.copy()
+    frame["score_original"] = numeric(frame["score_original"])
+    frame["score_llm"] = numeric(frame["score_llm"])
+
+    text_lines.append("Stance descriptions")
+    text_lines.append("question	positive_original_%	negative_original_%	definition")
+    for qidx, group in frame.groupby("question_index", sort=True):
+        original = numeric(group["score_original"]).dropna()
+        denominator = len(original)
+        pos = 100.0 * float((original > 0).sum()) / denominator if denominator else np.nan
+        neg = 100.0 * float((original < 0).sum()) / denominator if denominator else np.nan
+        question = str(group["stance_question"].dropna().iloc[0]) if "stance_question" in group and group["stance_question"].notna().any() else ""
+        metrics_by_subset[subset].append(
+            metric_row(
+                f"Q{qidx} stance description",
+                np.nan,
+                np.nan,
+                np.nan,
+                n=denominator,
+                section="STANCE Descriptions",
+                detail=question,
+                model_value=pos,
+                original_value=neg,
+            )
+        )
+        text_lines.append("	".join([f"Q{qidx}", fmt(pos), fmt(neg), question]))
 
     all_original = numeric(frame["score_original"])
     all_model = numeric(frame["score_llm"])
-    all_valid = all_original.notna() & all_model.notna()
-    all_original = all_original.loc[all_valid]
-    all_model = all_model.loc[all_valid]
-    original_negative = all_original < 0
-    original_positive = all_original > 0
+    valid = all_original.notna() & all_model.notna()
+    all_original = all_original.loc[valid]
+    all_model = all_model.loc[valid]
+    denominator = len(all_original)
+    model_same = 100.0 * float((np.sign(all_original) == np.sign(all_model)).sum()) / denominator if denominator else np.nan
+    model_more_positive = 100.0 * float((all_model > all_original).sum()) / denominator if denominator else np.nan
+    model_more_negative = 100.0 * float((all_model < all_original).sum()) / denominator if denominator else np.nan
 
-    append_percentage_metric(
-        metrics_by_subset,
-        text_lines,
-        subset,
-        "STANCE same sign (%)",
-        int((np.sign(all_original) == np.sign(all_model)).sum()),
-        len(all_original),
-        "percentage of valid paired rows where score_original and score_llm have the same sign, with zero treated as neutral",
-    )
-    append_percentage_metric(
-        metrics_by_subset,
-        text_lines,
-        subset,
-        "STANCE model positive when original negative (%)",
-        int(((all_model > 0) & original_negative).sum()),
-        int(original_negative.sum()),
-        "percentage among valid paired rows with score_original < 0",
-    )
-    append_percentage_metric(
-        metrics_by_subset,
-        text_lines,
-        subset,
-        "STANCE model negative when original positive (%)",
-        int(((all_model < 0) & original_positive).sum()),
-        int(original_positive.sum()),
-        "percentage among valid paired rows with score_original > 0",
-    )
-
-    for qidx, group in frame.groupby("question_index", sort=True):
-        original = numeric(group["score_original"])
-        model = numeric(group["score_llm"])
-        valid = original.notna() & model.notna()
-        original = original.loc[valid]
-        model = model.loc[valid]
-        diff = model - original
-        pvalue = statistical_pvalue(original, model, args.statistical_test, paired=True)
-        question = str(group["stance_question"].dropna().iloc[0]) if "stance_question" in group and group["stance_question"].notna().any() else ""
-        row = metric_row(
-            f"Q{qidx}",
-            diff.mean(),
-            diff.std(),
-            pvalue,
-            n=len(diff),
-            section="STANCEs",
-            detail=question,
-        )
-        metrics_by_subset[subset].append(row)
-        append_metric_table_line(text_lines, f"Q{qidx}", row)
+    result_rows = [
+        ("original", 100.0 if denominator else np.nan, 0.0 if denominator else np.nan, 0.0 if denominator else np.nan),
+        (args.model, model_same, model_more_positive, model_more_negative),
+    ]
     text_lines.append("")
-
+    text_lines.append("STANCE results")
+    text_lines.append("dataset	STANCE same sign (%)	More positive (%)	More negative (%)")
+    for dataset, same, more_positive, more_negative in result_rows:
+        metrics_by_subset[subset].append(
+            metric_row(
+                f"STANCE results: {dataset}",
+                same,
+                np.nan,
+                np.nan,
+                n=denominator,
+                section="STANCE Results",
+                detail="",
+                model_value=more_positive,
+                original_value=more_negative,
+            )
+        )
+        text_lines.append("	".join([dataset, fmt(same), fmt(more_positive), fmt(more_negative)]))
+    text_lines.append("")
 
 def feature_stats(args, subset: str, feature: str) -> Tuple[float, float, float, int]:
     original = safe_read_csv(feature_csv(args, ORIGINAL, "test", subset))
@@ -776,7 +955,7 @@ def write_outputs(args, metrics_by_subset: Dict[str, List[Dict[str, Any]]], text
 
     for subset, rows in metrics_by_subset.items():
         metrics_path = args.output_dir / f"metrics-{subset}.csv"
-        columns = ["metric", "section", "mean_diff", "std_diff", "p_value", "n", "auroc", "accuracy", "detail"]
+        columns = ["metric", "section", "model_value", "original_value", "mean_diff", "std_diff", "p_value", "n", "auroc", "accuracy", "detail"]
         pd.DataFrame(rows, columns=columns).to_csv(metrics_path, index=False)
         print(f"Wrote metrics: {metrics_path}")
 
@@ -788,13 +967,17 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--protocol", required=True)
     parser.add_argument("--model", required=True)
-    parser.add_argument("--asr-model", required=True)
+    parser.add_argument("--asr-models", nargs="+", required=True)
+    parser.add_argument("--language-id-model", default="facebook/mms-lid-126")
+    parser.add_argument("--dialect-id-model", default="tiantiaf/voxlect-english-dialect-whisper-large-v3")
+    parser.add_argument("--utmos-model", default="tarepan/SpeechMOS:v1.2.0 utmos22_strong")
+    parser.add_argument("--vad-model", default="silero-vad")
     parser.add_argument("--stance-model", required=True)
     parser.add_argument("--sbert-model", default="sentence-transformers/all-MiniLM-L6-v2")
     parser.add_argument("--statistical-test", default="Welch t-test", choices=sorted(STATISTICAL_TESTS))
     parser.add_argument("--selection-method", default="end_with_question")
-    parser.add_argument("--min-turns", type=int, default=1)
-    parser.add_argument("--min-speakers", type=int, default=1)
+    parser.add_argument("--min-turns", type=int, default=2)
+    parser.add_argument("--min-speakers", type=int, default=2)
     parser.add_argument("--data-root", type=Path, required=True)
     parser.add_argument("--results-root", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
@@ -809,8 +992,9 @@ def main() -> int:
         "",
     ]
 
-    setup_section(args, text_lines)
     data_statistics_section(args, text_lines)
+    setup_section(args, text_lines)
+    setup_details_section(args, text_lines)
     base_metrics_section(args, metrics_by_subset, text_lines)
     language_id_section(args, metrics_by_subset, text_lines)
     dialect_id_section(args, metrics_by_subset, text_lines)

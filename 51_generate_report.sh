@@ -55,7 +55,6 @@ if [[ "$run_short" -eq 1 ]]; then
     $(python_cmd 'SB51-S1' --cpu) bin/reports/generate_short_report.py \
         --protocol "$protocol" \
         --model "$model" \
-        --asr-model "$asr" \
         --asr-models "${asr_models[@]}" \
         --language-id-model "$language_id_model" \
         --dialect-id-model "$dialect_id_model" \
@@ -63,8 +62,8 @@ if [[ "$run_short" -eq 1 ]]; then
         --sbert-model "${sbert_model:-sentence-transformers/all-MiniLM-L6-v2}" \
         --statistical-test "${statistical_test:-Welch t-test}" \
         --selection-method "end_with_question" \
-        --min-turns 1 \
-        --min-speakers 1 \
+        --min-turns 2 \
+        --min-speakers 2 \
         --data-root "$data_dir" \
         --results-root "results/$protocol" \
         --output-dir "$report_dir" \
@@ -94,7 +93,7 @@ if [[ "$run_long" -eq 1 ]]; then
   for model in "${eval_models[@]}"; do
     report_dir="reports/$protocol/$model"
     echo "Stage 3: generating detailed HTML report for model:$model"
-    $(python_cmd 'SB51-S3' --cpu) bin/reports/generate_html_report.py \
+    python bin/reports/generate_html_report.py \
         --protocol "$protocol" \
         --model "$model" \
         --report-dir "$report_dir" \

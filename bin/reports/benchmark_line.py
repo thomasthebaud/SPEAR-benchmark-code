@@ -28,9 +28,61 @@ def numeric(series: pd.Series) -> pd.Series:
     return pd.to_numeric(series, errors="coerce").replace([np.inf, -np.inf], np.nan)
 
 
+
+LANGUAGE_NAME_OVERRIDES = {
+    "eng": "English",
+    "fra": "French",
+    "fre": "French",
+    "spa": "Spanish",
+    "deu": "German",
+    "ger": "German",
+    "ita": "Italian",
+    "por": "Portuguese",
+    "nld": "Dutch",
+    "dut": "Dutch",
+    "rus": "Russian",
+    "zho": "Chinese",
+    "chi": "Chinese",
+    "cmn": "Mandarin Chinese",
+    "jpn": "Japanese",
+    "kor": "Korean",
+    "ara": "Arabic",
+    "hin": "Hindi",
+    "urd": "Urdu",
+    "ben": "Bengali",
+    "tur": "Turkish",
+    "vie": "Vietnamese",
+    "tha": "Thai",
+    "ind": "Indonesian",
+    "msa": "Malay",
+    "tgl": "Tagalog",
+    "fil": "Filipino",
+}
+
+
+def language_display_name(code: str) -> str:
+    code = str(code).strip().lower()
+    if not code:
+        return ""
+    if code in LANGUAGE_NAME_OVERRIDES:
+        return LANGUAGE_NAME_OVERRIDES[code]
+    try:
+        import pycountry
+
+        language = pycountry.languages.get(alpha_3=code) or pycountry.languages.get(alpha_2=code)
+        if language is not None:
+            return getattr(language, "name", code)
+    except Exception:
+        pass
+    return code
+
+
 def valid_text(series: pd.Series) -> pd.Series:
     values = series.astype(str).str.strip()
-    return values[values.notna() & (values != "") & (values.str.lower() != "nan")]
+    normalized = values.str.lower()
+    valid = values.notna() & (values != "") & (normalized != "nan")
+    valid &= ~normalized.str.startswith(("unknown", "unkown"), na=False)
+    return values[valid]
 
 
 def percentage(mask: pd.Series | np.ndarray, denominator: int) -> float:
@@ -52,7 +104,7 @@ def dialect_id_path(results_root: Path, model: str, subset: str) -> Path:
 
 
 def naturalness_path(results_root: Path, model: str, subset: str) -> Path:
-    return results_root / model / "test" / subset / "naturalness_scores.csv"
+    return results_root / model / "test" / subset / "naturalness_scores_normalized.csv"
 
 
 def stances_path(results_root: Path, model: str, subset: str) -> Path:
@@ -80,11 +132,23 @@ def base_metric_frames(results_root: Path, model: str, subsets: list[str]) -> li
     return frames
 
 
-def average_column(frames: list[pd.DataFrame], column: str) -> float:
-    values = [numeric(frame[column]) for frame in frames if column in frame.columns]
+def average_column(frames: list[pd.DataFrame], column: str, *, scale: float = 1.0) -> float:
+    values = [numeric(frame[column]) * scale for frame in frames if column in frame.columns]
     if not values:
         return np.nan
     return float(pd.concat(values, ignore_index=True).dropna().mean())
+
+
+def dialogue_interruption_fraction(frames: list[pd.DataFrame]) -> str:
+    interrupted = 0
+    total = 0
+    for frame in frames:
+        total += len(frame)
+        if "interruptions" in frame.columns:
+            interrupted += int((numeric(frame["interruptions"]).fillna(0) > 0).sum())
+        elif "interrupted" in frame.columns:
+            interrupted += int((numeric(frame["interrupted"]).fillna(0) > 0).sum())
+    return f"{interrupted}/{total}" if total else ""
 
 
 def wer_columns(frames: list[pd.DataFrame]) -> list[str]:
@@ -109,6 +173,7 @@ def wer_metrics(frames: list[pd.DataFrame]) -> tuple[float, float]:
         values = pd.concat(column_values, ignore_index=True).dropna()
         if values.empty:
             continue
+        values = values * 100.0
         all_values.append(values)
         asr_means.append(float(values.mean()))
 
@@ -117,48 +182,39 @@ def wer_metrics(frames: list[pd.DataFrame]) -> tuple[float, float]:
     return average_wer, wer_std_between_asr
 
 
-def interruption_metrics(frames: list[pd.DataFrame]) -> tuple[float, float]:
-    interrupted_masks = []
-    interrupted_times = []
-    total_rows = 0
-
-    for frame in frames:
-        total_rows += len(frame)
-        if "interruptions" in frame.columns:
-            mask = numeric(frame["interruptions"]).fillna(0) > 0
-        elif "interrupted" in frame.columns:
-            mask = numeric(frame["interrupted"]).fillna(0) > 0
-        else:
-            mask = pd.Series(False, index=frame.index)
-        interrupted_masks.append(mask)
-
-        if "interrupted" in frame.columns:
-            interrupted_times.append(numeric(frame.loc[mask, "interrupted"]))
-        elif "interruptions" in frame.columns:
-            interrupted_times.append(numeric(frame.loc[mask, "interruptions"]))
-
-    if not interrupted_masks:
-        return np.nan, np.nan
-
-    interrupted = pd.concat(interrupted_masks, ignore_index=True)
-    percentage_interrupted = percentage(interrupted, total_rows)
-    if not interrupted_times:
-        return percentage_interrupted, np.nan
-    times = pd.concat(interrupted_times, ignore_index=True).dropna()
-    return percentage_interrupted, float(times.mean()) if not times.empty else np.nan
+def interruption_metrics(frames: list[pd.DataFrame]) -> tuple[float, str, float]:
+    avg_interruptions = average_column(frames, "interruption_segments")
+    fraction = dialogue_interruption_fraction(frames)
+    interrupted_time_s = average_column(frames, "interrupted", scale=1.0 / 1000.0)
+    return avg_interruptions, fraction, interrupted_time_s
 
 
-def english_percentage(results_root: Path, model: str, subsets: list[str]) -> float:
-    numerator = 0
+def language_counts(results_root: Path, model: str, subsets: list[str]) -> tuple[pd.Series, int]:
+    counts = []
     denominator = 0
     for subset in subsets:
         frame = safe_read_csv(language_id_path(results_root, model, subset))
         if frame is None or "language" not in frame.columns:
             continue
         languages = valid_text(frame["language"]).str.lower()
-        numerator += int((languages == "eng").sum())
         denominator += int(len(languages))
-    return 100.0 * numerator / denominator if denominator else np.nan
+        counts.append(languages.value_counts())
+    if not counts:
+        return pd.Series(dtype=int), 0
+    merged = pd.concat(counts, axis=1).fillna(0).sum(axis=1).sort_values(ascending=False)
+    return merged.astype(int), denominator
+
+
+def second_language(results_root: Path, model: str, subsets: list[str]) -> tuple[str, float]:
+    counts, denominator = language_counts(results_root, model, subsets)
+    if denominator == 0 or len(counts) < 2:
+        return "", np.nan
+    language = str(counts.index[1])
+    return language_display_name(language), float(100.0 * int(counts.iloc[1]) / denominator)
+
+def english_percentage(results_root: Path, model: str, subsets: list[str]) -> float:
+    counts, denominator = language_counts(results_root, model, subsets)
+    return 100.0 * int(counts.get("eng", 0)) / denominator if denominator else np.nan
 
 
 def dialect_percentages(results_root: Path, model: str, subsets: list[str]) -> tuple[float, float]:
@@ -255,8 +311,9 @@ def resolve_output_path(args: argparse.Namespace) -> Path:
 def compute_benchmark_line(args: argparse.Namespace) -> dict[str, object]:
     frames = base_metric_frames(args.results_root, args.model, args.subsets)
     average_wer, wer_std_between_asr = wer_metrics(frames)
-    interrupted_pct, average_interruption_time = interruption_metrics(frames)
+    avg_interruptions, interruption_fraction, interrupted_time_s = interruption_metrics(frames)
     same_dialect_pct, north_america_dialect_pct = dialect_percentages(args.results_root, args.model, args.subsets)
+    second_lang, second_lang_pct = second_language(args.results_root, args.model, args.subsets)
     stance_same_pct, stance_more_negative_pct, stance_more_positive_pct = stance_metrics(args.results_root, args.model, args.subsets)
 
     return {
@@ -264,11 +321,14 @@ def compute_benchmark_line(args: argparse.Namespace) -> dict[str, object]:
         "model": args.model,
         "avg_latency": average_column(frames, "latency"),
         "avg_UTMOS": average_column(frames, "UTMOS"),
-        "avg_WER": average_wer,
-        "WER_std_between_asr_models": wer_std_between_asr,
-        "interrupted_pct": interrupted_pct,
-        "avg_interruption_time": average_interruption_time,
+        "avg_WER_%": average_wer,
+        "WER_%_std_between_asr_models": wer_std_between_asr,
+        "average_number_of_interruptions_per_dialogue": avg_interruptions,
+        "number_of_dialogues_with_interruption": interruption_fraction,
+        "interrupted_time_s": interrupted_time_s,
         "EN_lang_%": english_percentage(args.results_root, args.model, args.subsets),
+        "second_most_spoken_language": second_lang,
+        "percentage_2nd_language": second_lang_pct,
         "same_dialect_%": same_dialect_pct,
         "NA_dialect_%": north_america_dialect_pct,
         "avg_emo_naturalness_logit": naturalness_average(args.results_root, args.model, args.subsets),

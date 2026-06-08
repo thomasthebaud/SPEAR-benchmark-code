@@ -49,6 +49,29 @@ DIALECT_LABELS = [
     "South Asia",
     "Welsh",
 ]
+DIALECT_PROFILE_GROUPS = [
+    ("East Asia", ["East Asia"]),
+    ("UK", ["English", "Welsh", "Scottish"]),
+    ("Germanic", ["Germanic"]),
+    ("Irish", ["Irish", "Northern Irish"]),
+    ("North America", ["North America"]),
+    ("Oceania", ["Oceania"]),
+    ("Romance", ["Romance"]),
+    ("Semitic", ["Semitic"]),
+    ("Slavic", ["Slavic"]),
+    ("South African", ["South African"]),
+    ("Southeast Asia", ["Southeast Asia"]),
+    ("South Asia", ["South Asia"]),
+]
+DIALECT_PROFILE_LABELS = [label for label, _ in DIALECT_PROFILE_GROUPS]
+
+
+def grouped_dialect_scores(vector: list[float]) -> dict[str, float]:
+    by_label = dict(zip(DIALECT_LABELS, vector))
+    return {
+        group: float(sum(by_label.get(label, 0.0) for label in labels))
+        for group, labels in DIALECT_PROFILE_GROUPS
+    }
 
 sns.set_theme(style="whitegrid", context="talk")
 
@@ -146,7 +169,10 @@ def load_base_metric_values(results_root: Path, model: str, metric: str) -> Opti
             values = numeric(frame[metric]).dropna()
             if values.empty:
                 continue
-            frames.append(pd.DataFrame({"value": values, "dataset": label, "subset": subset, "metric": metric}))
+            display_metric = "interrupted time (s)" if metric == "interrupted" else metric
+            if metric == "interrupted":
+                values = values / 1000.0
+            frames.append(pd.DataFrame({"value": values, "dataset": label, "subset": subset, "metric": display_metric}))
     if not frames:
         return None
     return pd.concat(frames, ignore_index=True)
@@ -167,7 +193,7 @@ def load_asr_error_values(results_root: Path, model: str, error_type: str) -> Op
             for column in columns:
                 if column not in frame.columns:
                     continue
-                values = numeric(frame[column]).dropna()
+                values = numeric(frame[column]).dropna() * 100.0
                 if values.empty:
                     continue
                 asr_system = "default" if column == error_type else column.split("_", 1)[1]
@@ -209,32 +235,36 @@ def graph_asr_error_histogram(results_root: Path, model: str, error_type: str, o
     data = remove_iqr_outliers(data, ["subset", "metric", "asr_system"])
     if data.empty:
         return
-    subsets = [subset for subset in SUBSETS if subset in set(data["subset"])]
-    fig, axes = plt.subplots(len(subsets), 1, figsize=(11, max(4.5, 4.5 * len(subsets))), sharex=True, squeeze=False)
-    for ax, subset in zip(axes[:, 0], subsets):
-        sub = data[data["subset"] == subset]
-        sns.violinplot(
+    panels = []
+    for subset in SUBSETS:
+        subset_data = data[data["subset"] == subset]
+        for asr_system in sorted(subset_data["asr_system"].dropna().astype(str).unique()):
+            panels.append((subset, asr_system))
+    if not panels:
+        return
+    fig, axes = plt.subplots(len(panels), 1, figsize=(11, max(4.0, 3.2 * len(panels))), sharex=True, squeeze=False)
+    for ax, (subset, asr_system) in zip(axes[:, 0], panels):
+        sub = data[(data["subset"] == subset) & (data["asr_system"].astype(str) == asr_system)]
+        sns.histplot(
             data=sub,
             x="value",
-            y="asr_system",
             hue="dataset",
             hue_order=["original", "model"],
+            bins=30,
+            stat="density",
+            common_norm=False,
+            element="step",
+            fill=True,
+            alpha=0.30,
+            kde=True,
             palette=DATASET_PALETTE,
-            orient="h",
-            inner="quartile",
-            cut=0,
-            linewidth=0.8,
-            density_norm="width",
             ax=ax,
         )
-        remove_axis_legend(ax)
         ax.set_title(subset.title())
-        ax.set_xlabel(error_type)
-        ax.set_ylabel("ASR system")
-    legend_handles = [Patch(facecolor=DATASET_PALETTE[label], label=label) for label in ["original", "model"]]
-    fig.legend(legend_handles, ["original", "model"], title="Dataset", loc="upper center", ncol=2, bbox_to_anchor=(0.5, 1.02), frameon=True)
-    fig.suptitle(f"{error_type}: Original vs Model Across ASR Systems", y=1.04)
-    fig.tight_layout(rect=(0, 0, 1, 0.96))
+        ax.set_xlabel(f"{error_type} (%)")
+        ax.set_ylabel(asr_system)
+    fig.suptitle(f"{error_type}: Original vs Model Across ASR Systems", y=1.02)
+    fig.tight_layout()
     save_figure(fig, output_path)
 
 
@@ -243,7 +273,7 @@ def graph_basic_metric_histograms(results_root: Path, model: str, output_dir: Pa
     for error_type in ["CER", "WER"]:
         graph_asr_error_histogram(results_root, model, error_type, output_dir / f"{error_type}.png")
 
-    for metric in [metric for metric in available_base_metric_columns(results_root, model) if not metric.startswith(("CER", "WER")) and metric != "interruptions"]:
+    for metric in [metric for metric in available_base_metric_columns(results_root, model) if not metric.startswith(("CER", "WER"))]:
         data = load_base_metric_values(results_root, model, metric)
         if data is None or data.empty:
             continue
@@ -264,11 +294,12 @@ def graph_basic_metric_histograms(results_root: Path, model: str, output_dir: Pa
                 element="step",
                 fill=True,
                 alpha=0.35,
+                kde=True,
                 palette=DATASET_PALETTE,
                 ax=ax,
             )
             ax.set_title(subset.title())
-            ax.set_xlabel(metric)
+            ax.set_xlabel(data["metric"].iloc[0] if "metric" in data else metric)
             ax.set_ylabel("Density")
         fig.suptitle(f"{metric}: Original vs Model", y=1.03)
         fig.tight_layout()
@@ -278,81 +309,75 @@ def graph_basic_metric_histograms(results_root: Path, model: str, output_dir: Pa
     print(f"Wrote basic metric histograms to {output_dir}")
 
 
-def graph_basic_metrics_violin(results_root: Path, model: str, output_path: Path) -> None:
+def graph_basic_metrics_histograms(results_root: Path, model: str, output_path: Path) -> None:
     frames = []
-    metric_order = []
+    plot_order = []
     for error_type in ["CER", "WER"]:
         data = load_asr_error_values(results_root, model, error_type)
         if data is not None:
+            data = data.copy()
+            data["plot_metric"] = data["metric"].astype(str) + " (%): " + data["asr_system"].astype(str)
             frames.append(data)
-            metric_order.append(error_type)
-    for metric in [metric for metric in available_base_metric_columns(results_root, model) if not metric.startswith(("CER", "WER")) and metric != "interruptions"]:
+            for asr_system in sorted(data["asr_system"].dropna().astype(str).unique()):
+                plot_order.append(f"{error_type} (%): {asr_system}")
+    for metric in [metric for metric in available_base_metric_columns(results_root, model) if not metric.startswith(("CER", "WER"))]:
         data = load_base_metric_values(results_root, model, metric)
         if data is not None:
+            data = data.copy()
+            plot_metric = str(data["metric"].iloc[0]) if "metric" in data and not data.empty else metric
+            data["plot_metric"] = plot_metric
             frames.append(data)
-            metric_order.append(metric)
+            plot_order.append(plot_metric)
     if not frames:
         print("[WARN] No base metrics found; skipping basic_metrics.png.")
         return
     data = pd.concat(frames, ignore_index=True)
-    group_cols = ["subset", "metric"] + (["asr_system"] if "asr_system" in data.columns else [])
+    group_cols = ["subset", "plot_metric"]
     data = remove_iqr_outliers(data, group_cols)
     if data.empty:
         print("[WARN] All base metric rows were filtered as outliers; skipping basic_metrics.png.")
         return
     available_subsets = [subset for subset in SUBSETS if subset in set(data["subset"])]
-    metrics = [metric for metric in metric_order if metric in set(data["metric"])]
-    fig, axes = plt.subplots(len(metrics), len(available_subsets), figsize=(8.5 * len(available_subsets), 3.8 * len(metrics)), squeeze=False)
-    for row_idx, metric in enumerate(metrics):
+    plot_metrics = [metric for metric in plot_order if metric in set(data["plot_metric"])]
+    fig, axes = plt.subplots(len(plot_metrics), len(available_subsets), figsize=(8.5 * len(available_subsets), 3.4 * len(plot_metrics)), squeeze=False)
+    for row_idx, plot_metric in enumerate(plot_metrics):
         for col_idx, subset in enumerate(available_subsets):
             ax = axes[row_idx, col_idx]
-            sub = data[(data["subset"] == subset) & (data["metric"] == metric)]
+            sub = data[(data["subset"] == subset) & (data["plot_metric"] == plot_metric)]
             if sub.empty:
                 ax.set_axis_off()
                 continue
-            if metric in {"CER", "WER"} and "asr_system" in sub.columns:
-                sns.violinplot(
-                    data=sub,
-                    x="value",
-                    y="asr_system",
-                    hue="dataset",
-                    hue_order=["original", "model"],
-                    palette=DATASET_PALETTE,
-                    orient="h",
-                    inner="quartile",
-                    cut=0,
-                    linewidth=0.8,
-                    density_norm="width",
-                    ax=ax,
-                )
-                ax.set_ylabel(metric if col_idx == 0 else "")
-            else:
-                sns.violinplot(
-                    data=sub,
-                    x="value",
-                    y="dataset",
-                    hue="dataset",
-                    hue_order=["original", "model"],
-                    palette=DATASET_PALETTE,
-                    orient="h",
-                    inner="quartile",
-                    cut=0,
-                    linewidth=0.8,
-                    density_norm="width",
-                    ax=ax,
-                )
-                ax.set_ylabel(metric if col_idx == 0 else "")
-                ax.set_yticks([])
-                ax.tick_params(axis="y", left=False, labelleft=False)
-            remove_axis_legend(ax)
+            sns.histplot(
+                data=sub,
+                x="value",
+                hue="dataset",
+                hue_order=["original", "model"],
+                bins=30,
+                stat="density",
+                common_norm=False,
+                element="step",
+                fill=True,
+                alpha=0.30,
+                kde=True,
+                palette=DATASET_PALETTE,
+                ax=ax,
+            )
+            if ax.get_legend() is not None:
+                ax.get_legend().remove()
             ax.set_title(subset.title() if row_idx == 0 else "")
-            ax.set_xlabel("")
+            if " (%): " in plot_metric:
+                metric_label, system_label = plot_metric.split(" (%): ", 1)
+                ax.set_xlabel(f"{metric_label} (%)")
+                ax.set_ylabel(system_label if col_idx == 0 else "")
+            else:
+                ax.set_xlabel(plot_metric)
+                ax.set_ylabel("Density")
             ax.tick_params(axis="x", labelsize=10)
             ax.tick_params(axis="y", labelsize=10)
 
     legend_handles = [Patch(facecolor=DATASET_PALETTE[label], label=label) for label in ["original", "model"]]
     fig.legend(legend_handles, ["original", "model"], title="Dataset", loc="upper center", ncol=2, bbox_to_anchor=(0.5, 1.02), frameon=True)
-    fig.suptitle("Basic Metric Distributions: Original vs Model", y=1.04)
+    fig.suptitle("Intelligibility and Interruptions histograms: Original vs Model", y=1.04)
     fig.tight_layout(rect=(0, 0, 1, 0.96))
     save_figure(fig, output_path)
 
@@ -546,7 +571,7 @@ def graph_dialect_scores(results_root: Path, model: str, output_path: Path) -> N
             for vector in frame[score_column].map(parse_score_vector).dropna():
                 rows.extend(
                     {"subset": subset, "field": field, "dialect": dialect, "score": score}
-                    for dialect, score in zip(DIALECT_LABELS, vector)
+                    for dialect, score in grouped_dialect_scores(vector).items()
                 )
     if not rows:
         print("[WARN] Missing dialect score vectors; skipping dialect_scores.png.")
@@ -555,46 +580,57 @@ def graph_dialect_scores(results_root: Path, model: str, output_path: Path) -> N
     data = pd.DataFrame(rows)
     data["score"] = numeric(data["score"])
     data = data.dropna(subset=["score"])
-    positive_scores = data.loc[data["score"] > 0, "score"]
-    if positive_scores.empty:
-        print("[WARN] Dialect score vectors do not contain positive values; skipping dialect_scores.png.")
+    if data.empty:
+        print("[WARN] Dialect score vectors do not contain numeric values; skipping dialect_scores.png.")
         return
-    score_floor = float(positive_scores.min()) / 10.0
-    data["score_plot"] = data["score"].where(data["score"] > 0, score_floor)
+
+    score_floor = 1e-8
+    data["score_plot"] = data["score"].clip(lower=score_floor)
     subsets = [subset for subset in SUBSETS if subset in set(data["subset"])]
-    fig, axes = plt.subplots(1, len(subsets), figsize=(9 * len(subsets), 7.5), sharex=True, squeeze=False)
-    legend_handles = None
-    legend_labels = None
+    if not subsets:
+        print("[WARN] No subset dialect score vectors found; skipping dialect_scores.png.")
+        return
+
+    angles = np.linspace(0, 2 * np.pi, len(DIALECT_PROFILE_LABELS), endpoint=False)
+    closed_angles = np.concatenate([angles, angles[:1]])
+    palette = {"question": "#4C72B0", "answer": "#DD8452"}
+    fig, axes = plt.subplots(1, len(subsets), figsize=(8.5 * len(subsets), 8.5), subplot_kw={"projection": "polar"}, squeeze=False)
+    legend_handles = []
+    legend_labels = []
+
     for ax, subset in zip(axes[0], subsets):
         sub = data[data["subset"] == subset]
-        sns.boxplot(
-            data=sub,
-            x="score_plot",
-            y="dialect",
-            hue="field",
-            order=DIALECT_LABELS,
-            hue_order=["question", "answer"],
-            orient="h",
-            showfliers=False,
-            linewidth=0.8,
-            ax=ax,
+        profile = (
+            sub.groupby(["field", "dialect"], dropna=False)["score_plot"]
+            .median()
+            .unstack("dialect")
+            .reindex(index=["question", "answer"], columns=DIALECT_PROFILE_LABELS)
         )
-        handles, labels = ax.get_legend_handles_labels()
-        if handles and legend_handles is None:
-            legend_handles, legend_labels = handles, labels
-        remove_axis_legend(ax)
-        ax.set_title(subset.title())
-        ax.set_xscale("log")
-        # ax.set_xlim(score_floor, 1.0)
-        ax.set_xlabel("Dialect score (log scale)")
-        ax.set_ylabel("Dialect" if ax is axes[0, 0] else "")
-        if ax is not axes[0, 0]:
-            ax.set_yticks([])
-            ax.tick_params(axis="y", left=False, labelleft=False)
+        for field in ["question", "answer"]:
+            if field not in profile.index:
+                continue
+            values = pd.to_numeric(profile.loc[field], errors="coerce").fillna(score_floor).clip(lower=score_floor).to_numpy(dtype=float)
+            closed_values = np.concatenate([values, values[:1]])
+            line, = ax.plot(closed_angles, closed_values, color=palette[field], linewidth=2.0, label=field)
+            ax.fill(closed_angles, closed_values, color=palette[field], alpha=0.14)
+            if field not in legend_labels:
+                legend_handles.append(line)
+                legend_labels.append(field)
+
+        ax.set_title(subset.title(), pad=24)
+        ax.set_yscale("log")
+        ax.set_ylim(score_floor, 1.0)
+        ax.set_yticks([1e-8, 1e-6, 1e-4, 1e-2, 1.0])
+        ax.set_yticklabels(["1e-8", "1e-6", "1e-4", "1e-2", "1"], fontsize=8)
+        ax.set_xticks(angles)
+        ax.set_xticklabels(DIALECT_PROFILE_LABELS, fontsize=8)
+        ax.tick_params(axis="x", pad=8)
+        ax.grid(True, alpha=0.45)
+
     if legend_handles:
-        fig.legend(legend_handles, legend_labels, title="Field", loc="upper center", ncol=2, bbox_to_anchor=(0.5, 1.01), frameon=True)
-    fig.suptitle("Dialect Score Distributions: Question vs Answer", y=1.035)
-    fig.tight_layout(rect=(0, 0, 1, 0.98))
+        fig.legend(legend_handles, legend_labels, title="Field", loc="upper center", ncol=2, bbox_to_anchor=(0.5, 1.02), frameon=True)
+    fig.suptitle("Dialect Score Profiles: Question vs Answer", y=1.04)
+    fig.tight_layout(rect=(0, 0, 1, 0.96))
     save_figure(fig, output_path)
 
 
@@ -731,7 +767,7 @@ def load_naturalness_relationship_values(results_root: Path, model: str) -> Opti
     frames = []
     subset = "naturalistic"
     for label_model, label in [(ORIGINAL, "original"), (model, "model")]:
-        scores = safe_read_csv(result_file(results_root, label_model, "test", subset, "naturalness_scores.csv"))
+        scores = safe_read_csv(result_file(results_root, label_model, "test", subset, "naturalness_scores_normalized.csv"))
         inference = safe_read_csv(result_file(results_root, label_model, "test", subset, "naturalness_inference_input.csv"))
         if scores is None or inference is None:
             continue
@@ -820,7 +856,7 @@ def graph_emotional_naturalness_by_relationship(results_root: Path, model: str, 
         frameon=True,
     )
     ax.set_title("Naturalistic Emotional Naturalness by Relationship")
-    ax.set_xlabel("Emotional naturalness logit")
+    ax.set_xlabel("Normalized emotional naturalness logit")
     ax.set_ylabel("Relationship")
     fig.tight_layout()
     save_figure(fig, output_path)
@@ -830,7 +866,7 @@ def graph_emotional_naturalness(results_root: Path, model: str, output_path: Pat
     subset_frames = []
     for subset in SUBSETS:
         for label_model, label in [(ORIGINAL, "original"), (model, "model")]:
-            frame = safe_read_csv(result_file(results_root, label_model, "test", subset, "naturalness_scores.csv"))
+            frame = safe_read_csv(result_file(results_root, label_model, "test", subset, "naturalness_scores_normalized.csv"))
             if frame is None or "naturalness_logit" not in frame.columns:
                 continue
             values = numeric(frame["naturalness_logit"]).dropna()
@@ -859,8 +895,8 @@ def graph_emotional_naturalness(results_root: Path, model: str, output_path: Pat
             alpha=0.35,
             ax=ax,
         )
-        ax.set_title(f"Emotional Naturalness Logits - {subset}")
-        ax.set_xlabel("naturalness_logit")
+        ax.set_title(f"Normalized Emotional Naturalness Logits - {subset}")
+        ax.set_xlabel("normalized naturalness_logit")
         ax.set_ylabel("Density")
     fig.tight_layout()
     save_figure(fig, output_path)
@@ -1151,7 +1187,7 @@ def main() -> int:
 
     graphs_dir = args.output_dir / "graphs"
     graph_basic_metric_histograms(args.results_root, args.model, graphs_dir / "basic_metric_graphs")
-    graph_basic_metrics_violin(args.results_root, args.model, graphs_dir / "basic_metrics.png")
+    graph_basic_metrics_histograms(args.results_root, args.model, graphs_dir / "basic_metrics.png")
     graph_feature_histograms(args.results_root, args.model, graphs_dir / "feat_graphs")
     graph_stances(args.results_root, args.model, graphs_dir / "stances.png")
     graph_emotional_naturalness(args.results_root, args.model, graphs_dir / "emo_naturalness.png")
