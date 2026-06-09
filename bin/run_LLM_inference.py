@@ -85,20 +85,30 @@ if __name__ == "__main__":
     parser.add_argument("--openai-api-key",type=str, help="")
     parser.add_argument("--org",type=str, help="")
     parser.add_argument("--stop-on-fail", action="store_true", help="Stop at the first failed inference instead of skipping failed rows.")
+    parser.add_argument("--shard-index", type=int, default=0, help="Zero-based shard index to process.")
+    parser.add_argument("--num-shards", type=int, default=1, help="Total number of metadata shards.")
+    parser.add_argument("--output-csv-name", default="metadata.csv", help="Output metadata CSV filename inside the split/subset output directory.")
 
     args = parser.parse_args()
+    if args.num_shards < 1:
+        raise ValueError(f"--num-shards must be >= 1, got {args.num_shards}")
+    if args.shard_index < 0 or args.shard_index >= args.num_shards:
+        raise ValueError(f"--shard-index must be in [0, {args.num_shards - 1}], got {args.shard_index}")
     model_proxy = load_proxy_module(args.model)
     sr = 16_000 
 
     input_dir = Path(args.audio_dir) / args.split / args.subset
     output_dir = Path(args.output_dir) / args.split / args.subset
     output_dir.mkdir(parents=True, exist_ok=True)
-    output_csv = output_dir / "metadata.csv"
+    output_csv = output_dir / args.output_csv_name
 
     if args.prompt=='None':print("Warning: No prompt provided, only feeding the audios.")
 
     metadata = pd.read_csv(input_dir / "metadata.csv")
     print(f"found {len(metadata)} rows in {input_dir}/metadata.csv")
+    if args.num_shards > 1:
+        metadata = metadata.iloc[args.shard_index::args.num_shards].copy()
+        print(f"processing shard {args.shard_index + 1}/{args.num_shards} with {len(metadata)} rows")
 
     existing_output = load_existing_output(output_csv)
     if existing_output is not None and len(existing_output) == len(metadata):
@@ -117,6 +127,9 @@ if __name__ == "__main__":
     failed_indices = {}
 
     remaining = metadata[~metadata["audio_path"].astype(str).isin(processed_audio_paths)]
+    remaining = remaining[remaining['question_end_time']>1] # filter out rows with missing question_end_time which is needed for computing answer_start_time, these rows can be processed separately after the rest of the data has been processed successfully.
+    # print(f"Previously failed:", remaining.iloc[0])
+    # remaining = remaining.iloc[2:] #ignore the first 10 rows which is often the one that causes issues and is likely to fail repeatedly, allowing the rest of the rows to be processed and saved successfully. This is a practical workaround to avoid getting stuck on a single problematic row when resuming from a failure. The failed row can be investigated separately after the rest of the data has been processed.
 
     for idx, row in tqdm(remaining.iterrows(), total=remaining.shape[0], desc=f"Processing {args.split}/{args.subset}"):
         input_audio_path = Path(row['audio_path'])

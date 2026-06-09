@@ -7,6 +7,7 @@ import threading
 import wave
 from pathlib import Path
 from typing import Optional
+import torch
 
 """
 Adapted from the github https://github.com/gpt-omni/mini-omni/blob/main/server.py 
@@ -137,8 +138,6 @@ def clear_mini_omni_runtime(client) -> None:
         pass
 
     try:
-        import torch
-
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
     except Exception:
@@ -165,9 +164,8 @@ def infer_one_audio(
     temperature: float = 0.9,
     top_k: int = 1,
     top_p: float = 1.0,
-) -> bytes:
-    """Run Mini-Omni audio-to-audio inference for one audio file and return WAV bytes."""
-    stream_stride = int(os.environ.get("MINI_OMNI_STREAM_STRIDE", stream_stride or DEFAULT_STREAM_STRIDE))
+) -> tuple[bytes, str]:
+    """Run Mini-Omni audio-to-audio inference for one audio file and return a complete WAV."""
     max_tokens = int(os.environ.get("MINI_OMNI_MAX_TOKENS", max_tokens or DEFAULT_MAX_TOKENS))
     client = load_mini_omni_model()
 
@@ -175,20 +173,16 @@ def infer_one_audio(
     try:
         if not is_wav_long_enough(wav_path):
             raise ValueError(f"Input audio is too short after WAV conversion: {audio_path}")
-        pcm_chunks = []
         try:
             with _CLIENT_LOCK:
                 maybe_synchronize_cuda()
-                for chunk in client.run_AT_batch_stream(
+                pcm_audio, transcript = client.run_AA_nonstream(
                     str(wav_path),
-                    stream_stride=stream_stride,
                     max_returned_tokens=max_tokens,
                     temperature=temperature,
                     top_k=top_k,
                     top_p=top_p,
-                ):
-                    if chunk:
-                        pcm_chunks.append(chunk)
+                )
                 maybe_synchronize_cuda()
         except Exception as exc:
             clear_mini_omni_runtime(client)
@@ -199,10 +193,9 @@ def infer_one_audio(
         except Exception:
             pass
 
-    pcm_audio = b"".join(pcm_chunks)
     if not pcm_audio:
         raise RuntimeError(f"Mini-Omni produced no audio for {audio_path}")
-    return pcm16_to_wav_bytes(pcm_audio)
+    return pcm16_to_wav_bytes(pcm_audio), transcript
 
 
 def get_reply_with_audio(
@@ -216,10 +209,11 @@ def get_reply_with_audio(
     """Direct in-process Mini-Omni proxy compatible with run_LLM_inference.py."""
 
     try:
-        audio_bytes_out = infer_one_audio(audio_path, temperature=temp)
+        audio_bytes_out, transcript = infer_one_audio(audio_path, temperature=temp)
     except Exception as exc:
+        if os.environ.get("MINI_OMNI_RAISE_ERRORS", "0") == "1":
+            raise
         return None, None, str(exc), False, None
 
-    transcript = ""
-    finish_reason = "direct_inference"
+    finish_reason = "direct_nonstream_inference"
     return audio_bytes_out, transcript, finish_reason, True, NON_STREAMING_ANSWER_START_S

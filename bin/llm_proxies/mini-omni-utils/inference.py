@@ -51,6 +51,61 @@ _answer_a = audio_vocabsize + 3
 _split = audio_vocabsize + 4
 
 
+def invalid_snac_tokens(snac_tokens):
+    invalid = []
+    for pos, token in enumerate(snac_tokens):
+        if token == "#":
+            continue
+        try:
+            token_id = int(token)
+        except (TypeError, ValueError):
+            invalid.append((pos, token))
+            continue
+        if token_id < 0 or token_id >= audio_vocabsize:
+            invalid.append((pos, token_id))
+    return invalid
+
+
+def format_invalid_tokens(invalid):
+    return ", ".join(f"{pos}:{token}" for pos, token in invalid[:12])
+
+
+def clamp_snac_tokens(snac_tokens, context):
+    clamped = []
+    changed = []
+    max_token = audio_vocabsize - 1
+    for pos, token in enumerate(snac_tokens):
+        if token == "#":
+            clamped.append(token)
+            continue
+        try:
+            token_id = int(token)
+        except (TypeError, ValueError):
+            token_id = 0
+            changed.append((pos, token))
+        else:
+            clamped_id = min(max(token_id, 0), max_token)
+            if clamped_id != token_id:
+                changed.append((pos, token_id))
+            token_id = clamped_id
+        clamped.append(token_id)
+    # if changed:
+    #     print(
+    #         f"[mini-omni] Clamped {len(changed)} SNAC token(s) to [0, {max_token}] at {context}: {format_invalid_tokens(changed)}.",
+    #         flush=True,
+    #     )
+    return clamped
+
+
+def validate_snac_tokens(snac_tokens, context):
+    invalid = invalid_snac_tokens(snac_tokens)
+    if invalid:
+        raise ValueError(
+            f"Invalid Mini-Omni SNAC token(s) before CUDA decode at {context}: {format_invalid_tokens(invalid)}. "
+            f"SNAC codebook tokens must be in [0, {audio_vocabsize - 1}]."
+        )
+
+
 def get_input_ids_TA(text, text_tokenizer):
     input_ids_item = [[] for _ in range(8)]
     text_tokens = text_tokenizer.encode(text)
@@ -388,6 +443,62 @@ class OmniInference:
             pass
 
     @torch.inference_mode()
+    def run_AA_nonstream(
+        self,
+        audio_path,
+        max_returned_tokens=2048,
+        temperature=0.9,
+        top_k=1,
+        top_p=1.0,
+    ):
+        assert os.path.exists(audio_path), f"audio file {audio_path} not found"
+        model = self.model
+
+        with self.fabric.init_tensor():
+            model.set_kv_cache(batch_size=1, device=self.device)
+
+        mel, leng = load_audio(audio_path)
+        audio_feature, input_ids = get_input_ids_whisper(mel, leng, self.whispermodel, self.device)
+        T = input_ids[0].size(1)
+        if max_returned_tokens <= T:
+            raise ValueError(
+                f"max_returned_tokens {max_returned_tokens} should be greater than audio token length {T}. "
+                "Increase MINI_OMNI_MAX_TOKENS or use a shorter input audio."
+            )
+        if model.max_seq_length < max_returned_tokens - 1:
+            raise NotImplementedError(
+                f"max_seq_length {model.max_seq_length} needs to be >= {max_returned_tokens - 1}"
+            )
+
+        tokenlist = generate_AA(
+            model,
+            audio_feature.to(torch.float32).to(model.device),
+            input_ids,
+            [T - 3],
+            ["A1T2"],
+            max_returned_tokens=max_returned_tokens,
+            temperature=temperature,
+            top_k=top_k,
+            top_p=top_p,
+            eos_id_a=_eoa,
+            eos_id_t=_eot,
+            pad_id_t=_pad_t,
+            shift=padded_text_vocabsize,
+            include_prompt=True,
+            generate_text=True,
+        )
+        audio_tokens = reconscruct_snac(tokenlist)
+        audio_tokens = clamp_snac_tokens(audio_tokens, "non-streaming decode")
+        audio_stream = generate_audio_data(audio_tokens, self.snacmodel, self.device)
+
+        text_tokens = tokenlist[-1]
+        if text_vocabsize in text_tokens:
+            text_tokens = text_tokens[: text_tokens.index(text_vocabsize)]
+        text = self.text_tokenizer.decode(torch.tensor(text_tokens)).strip()
+        model.clear_kv_cache()
+        return audio_stream, text
+
+    @torch.inference_mode()
     def run_AT_batch_stream(self, 
                             audio_path, 
                             stream_stride=4,
@@ -430,6 +541,7 @@ class OmniInference:
             [T - 3, T - 3],
             ["A1T2", "A1T2"],
             input_pos=torch.arange(0, T, device=device),
+            force_valid_audio=True,
             temperature=temperature,
             top_k=top_k,
             top_p=top_p,
@@ -502,6 +614,7 @@ class OmniInference:
                 if current_index == nums_generate:
                     current_index = 0
                     snac = get_snac(list_output, index, nums_generate)
+                    snac = clamp_snac_tokens(snac, f"stream index {index}")
                     audio_stream = generate_audio_data(snac, self.snacmodel, self.device)
                     yield audio_stream
 

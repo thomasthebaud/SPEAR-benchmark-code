@@ -103,6 +103,7 @@ def next_token_A1T2(
     whisper_lens: int,
     task: list,
     input_pos: torch.Tensor,
+    force_valid_audio: bool = False,
     **kwargs: Any,
 ) -> torch.Tensor:
     input_pos = input_pos.to(model.device)
@@ -113,6 +114,8 @@ def next_token_A1T2(
 
     next_audio_tokens = []
     for logit_a in logits_a:
+        if force_valid_audio:
+            logit_a = logit_a[..., : snac_config.audio_vocab_size]
         next_a = sample(logit_a, **kwargs).to(dtype=input_ids[0].dtype)
         next_audio_tokens.append(next_a)
     next_t = sample(logit_t, **kwargs).to(dtype=input_ids[0].dtype)
@@ -144,6 +147,7 @@ def next_token_batch(
     whisper_lens: int,
     task: list,
     input_pos: torch.Tensor,
+    force_valid_audio: bool = False,
     **kwargs: Any,
 ) -> torch.Tensor:
     input_pos = input_pos.to(model.device)
@@ -158,6 +162,8 @@ def next_token_batch(
 
     next_audio_tokens = []
     for logit_a in logits_a:
+        if force_valid_audio:
+            logit_a = logit_a[..., : snac_config.audio_vocab_size]
         next_a = sample(logit_a, **kwargs).to(dtype=input_ids[0].dtype)
         next_audio_tokens.append(next_a)
     next_t = sample(logit_t, **kwargs).to(dtype=input_ids[0].dtype)
@@ -291,7 +297,7 @@ def generate(
 
     text_end = False
     max_returned_tokens = 1000
-    for _ in tqdm(range(2, max_returned_tokens - T + 1)):
+    for _ in range(2, max_returned_tokens - T + 1):
         model_input_ids = [
             token_a.view(1, -1).to(torch.int32) for token_a in tokens_A
         ] + [token_T.view(1, -1).to(torch.int32)]
@@ -471,7 +477,7 @@ def generate_TT(
     output.append(token_T.clone().tolist()[0])
     input_pos = torch.tensor([T], device=device)
 
-    for _ in tqdm(range(2, max_returned_tokens - T + 1)):
+    for _ in range(2, max_returned_tokens - T + 1):
         model_input_ids = []
         for i in range(7):
             model_input_ids.append(
@@ -537,7 +543,7 @@ def generate_AT(
     output.append(token_T.clone().tolist()[0])
     input_pos = torch.tensor([T], device=device)
     text_end = False
-    for _ in tqdm(range(2, max_returned_tokens - T + 1)):
+    for _ in range(2, max_returned_tokens - T + 1):
         model_input_ids = []
         for i in range(7):
             model_input_ids.append(
@@ -606,7 +612,7 @@ def generate_TA(
 
     input_pos = torch.tensor([T], device=device)
     text_end = False
-    for _ in tqdm(range(2, max_returned_tokens - T + 1)):
+    for _ in range(2, max_returned_tokens - T + 1):
 
         model_input_ids = []
         for i in range(7):
@@ -678,6 +684,7 @@ def generate_AA(
         [T - 3],
         ["A1T2"],
         input_pos=torch.arange(0, T, device=device),
+        force_valid_audio=True,
         temperature=temperature,
         top_k=top_k,
         top_p=top_p,
@@ -689,7 +696,7 @@ def generate_AA(
     input_pos = torch.tensor([T], device=device)
 
     text_end = False
-    for _ in tqdm(range(2, max_returned_tokens - T + 1)):
+    for _ in range(2, max_returned_tokens - T + 1):
 
         model_input_ids = []
         for i in range(7):
@@ -767,7 +774,7 @@ def generate_ASR(
     output.append(token_T.clone().tolist()[0])
     input_pos = torch.tensor([T], device=device)
     text_end = False
-    for _ in tqdm(range(2, max_returned_tokens - T + 1)):
+    for _ in range(2, max_returned_tokens - T + 1):
         model_input_ids = []
         for i in range(7):
             model_input_ids.append(
