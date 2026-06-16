@@ -9,18 +9,75 @@ import seaborn as sns
 from utils import add_common_graph_args, all_systems, load_base_metric_values, remove_iqr_outliers, save_figure, system_palette
 
 
+def latex_escape(value: str) -> str:
+    replacements = {
+        "\\": r"\textbackslash{}",
+        "&": r"\&",
+        "%": r"\%",
+        "$": r"\$",
+        "#": r"\#",
+        "_": r"\_",
+        "{": r"\{",
+        "}": r"\}",
+        "~": r"\textasciitilde{}",
+        "^": r"\textasciicircum{}",
+    }
+    return "".join(replacements.get(char, char) for char in str(value))
+
+
+def mean_std_cell(values) -> str:
+    values = values.dropna()
+    if values.empty:
+        return "--"
+    mean = values.mean()
+    std = values.std(ddof=1) if len(values) > 1 else 0.0
+    return f"{mean:.1f} $\\pm$ {std:.1f}"
+
+
+def mean_cell(values) -> str:
+    values = values.dropna()
+    if values.empty:
+        return "--"
+    return f"{values.mean():.1f}"
+
+
+def write_latex_table(data, systems: list[str], output_path) -> None:
+    table_path = output_path.with_suffix(".tex")
+    table_path.parent.mkdir(parents=True, exist_ok=True)
+    subsets = [subset for subset in ["improvised", "naturalistic"] if subset in set(data["subset"])]
+    lines = [
+        r"\begin{tabular}{llccc}",
+        r"\toprule",
+        r"Model & Dataset & Latency (ms) & Mean interrupted time (ms) & Interruption rate (\%) \\",
+        r"\midrule",
+    ]
+    for system in systems:
+        for subset in subsets:
+            sub = data[(data["system"] == system) & (data["subset"] == subset)]
+            latency = mean_std_cell(sub[sub["metric"] == "latency"]["value"])
+            interrupted = mean_cell(sub[sub["metric"] == "interrupted time (s)"]["value"] * 1000.0)
+            interruption_rate = mean_cell(sub[sub["metric"] == "interruptions"]["value"] * 100.0)
+            lines.append(
+                f"{latex_escape(system)} & {latex_escape(subset)} & {latency} & {interrupted} & {interruption_rate} \\\\" 
+            )
+    lines.extend([r"\bottomrule", r"\end{tabular}"])
+    table_path.write_text("\n".join(lines) + "\n")
+    print(f"Wrote {table_path}")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Article graph: interruptions and latency.")
     add_common_graph_args(parser)
     args = parser.parse_args()
 
     systems = all_systems(args.models)
-    streaming_systems = [system for system in ["original", "gpt-realtime-2"] if system in systems]
+    streaming_systems = [system for system in ["original", "gpt-realtime-2", 'mini-omni'] if system in systems]
     if len(streaming_systems) < 2:
         print("[WARN] Expected original and gpt-realtime-2 for streaming latency/interrupted plots.")
 
     continuous_data = load_base_metric_values(args.results_root, streaming_systems, ["latency", "interrupted"])
     interruptions_data = load_base_metric_values(args.results_root, systems, ["interruptions"])
+    table_data = load_base_metric_values(args.results_root, systems, ["latency", "interrupted", "interruptions"])
     if continuous_data.empty and interruptions_data.empty:
         print("[WARN] No latency or interruption metrics found.")
         return 0
@@ -102,6 +159,8 @@ def main() -> int:
     fig.suptitle("Interruptions and Latency Across Systems", y=1.02)
     fig.tight_layout()
     save_figure(fig, args.output_path)
+    if not table_data.empty:
+        write_latex_table(table_data, systems, args.output_path)
     return 0
 
 

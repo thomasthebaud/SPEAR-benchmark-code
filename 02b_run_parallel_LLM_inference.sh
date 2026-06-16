@@ -106,6 +106,10 @@ subset_output_dir = Path(sys.argv[1])
 num_shards = int(sys.argv[2])
 output_metadata = Path(sys.argv[3])
 frames = []
+if output_metadata.exists():
+    existing = pd.read_csv(output_metadata)
+    existing = existing.loc[:, ~existing.columns.str.startswith("Unnamed:")]
+    frames.append(existing)
 for shard_index in range(num_shards):
     shard_path = subset_output_dir / f"metadata_shard_{shard_index}_of_{num_shards}.csv"
     if not shard_path.exists():

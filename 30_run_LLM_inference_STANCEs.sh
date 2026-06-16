@@ -61,7 +61,7 @@ fi
 if [[ "$run_question" -eq 1 ]]; then
 for split in 'test' 'dev'; do
     for subset in 'improvised'; do #never run on naturalistic, original paper needs ground truth stances, only available for the improvised subset
-        for model in 'original' "${eval_models[@]}"; do
+        for model in "${eval_models[@]}"; do
             metadata="data/$protocol/outputs/$model/$split/$subset/metadata.csv"
             metrics="results/$protocol/$model/$split/$subset"
             for idx in "${INDICES[@]}"; do
@@ -137,7 +137,7 @@ fi
 if [[ "$run_inference" -eq 1 ]]; then
 for split in 'test' 'dev'; do
     for subset in 'improvised'; do #never run on naturalistic, original paper needs ground truth stances, only available for the improvised subset
-        for model in 'original' "${eval_models[@]}"; do
+        for model in "${eval_models[@]}"; do
             metadata="data/$protocol/outputs/$model/$split/$subset/metadata.csv"
             metrics="results/$protocol/$model/$split/$subset"
             for idx in "${INDICES[@]}"; do
@@ -205,7 +205,7 @@ for split in 'test' 'dev'; do
                 --eval_model "$stance_llm_model" \
                 --openai-api-key "$openai_api_key" \
                 --openai-org "$org" \
-                "${force_args[@]}" &
+                "${force_args[@]}" 
               
               sleep 1
 

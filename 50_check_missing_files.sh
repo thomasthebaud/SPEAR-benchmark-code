@@ -4,6 +4,29 @@ set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")"
 source config.sh
 
+missing_only=0
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --missing-only)
+      missing_only=1
+      ;;
+    -h|--help)
+      cat <<EOF
+Usage: bash 50_check_missing_files.sh [--missing-only]
+
+Options:
+  --missing-only  Only print missing files. By default, print every expected file.
+EOF
+      exit 0
+      ;;
+    *)
+      echo "Unknown argument: $1" >&2
+      exit 2
+      ;;
+  esac
+  shift
+done
+
 splits=(test dev)
 subsets=(improvised naturalistic)
 models=(original "${eval_models[@]}")
@@ -23,14 +46,17 @@ check_files() {
   for file in "$@"; do
     if [[ ! -s "$file" ]]; then
       missing+=("$file")
+      printf "[ ] script %s\t- model %s\t- subset %s\t- missing: %s\n" "$script_id" "$model" "$subset_label" "$file"
+    elif [[ "$missing_only" -eq 0 ]]; then
+      printf "[X] script %s\t- model %s\t- subset %s\t- found: %s\n" "$script_id" "$model" "$subset_label" "$file"
     fi
   done
 
   if [[ ${#missing[@]} -eq 0 ]]; then
-    echo -e "[X] script $script_id\t- model $model\t- subset $subset_label \t- all computed"
+    if [[ "$missing_only" -eq 0 ]]; then
+      echo -e "[X] script $script_id\t- model $model\t- subset $subset_label \t- all computed"
+    fi
   else
-    echo -e "[ ] script $script_id\t- model $model\t- subset $subset_label \t- file missing"
-    printf '  missing: %s\n' "${missing[@]}" 
     missing_any=1
   fi
 }

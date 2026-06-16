@@ -15,31 +15,31 @@ if [[ "$llm_model" == "mini-omni" ]]; then
     export MINI_OMNI_RAISE_ERRORS="${MINI_OMNI_RAISE_ERRORS:-0}"
     echo "Mini-Omni debug mode: running split/subset jobs sequentially with CUDA_LAUNCH_BLOCKING=$CUDA_LAUNCH_BLOCKING"
 fi
-prompt="You are participating in a natural spoken conversation.\
-    Answer when it feels natural, not only at the very end.\
-    Keep responses conversational and concise.\
-    If the user interrupts, stop and respond to the latest user speech."
+# prompt="You are participating in a natural spoken conversation.\
+#     Answer when it feels natural, not only at the very end.\
+#     Keep responses conversational and concise.\
+#     If the user interrupts, stop and respond to the latest user speech."
 
-for split in 'test' 'dev'; do
-    for subset in 'improvised' 'naturalistic'; do
-        echo "on split $split and subset $subset"
+# for split in 'test' 'dev'; do
+#     for subset in 'improvised' 'naturalistic'; do
+#         echo "on split $split and subset $subset"
 
-            $(python_cmd 'SB02' --gpu) bin/run_LLM_inference.py \
-                --audio_dir $data_dir/inputs \
-                --output_dir $data_dir/outputs/$llm_model \
-                --model $llm_model \
-                --prompt "$prompt" \
-                --split $split \
-                --subset $subset \
-                --openai-api-key "$openai_api_key" \
-                --org "$org"
+#             $(python_cmd 'SB02' --gpu) bin/run_LLM_inference.py \
+#                 --audio_dir $data_dir/inputs \
+#                 --output_dir $data_dir/outputs/$llm_model \
+#                 --model $llm_model \
+#                 --prompt "$prompt" \
+#                 --split $split \
+#                 --subset $subset \
+#                 --openai-api-key "$openai_api_key" \
+#                 --org "$org"
 
-            sleep 1
-    done
-done
+#             sleep 1
+#     done
+# done
 
-wait
-echo "LLM inference with $llm_model completed for all splits and subsets."
+# wait
+# echo "LLM inference with $llm_model completed for all splits and subsets."
 
 metadata_rows() {
     local metadata_path="$1"

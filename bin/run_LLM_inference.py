@@ -105,29 +105,36 @@ if __name__ == "__main__":
     if args.prompt=='None':print("Warning: No prompt provided, only feeding the audios.")
 
     metadata = pd.read_csv(input_dir / "metadata.csv")
-    print(f"found {len(metadata)} rows in {input_dir}/metadata.csv")
-    if args.num_shards > 1:
-        metadata = metadata.iloc[args.shard_index::args.num_shards].copy()
-        print(f"processing shard {args.shard_index + 1}/{args.num_shards} with {len(metadata)} rows")
+    total_metadata_rows = len(metadata)
+    print(f"found {total_metadata_rows} rows in {input_dir}/metadata.csv")
 
+    final_output_csv = output_dir / "metadata.csv"
     existing_output = load_existing_output(output_csv)
-    if existing_output is not None and len(existing_output) == len(metadata):
+    existing_final_output = None if output_csv == final_output_csv else load_existing_output(final_output_csv)
+
+    processed_audio_paths = set()
+    for existing in [existing_final_output, existing_output]:
+        if existing is not None and "audio_path" in existing.columns:
+            processed_audio_paths.update(existing["audio_path"].dropna().astype(str))
+
+    if len(processed_audio_paths) >= total_metadata_rows:
         print(f"### Subset {args.split}/{args.subset} already processed, moving on. ###")
         exit()
 
     if existing_output is not None:
         output_metadata = ensure_output_columns(existing_output)
-        processed_audio_paths = set(output_metadata["audio_path"].dropna().astype(str)) if "audio_path" in output_metadata.columns else set()
-        print(f"Resuming from {len(processed_audio_paths)}/{len(metadata)} completed rows in {output_csv}")
     else:
         output_metadata = ensure_output_columns(metadata.iloc[0:0].copy())
-        processed_audio_paths = set()
         save_output_metadata(output_metadata, output_csv)
-
-    failed_indices = {}
 
     remaining = metadata[~metadata["audio_path"].astype(str).isin(processed_audio_paths)]
     remaining = remaining[remaining['question_end_time']>1] # filter out rows with missing question_end_time which is needed for computing answer_start_time, these rows can be processed separately after the rest of the data has been processed successfully.
+    print(f"found {len(remaining)} unprocessed rows after checking existing metadata outputs")
+    if args.num_shards > 1:
+        remaining = remaining.iloc[args.shard_index::args.num_shards].copy()
+        print(f"processing shard {args.shard_index + 1}/{args.num_shards} with {len(remaining)} remaining rows")
+
+    failed_indices = {}
     # print(f"Previously failed:", remaining.iloc[0])
     # remaining = remaining.iloc[2:] #ignore the first 10 rows which is often the one that causes issues and is likely to fail repeatedly, allowing the rest of the rows to be processed and saved successfully. This is a practical workaround to avoid getting stuck on a single problematic row when resuming from a failure. The failed row can be investigated separately after the rest of the data has been processed.
 

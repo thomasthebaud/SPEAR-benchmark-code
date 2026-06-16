@@ -10,7 +10,7 @@ echo "data directory: $data_dir"
 
 for split in 'test' 'dev'; do
     for subset in 'improvised' 'naturalistic'; do
-        for model in "original";do #"${eval_models[@]}"; do
+        for model in "${eval_models[@]}"; do
             for asr in "${asr_models[@]}"; do
                 echo "running analysis for $model $split $subset ASR model=$asr"
                 data_dir="data/$protocol/outputs/$model"
@@ -26,5 +26,5 @@ for split in 'test' 'dev'; do
 done
 
 wait
-echo "All transcriptions completed for original and $llm_model outputs with both Qwen3-ASR-0.6B and whisper-large-v3 ASR models."
+echo "All transcriptions completed for original and $llm_model outputs with ${asr_models[@]} ASR models."
 exit

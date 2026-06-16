@@ -14,6 +14,7 @@ SUBSETS = ["improvised", "naturalistic"]
 SPLITS = ["dev", "test"]
 ORIGINAL = "original"
 EXCLUDED_REPORT_METRICS = {"question_end_time"}
+REPORTED_EXPLAINABLE_FEATURES = {"total_duration_s", "voiced_duration_s", "voiced_ratio"}
 STATISTICAL_TESTS = {"Welch t-test", "Mann-Whitney U Test", "Wilcoxon Signed-Rank Test"}
 DIALECT_LABELS = [
     "East Asia",
@@ -135,7 +136,25 @@ def statistical_pvalue(original_values: pd.Series, model_values: pd.Series, test
 
 
 def feature_csv(args, model: str, split: str, subset: str) -> Path:
-    return args.results_root / model / split / subset / "distrib_baselines_features.csv"
+    return args.results_root / model / split / subset / "distrib_baselines_features_normalized.csv"
+
+
+def is_reported_explainable_feature(feature: str) -> bool:
+    return feature in REPORTED_EXPLAINABLE_FEATURES or feature.startswith("f0_p")
+
+
+def available_explainable_features(args, subset: str) -> List[str]:
+    features = set()
+    for model in [ORIGINAL, args.model]:
+        frame = safe_read_csv(feature_csv(args, model, "test", subset))
+        if frame is None:
+            continue
+        features.update(
+            str(column)
+            for column in frame.columns
+            if is_reported_explainable_feature(str(column)) and str(column) not in EXCLUDED_REPORT_METRICS
+        )
+    return sorted(features)
 
 
 def append_metric_table_line(text_lines: List[str], name: str, row: Dict[str, Any]) -> None:
@@ -881,46 +900,47 @@ def explainable_features_section(args, metrics_by_subset: Dict[str, List[Dict[st
     path = args.results_root / args.model / "distrib_baselines_summary.csv"
     frame = safe_read_csv(path)
     if frame is None or "feature" not in frame or "auroc" not in frame:
-        text_lines.append("Baseline summary\tmissing")
-        text_lines.append("")
-        return
-
-    frame = frame.copy()
-    frame = frame[~frame["feature"].astype(str).isin(EXCLUDED_REPORT_METRICS)]
-    frame["auroc"] = numeric(frame["auroc"])
-    frame["accuracy"] = numeric(frame["accuracy"]) if "accuracy" in frame else np.nan
-    frame = frame.dropna(subset=["auroc"])
-
-    for subset in sorted(frame["subset"].dropna().unique()) if "subset" in frame else ["all"]:
-        sub = frame[frame["subset"] == subset].copy() if "subset" in frame else frame.copy()
-        text_lines.append(f"{subset}")
-        text_lines.append("rank_group\tmetric\tn\tmean_diff\tstd_diff\tp_value\tauroc\taccuracy")
-        for rank_group, block in [
-            ("highest_auroc", sub.sort_values("auroc", ascending=False).head(10)),
-            ("lowest_auroc", sub.sort_values("auroc", ascending=True).head(10)),
-        ]:
-            for _, source_row in block.iterrows():
-                feature = str(source_row.get("feature", ""))
-                auroc = pd.to_numeric(source_row.get("auroc"), errors="coerce")
-                accuracy = pd.to_numeric(source_row.get("accuracy"), errors="coerce")
-                row = add_feature_metric(args, metrics_by_subset, subset, feature, auroc, accuracy)
-                text_lines.append(
-                    "\t".join(
-                        [
-                            rank_group,
-                            feature,
-                            fmt(row["n"]),
-                            fmt(row["mean_diff"]),
-                            fmt(row["std_diff"]),
-                            pvalue_text(row["p_value"]),
-                            fmt(row["auroc"]),
-                            fmt(row["accuracy"]),
-                        ]
-                    )
-                )
+        frame = pd.DataFrame(columns=["feature", "subset", "auroc", "accuracy"])
+    else:
+        frame = frame.copy()
+        frame["feature"] = frame["feature"].astype(str)
+        frame = frame[frame["feature"].map(is_reported_explainable_feature)]
+        frame = frame[~frame["feature"].isin(EXCLUDED_REPORT_METRICS)]
+        frame["auroc"] = numeric(frame["auroc"])
+        frame["accuracy"] = numeric(frame["accuracy"]) if "accuracy" in frame else np.nan
 
     for subset in SUBSETS:
-        add_cluster_feature_metrics(args, metrics_by_subset, text_lines, subset)
+        features = available_explainable_features(args, subset)
+        if not features:
+            continue
+        sub = frame[frame["subset"] == subset].copy() if "subset" in frame else frame.copy()
+        summary_by_feature = sub.drop_duplicates("feature").set_index("feature") if not sub.empty else pd.DataFrame()
+        text_lines.append(f"{subset}")
+        text_lines.append("rank_group\tmetric\tn\tmean_diff\tstd_diff\tp_value\tauroc\taccuracy")
+        for feature in features:
+            if not summary_by_feature.empty and feature in summary_by_feature.index:
+                source_row = summary_by_feature.loc[feature]
+                auroc = pd.to_numeric(source_row.get("auroc"), errors="coerce")
+                accuracy = pd.to_numeric(source_row.get("accuracy"), errors="coerce")
+            else:
+                auroc = np.nan
+                accuracy = np.nan
+            row = add_feature_metric(args, metrics_by_subset, subset, feature, auroc, accuracy)
+            text_lines.append(
+                "\t".join(
+                    [
+                        "reported",
+                        feature,
+                        fmt(row["n"]),
+                        fmt(row["mean_diff"]),
+                        fmt(row["std_diff"]),
+                        pvalue_text(row["p_value"]),
+                        fmt(row["auroc"]),
+                        fmt(row["accuracy"]),
+                    ]
+                )
+            )
+
     text_lines.append("")
 
 

@@ -105,6 +105,15 @@ torchvision==0.22.1+cu118
 
 It also installs packages used by the benchmark pipeline, including `pandas`, `scipy`, `scikit-learn`, `librosa`, `matplotlib`, `seaborn`, `soundfile`, `qwen-asr`, `silero-vad`, `sentence-transformers`, and the VoxLect/Whisper dependencies.
 
+`Qwen3-ASR-*` can require a newer `qwen-asr`/`transformers` stack than the VoxLect-oriented `spearbench` environment. On the cluster, keep a separate ASR environment such as `spearbenchASR` if needed, and install packages with the environment's Python explicitly:
+
+```bash
+conda activate spearbenchASR
+python -m pip install -U qwen-asr==0.0.6 transformers==4.57.6
+```
+
+When debugging ASR imports, prefer `python -m pip show qwen-asr transformers torch torchvision` over bare `pip`, so you are checking the active conda environment.
+
 ## Configuration
 
 Before running the benchmark, edit `config.sh` so it points to your local data, model, and protocol settings.
@@ -115,11 +124,11 @@ Important fields:
 - `seamless_assets_dir`: path to the benchmark assets directory, usually `data/seamless_assets`.
 - `protocol`: name of the benchmark protocol to create and evaluate. The current default is `seamless_2t_2s_questions`.
 - `data_dir`: derived output data directory for the selected protocol.
-- `llm_model`: speech-to-speech LLM used by single-model stages such as LLM inference and per-model report generation. Current proxy files include `gpt-audio-1.5`, `gpt-realtime-2`, `Qwen3-Omni-30B-A3B-Instruct`, `Qwen2.5-Omni-7B`, and the older `gpt-4o-audio-preview-2025-06-03`.
-- `eval_models`: model list used by multi-model evaluation scripts such as naturalness scoring, STANCE metric aggregation, missing-file checks, report-line generation, and benchmark-table merging.
+- `llm_model`: speech-to-speech LLM used by single-model stages and ad hoc runs. Current proxy files include `gpt-audio-1.5`, `gpt-realtime-2`, `Qwen3-Omni-30B-A3B-Instruct`, `Qwen2.5-Omni-7B`, `mini-omni`, and the older `gpt-4o-audio-preview-2025-06-03`.
+- `eval_models`: model list used by multi-model stages, including LLM inference, transcription, base metrics, language/dialect analysis, naturalness scoring, STANCE metric aggregation, explainable features, missing-file checks, report generation, benchmark-table merging, and article graph generation. Set it to the full model list for a complete benchmark, or to `($llm_model)` for one-model runs. Some scripts compare against `original` internally, while others only process the models listed here.
 - `language_id_model`: Hugging Face audio language ID model, currently `facebook/mms-lid-126`.
 - `dialect_id_model`: VoxLect dialect model used by the language/dialect stage.
-- `asr`: ASR model name used in report labels. Transcription currently runs both `Qwen3-ASR-0.6B` and `whisper-large-v3`.
+- `asr_models`: ASR model names used for transcription and report labels. Transcription currently runs both `Qwen3-ASR-0.6B` and `whisper-large-v3`.
 - `stance_llm_model`: LLM used as the STANCE judge.
 - `statistical_test`: statistical test used by report p-values.
 
@@ -143,21 +152,21 @@ $(python_cmd JOB_NAME --gpu)
 
 ```bash
 $(python_cmd SB10-S1 --gpu) bin/base_metrics.py --metadata metadata.csv --outputs base_metrics.csv
-$(python_cmd SB51-S3 --cpu) bin/reports/generate_html_report.py --protocol "$protocol" --model "$llm_model" --report-dir "$report_dir"
+$(python_cmd SB51-S3 --cpu) bin/reports/generate_html_report.py --protocol "$protocol" --model "$model" --report-dir "$report_dir"
 ```
 
 With the current `cmd.sh`, these expand to commands like:
 
 ```bash
-srun -p gpu --gpus 1 --exclude=octopod --job-name SB10-S1 python3
-srun -p cpu --cpus-per-task 4 --exclude=octopod --job-name SB51-S3 python3
+srun -p gpu --gpus 1 --job-name SB10-S1 python3
+srun -p cpu --cpus-per-task 4 --job-name SB51-S3 python3
 ```
 
-Use `python_cmd` for Python stages. `srun_cmd JOB_NAME --cpu|--gpu` is also available when a script needs the Slurm prefix without automatically appending `python3`. Edit `cmd.sh` if the cluster partition, GPU count, CPU count, or excluded nodes need to change.
+Use `python_cmd` for Python stages. `srun_cmd JOB_NAME --cpu|--gpu` is also available when a script needs the Slurm prefix without automatically appending `python3`. Edit `cmd.sh` if the cluster partition, GPU count, CPU count, or excluded nodes need to change. The `exclude` variable is currently empty; set it in `cmd.sh` if some nodes should be avoided.
 
 ## Model Proxies
 
-`02_run_LLM_inference.sh` selects a model proxy based on `llm_model`. Each speech-to-speech backend should have a module at:
+`02_run_LLM_inference.sh` selects model proxies from `eval_models`. Each speech-to-speech backend should have a module at:
 
 ```text
 benchmark/bin/llm_proxies/${llm_model}.py
@@ -182,7 +191,7 @@ data/$protocol/outputs/original/$split/$subset/
 LLM-generated answer clips are written under:
 
 ```text
-data/$protocol/outputs/$llm_model/$split/$subset/
+data/$protocol/outputs/$model/$split/$subset/
 ```
 
 Each metadata CSV uses the current question-answer schema. The diagram below illustrates how the fields created by `01_prepare_data_from_seamless.sh` relate to the question and answer audio:
@@ -219,7 +228,7 @@ After preparation, `bin/data_prep_summary.py` prints a compact summary for the o
 
 ### `02_run_LLM_inference.sh`
 
-Runs speech-to-speech LLM inference on the prepared question clips. It sends each `audio_path` from the input metadata to the configured proxy and writes generated answer-only audio to `data/$protocol/outputs/$llm_model/$split/$subset/audio/`.
+Runs speech-to-speech LLM inference on the prepared question clips. The current script loops over every model in `eval_models`, sends each `audio_path` from the input metadata to the corresponding proxy, and writes generated answer-only audio plus metadata under `data/$protocol/outputs/$model/$split/$subset/`.
 
 The runner keeps the original question metadata and adds or updates:
 
@@ -229,11 +238,11 @@ The runner keeps the original question metadata and adds or updates:
 - `answer_duration`
 - `finish_reason`
 
-Existing output metadata causes the script to skip that split/subset.
+Existing output metadata causes the Python runner to skip that split/subset.
 
 ### `03_transcribe.sh`
 
-Runs ASR over original and generated answer audio for both `dev` and `test`, both subsets, and both models. It currently runs:
+Runs ASR over answer audio for both `dev` and `test`, both subsets, and every model in `eval_models`. If you also need original-answer transcripts for comparison runs, include `original` in the loop or run the transcriber directly on `data/$protocol/outputs/original`. It currently runs the ASR systems configured in `asr_models`, usually:
 
 - `Qwen3-ASR-0.6B`
 - `whisper-large-v3`
@@ -245,15 +254,25 @@ data/$protocol/outputs/$model/$split/$subset/Qwen3-ASR-0.6B_transcripts.csv
 data/$protocol/outputs/$model/$split/$subset/whisper-large-v3_transcripts.csv
 ```
 
+### `04_verify_file_integrity.sh`
+
+Verifies generated LLM output metadata against the corresponding input metadata for every split, subset, and model in `eval_models`. It checks that referenced audio files exist and writes a verified copy next to each generated metadata file:
+
+```text
+data/$protocol/outputs/$model/$split/$subset/metadata_verified.csv
+```
+
+The script currently does not overwrite `metadata.csv` automatically; the promotion block is left commented out so you can inspect `metadata_verified.csv` first. The current `10_compute_base_metrics.sh` reads `metadata.csv`, so promote or copy the verified metadata yourself if you want downstream stages to use it.
+
 ### `10_compute_base_metrics.sh`
 
-Computes answer-level base metrics for every split/subset/model combination and writes:
+Computes answer-level base metrics for every split/subset/model combination in `eval_models` and writes:
 
 ```text
 results/$protocol/$model/$split/$subset/base_metrics.csv
 ```
 
-Current metrics include WER/CER when ASR transcripts are present, response latency from VAD, interruption count, interrupted time in milliseconds, and UTMOS speech quality. These metrics operate on `answer_audio_path` and use `answer_start_time` for interruption-related measures.
+Current metrics include WER/CER when ASR transcripts are present, response latency from VAD, interruption count, interrupted time in milliseconds, and UTMOS speech quality. These metrics operate on `answer_audio_path` and use `answer_start_time` for interruption-related measures. The current shell script reads `metadata.csv` from each output directory; use `04_verify_file_integrity.sh` first when you want to inspect or promote verified metadata before metric computation.
 
 ### `11_language_dialect.sh`
 
@@ -284,7 +303,7 @@ Stage 2 writes dialect predictions to:
 results/$protocol/$model/$split/$subset/dialect_id.csv
 ```
 
-Dialect prediction uses language predictions to decide whether an utterance should be sent to the English VoxLect model. The summary stage prints language and dialect aggregate counts for `original` and `$llm_model`.
+Dialect prediction uses language predictions to decide whether an utterance should be sent to the English VoxLect model. The language and dialect stages run over `eval_models`; the summary helper currently prints aggregate counts for `original` and `$llm_model`.
 
 ### `20_naturalness_feats.sh`
 
@@ -344,7 +363,7 @@ Scripts `20`, `21`, and `22` are based on the TRACE emotional naturalness pipeli
 
 ### `30_run_LLM_inference_STANCEs.sh`
 
-Builds STANCE question CSVs and uses an LLM judge to score stance/tone/style dimensions. It currently runs STANCE question indices `0` through `9` for `dev` and `test`, only on the `improvised` subset, for both `original` and `$llm_model`. The naturalistic subset is intentionally skipped because the STANCE setup depends on ground-truth stance role metadata available for improvised interactions.
+Builds STANCE question CSVs and uses an LLM judge to score stance/tone/style dimensions. It currently runs STANCE question indices `0` through `9` for `dev` and `test`, only on the `improvised` subset, for every model in `eval_models`. The naturalistic subset is intentionally skipped because the STANCE setup depends on ground-truth stance role metadata available for improvised interactions. Include or process `original` separately when you need fresh original STANCE question files or judge scores.
 
 For each question index, `bin/STANCE/make_questions.py` filters rows by role/category and writes:
 
@@ -366,20 +385,46 @@ results/$protocol/$model/$split/improvised/
 
 ### `31_compute_STANCE_metrics.sh`
 
-Merges STANCE outputs from `original` and `$llm_model` for `dev` and `test`, improvised only. The merged output is:
+Merges STANCE outputs from `original` and each model in `eval_models` for `dev` and `test`, improvised only. It expects original STANCE outputs to already exist under `results/$protocol/original/...`. The merged output is:
 
 ```text
-results/$protocol/$llm_model/$split/improvised/merged_stances.csv
+results/$protocol/$model/$split/improvised/merged_stances.csv
 ```
 
 Scripts `30` and `31` are based on the StanceBench audio LLM interpersonal stance evaluation setup. See [References](#references) for the paper citation and full implementation.
 
 ### `40_extract_explainable_features.sh`
 
-Extracts explainable distributional baseline features for every split/subset/model combination. It computes prosodic, lexical, temporal, and relationship-aware features from metadata and audio, then writes:
+Extracts and normalizes explainable distributional baseline features. With no arguments, both stages run; stages can also be selected explicitly:
+
+```bash
+bash 40_extract_explainable_features.sh --extract
+bash 40_extract_explainable_features.sh --normalize
+bash 40_extract_explainable_features.sh --all
+```
+
+Stage 1, `--extract`, computes prosodic, lexical, temporal, and relationship-aware features from metadata and audio. Answer-side features are written as:
 
 ```text
 results/$protocol/$model/$split/$subset/distrib_baselines_features.csv
+```
+
+For the `original` system, the script also extracts question-side features with `--questions`, using metadata `audio_path` instead of `answer_audio_path`, and writes:
+
+```text
+results/$protocol/original/$split/$subset/distrib_baselines_features_q.csv
+```
+
+Stage 2, `--normalize`, normalizes f0 features by the mean `f0_mean_raw` of the speaker who asks the final question. It also renames `f0_total_duration_s`, `f0_voiced_duration_s`, `f0_voiced_ratio`, and `f0_n_voiced_frames` by removing the `f0_` prefix. Normalized answer-side features are written as:
+
+```text
+results/$protocol/$model/$split/$subset/distrib_baselines_features_normalized.csv
+```
+
+For original question-side features, the normalizer is called with `--questions`, matches rows to metadata by `audio_path`, and writes:
+
+```text
+results/$protocol/original/$split/$subset/distrib_baselines_features_normalized_q.csv
 ```
 
 ### `41_use_features_for_baseline.sh`
@@ -394,14 +439,14 @@ bash 41_use_features_for_baseline.sh --all
 
 If no option is passed, both stages are run.
 
-Stage 1, `--scores`, trains dev-set per-feature baselines and scores test utterances for `$llm_model`. It writes:
+Stage 1, `--scores`, trains dev-set per-feature baselines and scores test utterances for every model in `eval_models`. It writes:
 
 ```text
-results/$protocol/$llm_model/test/$subset/distrib_baselines_feature_scores.csv
-results/$protocol/$llm_model/distrib_baselines_summary.csv
+results/$protocol/$model/test/$subset/distrib_baselines_feature_scores.csv
+results/$protocol/$model/distrib_baselines_summary.csv
 ```
 
-Stage 2, `--clusters`, loads both `original` and `$llm_model` explainable features before computing correlations. It normalizes from the combined dev set, computes Spearman correlations, clusters features at the configured threshold, validates the groups on test, and fits PCA features. It writes the same cluster definitions and transformed test values back into each model directory:
+Stage 2, `--clusters`, loads both `original` and each evaluated model's explainable features before computing correlations. It normalizes from the combined dev set, computes Spearman correlations, clusters features at the configured threshold, validates the groups on test, and fits PCA features. It writes the same cluster definitions and transformed test values back into each model directory:
 
 ```text
 results/$protocol/$model/test/$subset/correlation_feature_groups_rho0p8.csv
@@ -422,14 +467,20 @@ Run it from the benchmark directory with:
 bash 50_check_missing_files.sh
 ```
 
-It prints one status line per checked combination, for example:
+By default it prints every expected file as either `found` or `missing`, plus an `all computed` summary for groups where every expected file exists. To print only missing files, use:
 
-```text
-[X] script 20   - model original        - subset test/improvised        - all computed
-[X] script 20   - model gpt-audio-1.5   - subset test/improvised        - all computed
+```bash
+bash 50_check_missing_files.sh --missing-only
 ```
 
-When files are missing, it prints the missing paths below the status line. The script exits with status `0` if all expected files exist and `1` if any file is missing.
+Example default output:
+
+```text
+[X] script 20   - model original        - subset test/improvised        - found: results/.../SER_AVD.csv
+[ ] script 20   - model mini-omni       - subset test/improvised        - missing: results/.../SER_AVD.csv
+```
+
+The script exits with status `0` if all expected files exist and `1` if any file is missing.
 
 ### `51_generate_report.sh`
 
@@ -444,18 +495,18 @@ bash 51_generate_report.sh --all
 
 If no option is passed, the script runs all stages.
 
-The short report reads base metrics, naturalness scores, merged STANCE metrics, explainable baseline outputs, and script `41` correlation-cluster PCA features. It writes:
+The short report loops over every model in `eval_models`. It reads base metrics, naturalness scores, merged STANCE metrics, and normalized explainable-feature outputs from script `40`. The explainable-feature report is restricted to `total_duration_s`, `voiced_duration_s`, `voiced_ratio`, and columns whose names start with `f0_p`. It writes:
 
 ```text
-reports/$protocol/$llm_model/report.txt
-reports/$protocol/$llm_model/metrics-improvised.csv
-reports/$protocol/$llm_model/metrics-naturalistic.csv
+reports/$protocol/$model/report.txt
+reports/$protocol/$model/metrics-improvised.csv
+reports/$protocol/$model/metrics-naturalistic.csv
 ```
 
 The graph stage writes plots under:
 
 ```text
-reports/$protocol/$llm_model/graphs/
+reports/$protocol/$model/graphs/
 ```
 
 It includes `emotion_scatter.png`, a 2x3 grid comparing full-question vs full-answer Arousal, Dominance, and Valence from `SER_AVD.csv`. Columns are Arousal, Dominance, and Valence; rows are improvised and naturalistic. It also includes `emo_naturalness_by_relationship.png`, a single horizontal violin plot comparing original and model emotional-naturalness logits across naturalistic relationship categories.
@@ -463,10 +514,10 @@ It includes `emotion_scatter.png`, a 2x3 grid comparing full-question vs full-an
 The long report stage writes:
 
 ```text
-reports/$protocol/$llm_model/detailed_report.html
+reports/$protocol/$model/detailed_report.html
 ```
 
-Report generation uses `statistical_test` from `config.sh`, defaulting to Welch t-test if the variable is unset. Explainable features listed in `ignored_explainable_features` are omitted from the short report tables, long report tables, and graphs. The long report includes a dedicated table for `corr_cluster_*` and `general_explainable_feature_*` rows from script `41`.
+Report generation uses `statistical_test` from `config.sh`, defaulting to Welch t-test if the variable is unset. Explainable features listed in `ignored_explainable_features` are omitted where applicable. The current short-report and graph explainable sections use the normalized script `40` feature files and only report `total_duration_s`, `voiced_duration_s`, `voiced_ratio`, and `f0_p*` columns.
 
 ### `52_benchmark.sh`
 
@@ -498,6 +549,73 @@ Stage 2, `--merge`, concatenates the per-model CSV files into one protocol-level
 reports/$protocol/benchmark.csv
 ```
 
+### `53_generate_article_graphs.sh`
+
+Generates protocol-level article figures that compare all evaluated systems in single figures. The script activates the `spearbench` conda environment, submits each requested graph with `python_cmd`, and writes PNGs under:
+
+```text
+graphs/
+```
+
+With no arguments, all eight stages run. Stage flags are:
+
+```bash
+bash 53_generate_article_graphs.sh --stage1  # Intelligibility and Speech Quality
+bash 53_generate_article_graphs.sh --stage2  # Interruptions and Latency
+bash 53_generate_article_graphs.sh --stage3  # Dialects
+bash 53_generate_article_graphs.sh --stage4  # Emotional Naturalness
+bash 53_generate_article_graphs.sh --stage5  # AVD consistency
+bash 53_generate_article_graphs.sh --stage6  # Stances
+bash 53_generate_article_graphs.sh --stage7  # EXplainable features
+bash 53_generate_article_graphs.sh --stage8  # WER by answer audio length
+bash 53_generate_article_graphs.sh --all
+```
+
+Output filenames include the stage number:
+
+```text
+graphs/stage1_article_intelligibility_speech_quality.png
+graphs/stage2_article_interruptions_latency.png
+graphs/stage3_article_dialects.png
+graphs/stage4_article_emotional_naturalness.png
+graphs/stage4_article_emotional_naturalness_short.png
+graphs/stage4_article_emotional_naturalness_violin.png
+graphs/stage5_article_avd_consistency.png
+graphs/stage6_article_stances.png
+graphs/stage7_article_explainable_features.png
+graphs/stage8_article_wer_answer_length.png
+```
+
+The current figures use these encodings:
+
+- Stage 1: boxplots for CER, WER, and UTMOS, with CER/WER merged across ASR systems and columns for improvised vs naturalistic.
+- Stage 2: histograms for latency and interrupted time, restricted to streaming systems `original` and `gpt-realtime-2`, plus an interruption-rate bar plot for the binary interruption flag. It also writes `graphs/stage2_article_interruptions_latency.tex`, a LaTeX table with model, dataset, latency mean/std, mean interrupted time, and interruption rate.
+- Stage 3: log-scale spider plot for dialect score profiles, clamped at `1e-5`, plus merged question-to-answer dialect change-rate bars.
+- Stage 4: emotional naturalness boxplots for Overall, Naturalistic, Improvised, and naturalistic relationship categories, with each panel title showing the original-set sample count. It also writes a short boxplot figure containing only Overall/Naturalistic/Improvised and a violin version of those three panels.
+- Stage 5: AVD question-answer consistency in a 2x2 grid, using the fourth panel for the legend.
+- Stage 6: positive-stance spider plot using stance names, plus polarity agreement heatmaps.
+- Stage 7: normalized f0 profile line plot. The x-axis uses `f0_min_raw`, `f0_p10`, `f0_p25`, `f0_median_raw`, `f0_p75`, `f0_p90`, and `f0_max_raw`; each evaluated model has one curve, with additional curves for original questions and original answers. Shaded bands show plus/minus one standard deviation.
+- Stage 8: scatter plots of WER percentage against answer audio length for improvised and naturalistic answers.
+
+Rendered article figures:
+
+![Stage 1: Intelligibility and Speech Quality](graphs/stage1_article_intelligibility_speech_quality.png)
+
+![Stage 2: Interruptions and Latency](graphs/stage2_article_interruptions_latency.png)
+
+![Stage 3: Dialects](graphs/stage3_article_dialects.png)
+
+![Stage 4: Emotional Naturalness](graphs/stage4_article_emotional_naturalness.png)
+
+![Stage 5: AVD consistency](graphs/stage5_article_avd_consistency.png)
+
+![Stage 6: Stances](graphs/stage6_article_stances.png)
+
+![Stage 7: EXplainable features](graphs/stage7_article_explainable_features.png)
+
+![Stage 8: WER by answer audio length](graphs/stage8_article_wer_answer_length.png)
+
+
 ## Outputs
 
 The main benchmark outputs are written under:
@@ -509,6 +627,7 @@ results/$protocol/$model/$split/$subset/
 Typical outputs include:
 
 ```text
+metadata_verified.csv
 base_metrics.csv
 language_id.csv
 dialect_id.csv
@@ -518,13 +637,16 @@ SER_AVD.csv
 stance_metrics_Q<idx>.csv
 merged_stances.csv
 distrib_baselines_features.csv
+distrib_baselines_features_normalized.csv
+distrib_baselines_features_q.csv
+distrib_baselines_features_normalized_q.csv
 distrib_baselines_feature_scores.csv
 ```
 
 Per-model report artifacts are written under:
 
 ```text
-reports/$protocol/$llm_model/
+reports/$protocol/$model/
 ```
 
 Typical per-model report outputs include:
@@ -542,6 +664,12 @@ Benchmark-table artifacts from script `52` are written under:
 ```text
 reports/$protocol/benchmark/$model.csv
 reports/$protocol/benchmark.csv
+```
+
+Article figures from script `53` are written under:
+
+```text
+graphs/stage*_article_*.png
 ```
 
 ## Current Benchmark Summary
@@ -638,6 +766,12 @@ For questions, please contact:
 _Assistant Research Professor_ <br>
 ECE department, Johns Hopkins University
 `tthebau1@jhu.edu`
+
+## License
+
+This benchmark code is released under the [MIT License](LICENSE). Third-party
+datasets, model checkpoints, and external tools used with the benchmark remain
+subject to their own licenses and terms.
 
 ## Citation
 

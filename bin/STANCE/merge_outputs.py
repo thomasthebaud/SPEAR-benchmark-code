@@ -111,24 +111,52 @@ def stance_files(directory: Path) -> dict[int, Path]:
     return files
 
 
-def row_key(row: dict[str, str], question_index: int) -> tuple[int, str]:
+MergeKey = tuple[str, int, str]
+
+
+def question_number(row: dict[str, str], question_index: int) -> int:
     q_text = safe_str(row.get("question_index"))
-    question = int(q_text) if q_text.isdigit() else int(question_index)
-    return question, safe_str(row.get("row_idx"))
+    return int(q_text) if q_text.isdigit() else int(question_index)
 
 
-def keyed_rows(path: Path, question_index: int) -> dict[tuple[int, str], dict[str, str]]:
-    rows: dict[tuple[int, str], dict[str, str]] = {}
+def normalized_audio_id(row: dict[str, str]) -> str:
+    for column in ("audio_path", "answer_audio_path"):
+        audio_path = safe_str(row.get(column))
+        if not audio_path:
+            continue
+        name = Path(audio_path).name
+        if name.startswith("answer_"):
+            name = name[len("answer_") :]
+        return name
+    return ""
+
+
+def merge_key(row: dict[str, str], question_index: int) -> MergeKey:
+    question = question_number(row, question_index)
+    audio_id = normalized_audio_id(row)
+    if audio_id:
+        return "audio", question, audio_id
+    return "row_idx", question, safe_str(row.get("row_idx"))
+
+
+def keyed_rows(path: Path, question_index: int) -> dict[MergeKey, dict[str, str]]:
+    rows: dict[MergeKey, dict[str, str]] = {}
+    duplicate_keys = 0
     for row in read_csv_rows(path):
-        key = row_key(row, question_index)
-        if key[1]:
+        key = merge_key(row, question_index)
+        if key[2]:
+            if key in rows:
+                duplicate_keys += 1
+                continue
             rows[key] = row
+    if duplicate_keys:
+        print(f"[WARN] {path}: skipped {duplicate_keys} duplicate merge key(s)")
     return rows
 
 
-def sort_key(key: tuple[int, str]) -> tuple[int, int | str]:
-    row_idx = key[1]
-    return key[0], int(row_idx) if row_idx.isdigit() else row_idx
+def sort_key(key: MergeKey) -> tuple[int, str, int | str]:
+    key_type, question, identifier = key
+    return question, key_type, int(identifier) if identifier.isdigit() else identifier
 
 
 def merge_rows(original: dict[str, str], llm: dict[str, str]) -> dict[str, str]:

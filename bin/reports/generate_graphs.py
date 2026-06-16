@@ -21,6 +21,7 @@ ORIGINAL = "original"
 SUBSETS = ["improvised", "naturalistic"]
 DATASET_PALETTE = {"original": "#4C72B0", "model": "#DD8452"}
 EXCLUDED_REPORT_METRICS = {"question_end_time"}
+REPORTED_EXPLAINABLE_FEATURES = {"total_duration_s", "voiced_duration_s", "voiced_ratio"}
 RELATIONSHIP_ORDER = [
     "coworkers",
     "dating/spouse/romantic_partner",
@@ -115,10 +116,32 @@ def remove_axis_legend(ax) -> None:
         legend.remove()
 
 
+def is_reported_explainable_feature(feature: str) -> bool:
+    return feature in REPORTED_EXPLAINABLE_FEATURES or feature.startswith("f0_p")
+
+
+def explainable_feature_file(results_root: Path, model: str, subset: str) -> Path:
+    return result_file(results_root, model, "test", subset, "distrib_baselines_features_normalized.csv")
+
+
+def available_explainable_features(results_root: Path, model: str, subset: str) -> List[str]:
+    features = set()
+    for label_model in [ORIGINAL, model]:
+        frame = safe_read_csv(explainable_feature_file(results_root, label_model, subset))
+        if frame is None:
+            continue
+        features.update(
+            str(column)
+            for column in frame.columns
+            if is_reported_explainable_feature(str(column)) and str(column) not in EXCLUDED_REPORT_METRICS
+        )
+    return sorted(features)
+
+
 def load_feature_values(results_root: Path, model: str, subset: str, feature: str) -> Optional[pd.DataFrame]:
     frames = []
     for label_model, label in [(ORIGINAL, "original"), (model, "model")]:
-        path = result_file(results_root, label_model, "test", subset, "distrib_baselines_features.csv")
+        path = explainable_feature_file(results_root, label_model, subset)
         frame = safe_read_csv(path)
         if frame is None or feature not in frame.columns:
             continue
@@ -381,16 +404,10 @@ def graph_basic_metrics_histograms(results_root: Path, model: str, output_path: 
     save_figure(fig, output_path)
 
 def graph_feature_histograms(results_root: Path, model: str, output_dir: Path) -> None:
-    summary = safe_read_csv(result_file(results_root, model, "distrib_baselines_summary.csv"))
-    if summary is None or "feature" not in summary.columns:
-        print("[WARN] No explainable feature summary found; skipping per-feature histograms.")
+    features = sorted({feature for subset in SUBSETS for feature in available_explainable_features(results_root, model, subset)})
+    if not features:
+        print("[WARN] No normalized explainable features found; skipping per-feature histograms.")
         return
-
-    features = sorted(
-        str(feature)
-        for feature in summary["feature"].dropna().unique()
-        if str(feature) not in EXCLUDED_REPORT_METRICS
-    )
     output_dir.mkdir(parents=True, exist_ok=True)
 
     for feature in features:
@@ -1034,11 +1051,6 @@ def graph_general_explainable_histogram(results_root: Path, model: str, output_p
     save_figure(fig, output_path)
 
 def graph_explainable_scatter(results_root: Path, model: str, output_path: Path) -> None:
-    summary = safe_read_csv(result_file(results_root, model, "distrib_baselines_summary.csv"))
-    if summary is None or "feature" not in summary.columns:
-        print("[WARN] Missing explainable feature summary; skipping explainables.png.")
-        return
-
     report_dir = output_path.parents[1]
     metrics_by_subset: Dict[str, pd.DataFrame] = {}
     for subset in SUBSETS:
@@ -1048,19 +1060,12 @@ def graph_explainable_scatter(results_root: Path, model: str, output_path: Path)
 
     rows = []
     for subset in SUBSETS:
-        original = safe_read_csv(result_file(results_root, ORIGINAL, "test", subset, "distrib_baselines_features.csv"))
-        model_frame = safe_read_csv(result_file(results_root, model, "test", subset, "distrib_baselines_features.csv"))
+        original = safe_read_csv(explainable_feature_file(results_root, ORIGINAL, subset))
+        model_frame = safe_read_csv(explainable_feature_file(results_root, model, subset))
         if original is None or model_frame is None:
             continue
 
-        if "subset" in summary.columns:
-            features = sorted(str(feature) for feature in summary.loc[summary["subset"] == subset, "feature"].dropna().unique())
-        else:
-            features = sorted(
-        str(feature)
-        for feature in summary["feature"].dropna().unique()
-        if str(feature) not in EXCLUDED_REPORT_METRICS
-    )
+        features = available_explainable_features(results_root, model, subset)
 
         pvalues = {}
         if subset in metrics_by_subset:
@@ -1195,8 +1200,6 @@ def main() -> int:
     graph_dialect_confusion(args.results_root, args.model, graphs_dir / "dialect_confusion.png")
     graph_dialect_scores(args.results_root, args.model, graphs_dir / "dialect_scores.png")
     graph_explainable_scatter(args.results_root, args.model, graphs_dir / "explainables.png")
-    graph_cluster_feature_violins(args.results_root, args.model, graphs_dir / "cluster_explainables.png")
-    graph_general_explainable_histogram(args.results_root, args.model, graphs_dir / "general_explainable.png")
     return 0
 
 

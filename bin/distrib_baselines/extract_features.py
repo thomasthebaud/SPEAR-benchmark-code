@@ -254,7 +254,13 @@ def compute_lexical_features(text: str, nlp) -> Dict[str, Any]:
     return row
 
 
-def transcript_text(row: pd.Series) -> str:
+def transcript_text(row: pd.Series, *, questions: bool = False) -> str:
+    if questions:
+        text = row.get("transcript_question", "")
+        return text if isinstance(text, str) else ""
+    answer_text = row.get("transcript_answer", "")
+    if isinstance(answer_text, str) and answer_text.strip():
+        return answer_text.strip()
     asr_text = row.get("ASR_transcript", "")
     if isinstance(asr_text, str) and asr_text.strip():
         return asr_text.strip()
@@ -275,26 +281,24 @@ def estimate_timed_words(text: str, start: float, end: float) -> List[Dict[str, 
     ]
 
 
-def build_words_and_vad(row: pd.Series) -> Tuple[List[Dict[str, float]], List[Tuple[float, float]], str]:
-    total_duration = float(row.get("total_duration", 0.0) or 0.0)
-    question_end = row.get("question_end_time", 0.0)
+def build_words_and_vad(row: pd.Series, *, questions: bool = False) -> Tuple[List[Dict[str, float]], List[Tuple[float, float]], str]:
+    duration_column = "question_end_time" if questions else "answer_duration"
+    duration = row.get(duration_column, row.get("total_duration", 0.0))
     try:
-        question_end_f = float(question_end)
+        duration_f = float(duration)
     except (TypeError, ValueError):
-        question_end_f = 0.0
+        duration_f = 0.0
 
-    text = transcript_text(row)
-    start = min(max(question_end_f, 0.0), total_duration)
-    end = total_duration
-    if end <= start:
-        start = 0.0
+    text = transcript_text(row, questions=questions)
+    start = 0.0
+    end = max(duration_f, 0.0)
     words = estimate_timed_words(text, start, end)
     vad = [(start, end)] if words and end > start else []
     return words, vad, "estimated_from_metadata"
 
 
-def compute_temporal_features(row: pd.Series) -> Dict[str, Any]:
-    words, vad, source = build_words_and_vad(row)
+def compute_temporal_features(row: pd.Series, *, questions: bool = False) -> Dict[str, Any]:
+    words, vad, source = build_words_and_vad(row, questions=questions)
     out: Dict[str, Any] = {"temporal_alignment_source": source}
     if len(words) < 2:
         out["temporal_status"] = "TOO_FEW_WORDS"
@@ -323,6 +327,7 @@ def main() -> int:
     parser.add_argument("--metadata", type=Path, required=True)
     parser.add_argument("--relationships-csv", type=Path)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--questions", action="store_true", help="Extract features from question audio/text instead of answer audio/text.")
     args = parser.parse_args()
 
     metadata = pd.read_csv(args.metadata)
@@ -334,7 +339,8 @@ def main() -> int:
     base_dir = Path.cwd()
 
     for _, meta_row in tqdm(metadata.iterrows(), total=len(metadata), desc=f"extracting explainable feats from {args.metadata.parent}"):
-        audio_path = resolve_path(meta_row["answer_audio_path"], base_dir)
+        audio_column = "audio_path" if args.questions else "answer_audio_path"
+        audio_path = resolve_path(meta_row[audio_column], base_dir)
         orig_id = audio_path.stem
         ids = parse_ids(orig_id)
         relationship, relationship_detail = relationships.get(
@@ -358,14 +364,14 @@ def main() -> int:
             traceback.print_exc()
 
         try:
-            out.update(compute_lexical_features(transcript_text(meta_row), nlp))
+            out.update(compute_lexical_features(transcript_text(meta_row, questions=args.questions), nlp))
         except Exception as exc:
             out["lexical_status"] = "ERROR"
             out["lexical_status_reason"] = str(exc)
             traceback.print_exc()
 
         try:
-            out.update(compute_temporal_features(meta_row))
+            out.update(compute_temporal_features(meta_row, questions=args.questions))
         except Exception as exc:
             out["temporal_status"] = f"ERROR: {exc}"
             traceback.print_exc()
