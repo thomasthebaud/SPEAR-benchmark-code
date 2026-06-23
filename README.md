@@ -715,15 +715,16 @@ graphs/stage*_article_*.png
 
 ## Current Benchmark Summary
 
-The table below mirrors `reports/seamless_2t_2s_questions/benchmark.csv`.
+The table below mirrors the article-ready LaTeX table in `reports/seamless_2t_2s_questions/benchmark.tex`. Values are aggregated over the `seamless_2t_2s_questions` protocol.
 
-| protocol | model | avg_latency | avg_UTMOS | avg_WER | WER_std_between_asr_models | interrupted_pct | avg_interruption_time | EN_lang_% | same_dialect_% | NA_dialect_% | avg_emo_naturalness_logit | same_stance_as_question_% | more_negative_stance_% | more_positive_stance_% | avg_general_expl_feat |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| seamless_2t_2s_questions | gpt-audio-1.5 | 131.544 | 4.362 | 0.058 | 0.004 | 0.000 |  | 100.000 | 74.633 | 97.379 | -4.369 | 95.122 | 2.439 | 2.962 | -1.257 |
-| seamless_2t_2s_questions | gpt-realtime-2 | 104.820 | 4.274 | 0.150 | 0.006 | 29.922 | 11260.979 | 99.844 | 75.133 | 98.027 | -4.378 | 94.889 | 3.066 | 2.385 | -0.622 |
-| seamless_2t_2s_questions | original | 752.525 | 2.217 | 5.729 | 0.228 | 40.305 | 2495.889 | 97.818 | 74.124 | 76.641 | -4.368 | 100.000 | 0.000 | 0.000 | -0.670 |
-| seamless_2t_2s_questions | Qwen2.5-Omni-7B | 277.120 | 4.195 | 0.193 | 0.018 | 0.000 |  | 95.231 | 52.144 | 65.565 | -5.082 | 96.567 | 2.146 | 1.717 | 1.040 |
-| seamless_2t_2s_questions | Qwen3-Omni-30B-A3B-Instruct | 27.743 | 4.337 | 0.079 | 0.011 | 0.000 |  | 90.461 | 69.504 | 89.593 | -4.371 | 96.610 | 1.695 | 2.684 | -0.134 |
+| Model | UTMOS | WER % | CER % | Latency ms | Interr. time ms | Interr. % | English answers % | Dialectal entrain. beta | Dialectal variance tr(Sigma) | Emotional naturalness logit | Arousal corr. rho | Valence corr. rho | Dominance corr. rho | Same stance % | More negative % | More positive % | Answer duration s | Voiced ratio | Pitch variation std |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| original | 2.222 | 27.1 | 17.2 | 742 | 521 | 33.8 | 99.3 | 0.53 | 250.6 | 11.10 | 0.53 | 0.36 | 0.51 | 97.1 | 1.5 | 1.7 | 21.9 | 0.494 | 0.275 |
+| gpt-audio-1.5 | 4.362 | 5.8 | 1.4 | 131 | 0 | 0.0 | 100.0 | 0.46 | 104.2 | 10.91 | 0.11 | 0.29 | 0.09 | 98.0 | 0.8 | 1.2 | 9.7 | 0.548 | 0.118 |
+| gpt-realtime-2 | 4.275 | 14.9 | 5.8 | 104 | 431 | 23.6 | 100.0 | 0.41 | 90.0 | 10.89 | 0.06 | 0.21 | 0.08 | 97.5 | 1.5 | 0.9 | 19.3 | 0.508 | 0.164 |
+| mini-omni | 3.923 | 6.7 | 4.8 | 115 | 1243 | 58.1 | 100.0 | 0.41 | 138.5 | 9.21 | -0.02 | 0.20 | -0.02 | 95.7 | 4.2 | 0.2 | 11.4 | 0.592 | 0.128 |
+| Qwen2.5-Omni-7B | 4.192 | 19.4 | 7.5 | 277 | 0 | 0.0 | 98.9 | 0.28 | 84.5 | 10.20 | -0.02 | -0.03 | -0.03 | 97.3 | 1.6 | 1.3 | 7.2 | 0.384 | 0.175 |
+| Qwen3-Omni-30B-A3B-Instruct | 4.338 | 7.9 | 3.3 | 27 | 0 | 0.0 | 98.1 | 0.48 | 204.5 | 10.91 | 0.07 | 0.29 | 0.06 | 97.2 | 1.1 | 2.0 | 8.6 | 0.671 | 0.219 |
 
 ## Notes and Current Assumptions
 
