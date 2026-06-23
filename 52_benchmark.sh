@@ -7,11 +7,14 @@ source cmd.sh
 
 run_lines=0
 run_merge=0
+run_latex=0
 n_digits=3
+use_std=0
 
 if [[ $# -eq 0 ]]; then
   run_lines=1
   run_merge=1
+  run_latex=1
 fi
 
 while [[ $# -gt 0 ]]; do
@@ -22,9 +25,16 @@ while [[ $# -gt 0 ]]; do
     --merge|--stage2)
       run_merge=1
       ;;
+    --latex|--stage3)
+      run_latex=1
+      ;;
     --all)
       run_lines=1
       run_merge=1
+      run_latex=1
+      ;;
+    --use-std)
+      use_std=1
       ;;
     --n-digits)
       if [[ $# -lt 2 ]]; then
@@ -36,12 +46,14 @@ while [[ $# -gt 0 ]]; do
       ;;
     -h|--help)
       cat <<EOF
-Usage: bash 52_benchmark.sh [--lines] [--merge] [--all] [--n-digits N]
+Usage: bash 52_benchmark.sh [--lines] [--merge] [--latex] [--all] [--use-std] [--n-digits N]
 
 Stages:
   --lines    Stage 1: generate one benchmark CSV line per model
   --merge    Stage 2: merge per-model benchmark CSVs into reports/$protocol/benchmark.csv
-  --all      Run both stages
+  --latex    Stage 3: convert reports/$protocol/benchmark.csv into reports/$protocol/benchmark.tex
+  --all      Run all stages
+  --use-std  Include standard deviation columns for mean-valued metrics
   --n-digits Digits to keep after the decimal point in stage-1 CSVs (default: 3)
 
 If no stage is passed, both stages are run.
@@ -58,6 +70,11 @@ done
 
 benchmark_dir="reports/$protocol/benchmark"
 benchmark_csv="reports/$protocol/benchmark.csv"
+benchmark_tex="reports/$protocol/benchmark.tex"
+benchmark_line_extra_args=()
+if [[ "$use_std" -eq 1 ]]; then
+  benchmark_line_extra_args+=(--use-std)
+fi
 
 if [[ "$run_lines" -eq 1 ]]; then
   benchmark_models=("original" "${eval_models[@]}")
@@ -70,6 +87,7 @@ if [[ "$run_lines" -eq 1 ]]; then
           --results-root "results/$protocol" \
           --output-csv "$benchmark_dir/$llm_model.csv" \
           --n-digits "$n_digits" \
+          "${benchmark_line_extra_args[@]}" \
           --ignore-features "${ignored_explainable_features[@]:-}" &
 
   done
@@ -101,4 +119,15 @@ if [[ "$run_merge" -eq 1 ]]; then
     fi
   done
   echo "Wrote merged benchmark CSV: $benchmark_csv"
+fi
+
+if [[ "$run_latex" -eq 1 ]]; then
+  echo "Converting $benchmark_csv into $benchmark_tex"
+  if [[ ! -f "$benchmark_csv" ]]; then
+    echo "Missing benchmark CSV: $benchmark_csv" >&2
+    exit 1
+  fi
+  python bin/reports/benchmark_latex.py \
+      --input-csv "$benchmark_csv" \
+      --output-tex "$benchmark_tex"
 fi

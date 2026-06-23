@@ -103,6 +103,26 @@ if [[ "$run_DialectID" -eq 1 ]];then
 
     wait
 
+    # Stage 2b: predict dialects for the original question audio only.
+    for split in 'test' 'dev'; do
+        for subset in 'improvised' 'naturalistic'; do
+            model='original'
+            echo "### Running question dialect ID for $model $split $subset ###"
+            metadata=data/$protocol/outputs/$model/$split/$subset/metadata.csv
+            output_dir=results/$protocol/$model/$split/$subset
+            output=$output_dir/dialect_id_q.csv
+
+            mkdir -p "$output_dir"
+            $(python_cmd 'SB11-S2Q' --gpu) bin/dialect_id.py \
+                --metadatafile "$metadata" \
+                --output "$output" \
+                --language "english" \
+                --eval-question &
+        done
+    done
+
+    wait
+
 fi
 
 if [[ "$run_Summary" -eq 1 ]];then

@@ -83,22 +83,22 @@ if [[ "$run_extract" -eq 1 ]]; then
 fi
 
 if [[ "$run_normalize" -eq 1 ]]; then
-  # for split in 'test' 'dev'; do
-  #   for subset in 'improvised' 'naturalistic'; do
-  #     for model in "${eval_models[@]}"; do
-  #       metadata=data/$protocol/outputs/$model/$split/$subset/metadata.csv
-  #       features=results/$protocol/$model/$split/$subset/distrib_baselines_features.csv
-  #       output=results/$protocol/$model/$split/$subset/distrib_baselines_features_normalized.csv
+  for split in 'test' 'dev'; do
+    for subset in 'improvised' 'naturalistic'; do
+      for model in "original" "${eval_models[@]}"; do
+        metadata=data/$protocol/outputs/$model/$split/$subset/metadata.csv
+        features=results/$protocol/$model/$split/$subset/distrib_baselines_features.csv
+        output=results/$protocol/$model/$split/$subset/distrib_baselines_features_normalized.csv
 
-  #       echo "Normalize explainable features for split:$split subset:$subset model:$model"
-  #       $(python_cmd 'SB40-S2' --cpu) bin/distrib_baselines/normalize_features_by_answered_speaker.py \
-  #           --metadata "$metadata" \
-  #           --features "$features" \
-  #           --output "$output" &
+        echo "Normalize explainable features for split:$split subset:$subset model:$model"
+        $(python_cmd 'SB40-S2' --cpu) bin/distrib_baselines/normalize_features_by_answered_speaker.py \
+            --metadata "$metadata" \
+            --features "$features" \
+            --output "$output" &
 
-  #     done
-  #   done
-  # done
+      done
+    done
+  done
 
   for split in 'test' 'dev'; do
     for subset in 'improvised' 'naturalistic'; do

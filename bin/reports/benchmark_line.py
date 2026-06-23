@@ -10,6 +10,16 @@ import pandas as pd
 
 
 SUBSETS = ["improvised", "naturalistic"]
+F0_PROFILE_FEATURES = [
+    "f0_min_raw",
+    "f0_p10",
+    "f0_p52",
+    "f0_median_raw",
+    "f0_p75",
+    "f0_p90",
+    "f0_max_raw",
+]
+F0_FEATURE_FALLBACKS = {"f0_p52": "f0_p25"}
 
 
 def safe_read_csv(path: Path, *, warn_missing: bool = True) -> Optional[pd.DataFrame]:
@@ -111,6 +121,14 @@ def stances_path(results_root: Path, model: str, subset: str) -> Path:
     return results_root / model / "test" / subset / "merged_stances.csv"
 
 
+def ser_avd_path(results_root: Path, model: str, subset: str) -> Path:
+    return results_root / model / "test" / subset / "SER_AVD.csv"
+
+
+def explainable_features_path(results_root: Path, model: str, subset: str) -> Path:
+    return results_root / model / "test" / subset / "distrib_baselines_features_normalized.csv"
+
+
 def cluster_feature_paths(results_root: Path, model: str, subset: str) -> list[Path]:
     folder = results_root / model / "test" / subset
     if not folder.exists():
@@ -139,6 +157,40 @@ def average_column(frames: list[pd.DataFrame], column: str, *, scale: float = 1.
     return float(pd.concat(values, ignore_index=True).dropna().mean())
 
 
+def concat_columns(frames: list[pd.DataFrame], columns: list[str], *, scale: float = 1.0) -> pd.Series:
+    values = []
+    for frame in frames:
+        for column in columns:
+            if column in frame.columns:
+                values.append(numeric(frame[column]) * scale)
+    if not values:
+        return pd.Series(dtype="float64")
+    return pd.concat(values, ignore_index=True).dropna()
+
+
+def mean_std(values: pd.Series) -> tuple[float, float]:
+    values = pd.Series(values, dtype="float64").dropna()
+    if values.empty:
+        return np.nan, np.nan
+    std = float(values.std(ddof=1)) if len(values) > 1 else 0.0
+    return float(values.mean()), std
+
+
+def add_mean_std(row: dict[str, object], name: str, values: pd.Series, *, use_std: bool) -> None:
+    mean, std = mean_std(values)
+    row[name] = mean
+    if use_std:
+        row[f"{name}_std"] = std
+
+
+def metric_columns(frames: list[pd.DataFrame], metric: str) -> list[str]:
+    columns = set()
+    for frame in frames:
+        columns.update(column for column in frame.columns if column == metric or column.startswith(f"{metric}_"))
+    specific = sorted(column for column in columns if column.startswith(f"{metric}_"))
+    return specific if specific else ([metric] if metric in columns else [])
+
+
 def dialogue_interruption_fraction(frames: list[pd.DataFrame]) -> str:
     interrupted = 0
     total = 0
@@ -151,35 +203,20 @@ def dialogue_interruption_fraction(frames: list[pd.DataFrame]) -> str:
     return f"{interrupted}/{total}" if total else ""
 
 
-def wer_columns(frames: list[pd.DataFrame]) -> list[str]:
-    columns = set()
+def metric_mean_std(frames: list[pd.DataFrame], metric: str, *, scale: float = 1.0) -> tuple[float, float]:
+    return mean_std(concat_columns(frames, metric_columns(frames, metric), scale=scale))
+
+
+def interruption_rate_values(frames: list[pd.DataFrame]) -> pd.Series:
+    values = []
     for frame in frames:
-        columns.update(column for column in frame.columns if column == "WER" or column.startswith("WER_"))
-    specific = sorted(column for column in columns if column.startswith("WER_"))
-    return specific if specific else (["WER"] if "WER" in columns else [])
-
-
-def wer_metrics(frames: list[pd.DataFrame]) -> tuple[float, float]:
-    columns = wer_columns(frames)
-    if not columns:
-        return np.nan, np.nan
-
-    all_values = []
-    asr_means = []
-    for column in columns:
-        column_values = [numeric(frame[column]) for frame in frames if column in frame.columns]
-        if not column_values:
-            continue
-        values = pd.concat(column_values, ignore_index=True).dropna()
-        if values.empty:
-            continue
-        values = values * 100.0
-        all_values.append(values)
-        asr_means.append(float(values.mean()))
-
-    average_wer = float(pd.concat(all_values, ignore_index=True).mean()) if all_values else np.nan
-    wer_std_between_asr = float(pd.Series(asr_means, dtype="float64").std(ddof=0)) if len(asr_means) > 1 else 0.0 if asr_means else np.nan
-    return average_wer, wer_std_between_asr
+        if "interruptions" in frame.columns:
+            values.append((numeric(frame["interruptions"]).fillna(0) > 0).astype(float) * 100.0)
+        elif "interrupted" in frame.columns:
+            values.append((numeric(frame["interrupted"]).fillna(0) > 0).astype(float) * 100.0)
+    if not values:
+        return pd.Series(dtype="float64")
+    return pd.concat(values, ignore_index=True).dropna()
 
 
 def interruption_metrics(frames: list[pd.DataFrame]) -> tuple[float, str, float]:
@@ -244,15 +281,83 @@ def dialect_percentages(results_root: Path, model: str, subsets: list[str]) -> t
     return same_pct, north_america_pct
 
 
-def naturalness_average(results_root: Path, model: str, subsets: list[str]) -> float:
+def naturalness_values(results_root: Path, model: str, subsets: list[str]) -> pd.Series:
     values = []
     for subset in subsets:
         frame = safe_read_csv(naturalness_path(results_root, model, subset))
         if frame is not None and "naturalness_logit" in frame.columns:
             values.append(numeric(frame["naturalness_logit"]))
     if not values:
+        return pd.Series(dtype="float64")
+    return pd.concat(values, ignore_index=True).dropna()
+
+
+def avd_correlation(results_root: Path, model: str, subsets: list[str], dimension: str) -> float:
+    question_values = []
+    answer_values = []
+    q_col = f"question_{dimension}"
+    a_col = f"answer_{dimension}"
+    for subset in subsets:
+        frame = safe_read_csv(ser_avd_path(results_root, model, subset))
+        if frame is None or not {q_col, a_col}.issubset(frame.columns):
+            continue
+        valid = pd.DataFrame({"question": numeric(frame[q_col]), "answer": numeric(frame[a_col])}).dropna()
+        if valid.empty:
+            continue
+        question_values.append(valid["question"])
+        answer_values.append(valid["answer"])
+    if not question_values:
         return np.nan
-    return float(pd.concat(values, ignore_index=True).dropna().mean())
+    question = pd.concat(question_values, ignore_index=True)
+    answer = pd.concat(answer_values, ignore_index=True)
+    if len(question) < 2 or question.nunique(dropna=True) < 2 or answer.nunique(dropna=True) < 2:
+        return np.nan
+    return float(question.corr(answer))
+
+
+def explainable_values(results_root: Path, model: str, subsets: list[str], column: str) -> pd.Series:
+    values = []
+    for subset in subsets:
+        frame = safe_read_csv(explainable_features_path(results_root, model, subset))
+        if frame is not None and column in frame.columns:
+            values.append(numeric(frame[column]))
+    if not values:
+        return pd.Series(dtype="float64")
+    return pd.concat(values, ignore_index=True).dropna()
+
+
+def normalized_f0_std_average(results_root: Path, model: str, subsets: list[str]) -> float:
+    stds = []
+    for feature in F0_PROFILE_FEATURES:
+        values = explainable_values(results_root, model, subsets, feature)
+        if values.empty and feature in F0_FEATURE_FALLBACKS:
+            values = explainable_values(results_root, model, subsets, F0_FEATURE_FALLBACKS[feature])
+        if len(values) > 1:
+            stds.append(float(values.std(ddof=1)))
+        elif len(values) == 1:
+            stds.append(0.0)
+    return float(pd.Series(stds, dtype="float64").mean()) if stds else np.nan
+
+
+def known_stance_reference(frame: pd.DataFrame) -> pd.Series:
+    if "score_reference" in frame.columns:
+        reference = numeric(frame["score_reference"])
+        if reference.notna().any():
+            return reference
+
+    if not {"target_category", "stance_related_categories"}.issubset(frame.columns):
+        return pd.Series(np.nan, index=frame.index, dtype="float64")
+
+    def row_reference(row: pd.Series) -> float:
+        categories = [str(category).strip().lower() for category in str(row.get("stance_related_categories", "")).split("|")]
+        target_category = str(row.get("target_category", "")).strip().lower()
+        if len(categories) >= 1 and target_category == categories[0]:
+            return 2.0
+        if len(categories) >= 2 and target_category == categories[1]:
+            return -2.0
+        return np.nan
+
+    return frame.apply(row_reference, axis=1).astype("float64")
 
 
 def stance_metrics(results_root: Path, model: str, subsets: list[str]) -> tuple[float, float, float]:
@@ -264,18 +369,18 @@ def stance_metrics(results_root: Path, model: str, subsets: list[str]) -> tuple[
 
     for subset in subsets:
         frame = safe_read_csv(stances_path(results_root, model, subset), warn_missing=(subset != "naturalistic"))
-        if frame is None or not {"score_original", "score_llm"}.issubset(frame.columns):
+        if frame is None or "score_llm" not in frame.columns:
             continue
-        original = numeric(frame["score_original"])
+        reference = known_stance_reference(frame)
         model_scores = numeric(frame["score_llm"])
-        valid = original.notna() & model_scores.notna()
-        original = original.loc[valid]
+        valid = reference.notna() & model_scores.notna()
+        reference = reference.loc[valid]
         model_scores = model_scores.loc[valid]
-        same_numerator += int((np.sign(original) == np.sign(model_scores)).sum())
-        same_denominator += int(len(original))
-        more_negative += int((model_scores < original).sum())
-        more_positive += int((model_scores > original).sum())
-        comparison_denominator += int(len(original))
+        same_numerator += int((np.sign(reference) == np.sign(model_scores)).sum())
+        same_denominator += int(len(reference))
+        more_negative += int((model_scores < reference).sum())
+        more_positive += int((model_scores > reference).sum())
+        comparison_denominator += int(len(reference))
 
     same_pct = 100.0 * same_numerator / same_denominator if same_denominator else np.nan
     more_negative_pct = 100.0 * more_negative / comparison_denominator if comparison_denominator else np.nan
@@ -310,34 +415,41 @@ def resolve_output_path(args: argparse.Namespace) -> Path:
 
 def compute_benchmark_line(args: argparse.Namespace) -> dict[str, object]:
     frames = base_metric_frames(args.results_root, args.model, args.subsets)
-    average_wer, wer_std_between_asr = wer_metrics(frames)
-    avg_interruptions, interruption_fraction, interrupted_time_s = interruption_metrics(frames)
     same_dialect_pct, north_america_dialect_pct = dialect_percentages(args.results_root, args.model, args.subsets)
-    second_lang, second_lang_pct = second_language(args.results_root, args.model, args.subsets)
     stance_same_pct, stance_more_negative_pct, stance_more_positive_pct = stance_metrics(args.results_root, args.model, args.subsets)
 
-    return {
+    row: dict[str, object] = {
         "protocol": args.protocol,
         "model": args.model,
-        "avg_latency": average_column(frames, "latency"),
-        "avg_UTMOS": average_column(frames, "UTMOS"),
-        "avg_WER_%": average_wer,
-        "WER_%_std_between_asr_models": wer_std_between_asr,
-        "average_number_of_interruptions_per_dialogue": avg_interruptions,
-        "number_of_dialogues_with_interruption": interruption_fraction,
-        "interrupted_time_s": interrupted_time_s,
-        "EN_lang_%": english_percentage(args.results_root, args.model, args.subsets),
-        "second_most_spoken_language": second_lang,
-        "percentage_2nd_language": second_lang_pct,
-        "same_dialect_%": same_dialect_pct,
-        "NA_dialect_%": north_america_dialect_pct,
-        "avg_emo_naturalness_logit": naturalness_average(args.results_root, args.model, args.subsets),
-        "same_stance_as_question_%": stance_same_pct,
-        "more_negative_stance_%": stance_more_negative_pct,
-        "more_positive_stance_%": stance_more_positive_pct,
-        "avg_general_expl_feat": general_explainable_average(args.results_root, args.model, args.subsets),
     }
-
+    add_mean_std(row, "UTMOS", concat_columns(frames, ["UTMOS"]), use_std=args.use_std)
+    add_mean_std(row, "WER_%", concat_columns(frames, metric_columns(frames, "WER"), scale=100.0), use_std=args.use_std)
+    add_mean_std(row, "CER_%", concat_columns(frames, metric_columns(frames, "CER"), scale=100.0), use_std=args.use_std)
+    add_mean_std(row, "latency_ms", concat_columns(frames, ["latency"]), use_std=args.use_std)
+    add_mean_std(row, "interrupted_time_ms", concat_columns(frames, ["interrupted"]), use_std=args.use_std)
+    row.update(
+        {
+            "interruptions_%": mean_std(interruption_rate_values(frames))[0],
+            "english_answers_%": english_percentage(args.results_root, args.model, args.subsets),
+            "same_dialect_as_question_%": same_dialect_pct,
+            "north_american_dialect_%": north_america_dialect_pct,
+        }
+    )
+    add_mean_std(row, "emotional_naturalness_logit", naturalness_values(args.results_root, args.model, args.subsets), use_std=args.use_std)
+    row.update(
+        {
+            "arousal_question_answer_corr": avd_correlation(args.results_root, args.model, args.subsets, "arousal"),
+            "valence_question_answer_corr": avd_correlation(args.results_root, args.model, args.subsets, "valence"),
+            "dominance_question_answer_corr": avd_correlation(args.results_root, args.model, args.subsets, "dominance"),
+            "stance_same_as_question_%": stance_same_pct,
+            "stance_more_negative_%": stance_more_negative_pct,
+            "stance_more_positive_%": stance_more_positive_pct,
+        }
+    )
+    add_mean_std(row, "explainable_duration_s", explainable_values(args.results_root, args.model, args.subsets, "total_duration_s"), use_std=args.use_std)
+    add_mean_std(row, "explainable_voiced_ratio", explainable_values(args.results_root, args.model, args.subsets, "voiced_ratio"), use_std=args.use_std)
+    row["explainable_normalized_f0_std_avg"] = normalized_f0_std_average(args.results_root, args.model, args.subsets)
+    return row
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Write one CSV line of aggregate benchmark metrics for a model.")
@@ -348,6 +460,7 @@ def main() -> int:
     parser.add_argument("--output-dir", type=Path, help="Backward-compatible alias; may be a directory or a .csv path.")
     parser.add_argument("--subsets", nargs="+", default=SUBSETS)
     parser.add_argument("--n-digits", type=int, help="Number of digits to keep after the decimal point for numeric CSV values.")
+    parser.add_argument("--use-std", action="store_true", help="Include standard deviation columns for mean-valued metrics.")
     parser.add_argument("--ignore-features", nargs="*", default=[], help="Accepted for compatibility with 52_benchmark.sh.")
     args = parser.parse_args()
     if args.n_digits is not None and args.n_digits < 0:

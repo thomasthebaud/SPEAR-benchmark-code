@@ -31,6 +31,7 @@ IDENTITY_COLUMNS = [
 OUTPUT_COLUMNS = IDENTITY_COLUMNS + [
     "audio_path_original",
     "audio_path_llm",
+    "score_reference",
     "score_original",
     "score_llm",
     "score_change",
@@ -80,6 +81,16 @@ def relative_change(new: float, old: float) -> float:
     if not math.isfinite(new) or not math.isfinite(old) or old == 0.0:
         return math.nan
     return (new - old) / abs(old)
+
+
+def known_reference_score(row: dict[str, str]) -> float:
+    categories = [safe_str(category).lower() for category in safe_str(row.get("stance_related_categories")).split("|")]
+    target_category = safe_str(row.get("target_category")).lower()
+    if len(categories) >= 1 and target_category == categories[0]:
+        return 2.0
+    if len(categories) >= 2 and target_category == categories[1]:
+        return -2.0
+    return math.nan
 
 
 def mean(values: list[float]) -> float:
@@ -160,14 +171,16 @@ def sort_key(key: MergeKey) -> tuple[int, str, int | str]:
 
 
 def merge_rows(original: dict[str, str], llm: dict[str, str]) -> dict[str, str]:
+    score_reference = known_reference_score(original) if original else known_reference_score(llm)
     score_original = safe_float(original.get("stance_score"))
     score_llm = safe_float(llm.get("stance_score"))
     confidence_original = safe_float(original.get("stance_probability"))
     confidence_llm = safe_float(llm.get("stance_probability"))
 
-    score_change = score_llm - score_original
+    score_baseline = score_reference if math.isfinite(score_reference) else score_original
+    score_change = score_llm - score_baseline
     confidence_change = confidence_llm - confidence_original
-    score_relative_change = relative_change(score_llm, score_original)
+    score_relative_change = relative_change(score_llm, score_baseline)
     confidence_relative_change = relative_change(confidence_llm, confidence_original)
 
     merged: dict[str, str] = {}
@@ -178,6 +191,7 @@ def merge_rows(original: dict[str, str], llm: dict[str, str]) -> dict[str, str]:
         {
             "audio_path_original": safe_str(original.get("audio_path")),
             "audio_path_llm": safe_str(llm.get("audio_path")),
+            "score_reference": fmt_float(score_reference),
             "score_original": fmt_float(score_original),
             "score_llm": fmt_float(score_llm),
             "score_change": fmt_float(score_change),

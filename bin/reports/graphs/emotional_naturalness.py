@@ -69,12 +69,23 @@ def draw_summary_panels(axes, scores, subset_order: list[str], systems: list[str
 
 
 def save_short_figure(scores, subset_order: list[str], systems: list[str], system_colors: dict[str, str], output_path: Path, *, kind: str) -> None:
-    n_panels = 1 + len(subset_order)
+    include_overall = kind != "violin"
+    n_panels = len(subset_order) + (1 if include_overall else 0)
     if scores.empty or n_panels == 0:
         return
-    fig, axes = plt.subplots(n_panels, 1, figsize=(15, max(7.5, 2.8 * n_panels)), squeeze=False)
+    height_per_panel = 2.8 * (1.3 if kind == "violin" else 1.0)
+    fig, axes = plt.subplots(n_panels, 1, figsize=(15, max(7.5, height_per_panel * n_panels)), squeeze=False)
     axes = axes[:, 0]
-    draw_summary_panels(axes, scores, subset_order, systems, system_colors, kind=kind)
+    if include_overall:
+        draw_summary_panels(axes, scores, subset_order, systems, system_colors, kind=kind)
+    else:
+        for ax, subset in zip(axes, subset_order):
+            sub = scores[scores["subset"] == subset]
+            plot_systems = [system for system in systems if system in set(sub["system"])]
+            draw_naturalness_panel(ax, sub, subset.title(), plot_systems, system_colors, kind=kind)
+        for ax in axes[:-1]:
+            ax.set_xlabel("")
+        axes[-1].set_xlabel("Naturalness logit")
     title_suffix = " Violin Plots" if kind == "violin" else ""
     fig.suptitle(f"Emotional Naturalness Across Systems{title_suffix}", y=1.02)
     fig.tight_layout()

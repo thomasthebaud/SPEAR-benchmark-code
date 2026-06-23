@@ -140,6 +140,7 @@ for split in "${splits[@]}"; do
     for model in "${models[@]}"; do
       check_files "22" "$model" "$split/$subset" \
         "results/$protocol/$model/$split/$subset/naturalness_scores.csv" \
+        "results/$protocol/$model/$split/$subset/naturalness_scores_normalized.csv" \
         "results/$protocol/$model/$split/$subset/naturalness_predictions_raw.csv"
     done
   done
@@ -167,12 +168,21 @@ for split in "${splits[@]}"; do
   done
 done
 
-# 40_extract_explainable_features.sh: extract explainable distributional baseline features.
+# 40_extract_explainable_features.sh: extract and normalize explainable distributional baseline features.
 for split in "${splits[@]}"; do
   for subset in "${subsets[@]}"; do
     for model in "${models[@]}"; do
-      check_files "40" "$model" "$split/$subset" \
+      expected=(
         "results/$protocol/$model/$split/$subset/distrib_baselines_features.csv"
+        "results/$protocol/$model/$split/$subset/distrib_baselines_features_normalized.csv"
+      )
+      if [[ "$model" == "original" ]]; then
+        expected+=(
+          "results/$protocol/$model/$split/$subset/distrib_baselines_features_q.csv"
+          "results/$protocol/$model/$split/$subset/distrib_baselines_features_normalized_q.csv"
+        )
+      fi
+      check_files "40" "$model" "$split/$subset" "${expected[@]}"
     done
   done
 done
@@ -194,5 +204,56 @@ for subset in "${subsets[@]}"; do
       "results/$protocol/$model/test/$subset/correlation_cluster_features_rho0p8.csv"
   done
 done
+
+# 51_generate_report.sh: generate short reports, per-model graphs, and detailed HTML reports.
+report_graphs=(
+  basic_metrics.png
+  stances.png
+  emo_naturalness.png
+  emo_naturalness_by_relationship.png
+  emotion_scatter.png
+  dialect_confusion.png
+  dialect_scores.png
+  explainables.png
+)
+for model in "${eval_models[@]}"; do
+  expected=(
+    "reports/$protocol/$model/report.txt"
+    "reports/$protocol/$model/metrics-improvised.csv"
+    "reports/$protocol/$model/metrics-naturalistic.csv"
+    "reports/$protocol/$model/detailed_report.html"
+  )
+  for graph in "${report_graphs[@]}"; do
+    expected+=("reports/$protocol/$model/graphs/$graph")
+  done
+  check_files "51" "$model" "reports" "${expected[@]}"
+done
+
+# 52_benchmark.sh: generate per-model benchmark CSVs, merged benchmark CSV, and LaTeX table.
+expected=(
+  "reports/$protocol/benchmark.csv"
+  "reports/$protocol/benchmark.tex"
+)
+for model in "${models[@]}"; do
+  expected+=("reports/$protocol/benchmark/$model.csv")
+done
+check_files "52" "all" "benchmark" "${expected[@]}"
+
+# 53_generate_article_graphs.sh: generate article figures and companion tables.
+check_files "53" "all" "graphs" \
+  "graphs/stage1_article_intelligibility_speech_quality.png" \
+  "graphs/stage2_article_interruptions_latency.png" \
+  "graphs/stage2_article_interruptions_latency.tex" \
+  "graphs/stage3_article_dialects.png" \
+  "graphs/stage3_dialects_nochange.png" \
+  "graphs/stage4_article_emotional_naturalness.png" \
+  "graphs/stage4_article_emotional_naturalness_short.png" \
+  "graphs/stage4_article_emotional_naturalness_violin.png" \
+  "graphs/stage5_article_avd_consistency.png" \
+  "graphs/stage6_article_stances.png" \
+  "graphs/stage6_article_stances_spider.png" \
+  "graphs/stage7_article_explainable_features.png" \
+  "graphs/stage7_article_explainable_features_combined.png" \
+  "graphs/stage8_article_wer_answer_length.png"
 
 exit "$missing_any"

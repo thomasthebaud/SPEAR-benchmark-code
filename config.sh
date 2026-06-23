@@ -39,5 +39,5 @@ stance_llm_model="gpt-audio-1.5"
 # Statistical test used for report p-values. Options: "Welch t-test", "Mann-Whitney U Test", "Wilcoxon Signed-Rank Test"
 statistical_test="Mann-Whitney U Test"
 # Explainable feature columns ignored by scripts 41 and 51.
-ignored_explainable_features=("f0_n_voiced_frames" "f0_total_duration_s" "f0_mean_raw" "f0_min_raw")
+ignored_explainable_features=("f0_n_voiced_frames" "f0_total_duration_s" "f0_mean_raw")
 

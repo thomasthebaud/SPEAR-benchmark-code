@@ -210,6 +210,11 @@ if __name__ == "__main__":
     )
     parser.add_argument("--volume", type=float, default=1.0, help="Audio volume multiplier")
     parser.add_argument("--force-recompute", action="store_true")
+    parser.add_argument(
+        "--eval-question",
+        action="store_true",
+        help="Only predict dialect for the question audio_path; skip answer_audio_path.",
+    )
 
     args = parser.parse_args()
 
@@ -275,6 +280,9 @@ if __name__ == "__main__":
         outputs.loc[row_mask, "dialect"] = dialect
         outputs.loc[row_mask, "dialect_score"] = score
         outputs.loc[row_mask, "dialect_model"] = model_name
+
+        if args.eval_question:
+            continue
 
         waveform = load_audio(Path(row["answer_audio_path"]))
         dialect, score = predict_dialect(model, waveform, volume=args.volume)
