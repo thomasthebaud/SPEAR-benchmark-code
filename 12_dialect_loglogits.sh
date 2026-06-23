@@ -10,7 +10,7 @@ echo "Projecting dialect log-logits for protocol $protocol"
 mkdir -p "results/$protocol/dialect_logits" graphs
 
 dialect_logit_models=()
-for model in original mini-omni "${eval_models[@]}"; do
+for model in original "${eval_models[@]}"; do
   already_added=0
   for existing in "${dialect_logit_models[@]}"; do
     if [[ "$existing" == "$model" ]]; then
@@ -24,12 +24,12 @@ for model in original mini-omni "${eval_models[@]}"; do
 done
 
 echo "Models: ${dialect_logit_models[*]}"
+graph_root='graphs/dialect_logits'
 
 $(python_cmd 'SB12' --cpu) bin/voxlect/dialect_loglogits.py \
   --results-dir "results/$protocol" \
   --models "${dialect_logit_models[@]}" \
   --output-dir "results/$protocol/dialect_logits" \
-  --pca-plot "graphs/dialect_logits_PCA.png" \
-  --tsne-plot "graphs/dialect_logits_TSNE.png"
+  --graph-root "$graph_root"
 
 exit

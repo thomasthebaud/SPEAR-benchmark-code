@@ -18,9 +18,11 @@ GROUPS = {
     "interrupted_time_ms": "Interruptions",
     "interrupted_time_ms_std": "Interruptions",
     "interruptions_%": "Interruptions",
-    "english_answers_%": "Language",
-    "same_dialect_as_question_%": "Language",
-    "north_american_dialect_%": "Language",
+    "english_answers_%": "Language and Dialect",
+    "same_dialect_as_question_%": "Language and Dialect",
+    "north_american_dialect_%": "Language and Dialect",
+    "dialectal_entrainment_spearman": "Language and Dialect",
+    "dialectal_variance": "Language and Dialect",
     "emotional_naturalness_logit": "Emotions",
     "emotional_naturalness_logit_std": "Emotions",
     "arousal_question_answer_corr": "Emotions",
@@ -29,14 +31,58 @@ GROUPS = {
     "stance_same_as_question_%": "Stances",
     "stance_more_negative_%": "Stances",
     "stance_more_positive_%": "Stances",
-    "explainable_duration_s": "Explainable",
-    "explainable_duration_s_std": "Explainable",
-    "explainable_voiced_ratio": "Explainable",
-    "explainable_voiced_ratio_std": "Explainable",
-    "explainable_normalized_f0_std_avg": "Explainable",
+    "explainable_duration_s": "Explainable Features",
+    "explainable_duration_s_std": "Explainable Features",
+    "explainable_voiced_ratio": "Explainable Features",
+    "explainable_voiced_ratio_std": "Explainable Features",
+    "explainable_normalized_f0_std_avg": "Explainable Features",
 }
-GROUP_ORDER = ["Speech quality", "Interruptions", "Language", "Emotions", "Stances", "Explainable"]
+GROUP_ORDER = ["Speech quality", "Interruptions", "Language and Dialect", "Emotions", "Stances", "Explainable Features"]
 ROW_END = " " + chr(92) * 2
+
+METRIC_ORDER = [
+    "UTMOS",
+    "WER_%",
+    "CER_%",
+    "latency_ms",
+    "interrupted_time_ms",
+    "interruptions_%",
+    "english_answers_%",
+    "dialectal_entrainment_spearman",
+    "dialectal_variance",
+    "emotional_naturalness_logit",
+    "arousal_question_answer_corr",
+    "valence_question_answer_corr",
+    "dominance_question_answer_corr",
+    "stance_same_as_question_%",
+    "stance_more_negative_%",
+    "stance_more_positive_%",
+    "explainable_duration_s",
+    "explainable_voiced_ratio",
+    "explainable_normalized_f0_std_avg",
+]
+
+HEADER_ROWS = {
+    "UTMOS": ("UTMOS", "", "1-5"),
+    "WER_%": ("WER", "", r"\%"),
+    "CER_%": ("CER", "", r"\%"),
+    "latency_ms": ("Latency", "", "(ms)"),
+    "interrupted_time_ms": ("Interr.", "time", "(ms)"),
+    "interruptions_%": ("Interr.", "", r"\%"),
+    "english_answers_%": ("English", "answers", r"\%"),
+    "dialectal_entrainment_spearman": ("Dialectal", "entrain.", r"$\beta$"),
+    "dialectal_variance": ("Dialectal", "variance", r"$tr(\Sigma)$"),
+    "emotional_naturalness_logit": ("Emotional", "Naturalness", "logit"),
+    "arousal_question_answer_corr": ("Arousal", "corr.", r"$\rho$"),
+    "valence_question_answer_corr": ("Valence", "corr.", r"$\rho$"),
+    "dominance_question_answer_corr": ("Dominance", "corr.", r"$\rho$"),
+    "stance_same_as_question_%": ("Same", "stance", r"\%"),
+    "stance_more_negative_%": ("More", "negative", r"\%"),
+    "stance_more_positive_%": ("More", "positive", r"\%"),
+    "explainable_duration_s": ("Answer", "Duration", "s"),
+    "explainable_voiced_ratio": ("Voiced", "ratio", ""),
+    "explainable_normalized_f0_std_avg": ("Pitch", "Variation", "(std)"),
+}
 
 LABELS = {
     "UTMOS": "UTMOS",
@@ -53,6 +99,8 @@ LABELS = {
     "english_answers_%": "English answers",
     "same_dialect_as_question_%": "Same dialect",
     "north_american_dialect_%": "North American",
+    "dialectal_entrainment_spearman": "Dialectal entrainment",
+    "dialectal_variance": "Dialectal variance",
     "emotional_naturalness_logit": "Naturalness",
     "emotional_naturalness_logit_std": "Naturalness std",
     "arousal_question_answer_corr": "Arousal corr.",
@@ -83,6 +131,8 @@ UNITS = {
     "english_answers_%": r"\%",
     "same_dialect_as_question_%": r"\%",
     "north_american_dialect_%": r"\%",
+    "dialectal_entrainment_spearman": r"$\beta$",
+    "dialectal_variance": r"$tr(\Sigma)$",
     "emotional_naturalness_logit": "logit",
     "emotional_naturalness_logit_std": "logit",
     "arousal_question_answer_corr": "r",
@@ -128,15 +178,20 @@ def format_value(value, column: str) -> str:
         return f"{number:.1f}"
     if unit == "ms":
         return str(int(round(number)))
+    if column == "dialectal_variance":
+        return f"{number:.1f}"
+    if column == "emotional_naturalness_logit":
+        return f"{number:.2f}"
     if unit == "s":
         return f"{number:.1f}"
-    if unit == "r":
+    if unit in {"r", r"$\rho$", r"$\beta$"}:
         return f"{number:.2f}"
     return latex_escape(value)
 
 
 def metric_columns(fieldnames: list[str]) -> list[str]:
-    return [column for column in fieldnames if column in GROUPS]
+    available = set(fieldnames)
+    return [column for column in METRIC_ORDER if column in available]
 
 
 def column_groups(columns: list[str]) -> list[tuple[str, int]]:
@@ -167,6 +222,18 @@ def grouped_header(columns: list[str]) -> list[str]:
     return cells
 
 
+def split_header_rows(columns: list[str]) -> tuple[list[str], list[str], list[str]]:
+    top = [r"\multirow{2}{*}{Model}"]
+    middle = [""]
+    units = [""]
+    for column in columns:
+        first, second, unit = HEADER_ROWS.get(column, (LABELS.get(column, column), "", UNITS.get(column, "")))
+        top.append(first)
+        middle.append(second)
+        units.append(unit)
+    return top, middle, units
+
+
 def row_for(frame_row: dict[str, str], columns: list[str]) -> str:
     cells = [latex_escape(frame_row.get("model", ""))]
     cells.extend(format_value(frame_row.get(column), column) for column in columns)
@@ -180,12 +247,14 @@ def make_table(rows: list[dict[str, str]], fieldnames: list[str]) -> str:
     original = [row for row in rows if row.get("model", "") == "original"]
     models = [row for row in rows if row.get("model", "") != "original"]
 
+    header_top, header_middle, header_units = split_header_rows(columns)
     lines = [
         rf"\begin{{tabular}}{{{tabular_spec(columns)}}}",
         r"\toprule",
         " & ".join(grouped_header(columns)) + ROW_END,
-        " & ".join(["Model"] + [latex_escape(LABELS[column]) for column in columns]) + ROW_END,
-        " & ".join([""] + [UNITS[column] for column in columns]) + ROW_END,
+        " & ".join(header_top) + ROW_END,
+        " & ".join(header_middle) + ROW_END,
+        " & ".join(header_units) + ROW_END,
         r"\midrule",
     ]
     if original:

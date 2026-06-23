@@ -240,6 +240,21 @@ The runner keeps the original question metadata and adds or updates:
 
 Existing output metadata causes the Python runner to skip that split/subset.
 
+### `02b_run_parallel_LLM_inference.sh`
+
+Runs sharded LLM inference for the single model named by `llm_model`. This is useful for GPU-heavy local proxies where one split/subset should be divided across multiple one-GPU jobs:
+
+```bash
+bash 02b_run_parallel_LLM_inference.sh --num-gpus 4
+bash 02b_run_parallel_LLM_inference.sh --num-gpus 4 --gpu-a100
+```
+
+You can also set `N_GPUS=4`. For each split/subset, the script launches `N` shards, writes `metadata_shard_<idx>_of_<N>.csv`, and merges the shards into the normal output file:
+
+```text
+data/$protocol/outputs/$llm_model/$split/$subset/metadata.csv
+```
+
 ### `03_transcribe.sh`
 
 Runs ASR over answer audio for both `dev` and `test`, both subsets, and every model in `eval_models`. If you also need original-answer transcripts for comparison runs, include `original` in the loop or run the transcriber directly on `data/$protocol/outputs/original`. It currently runs the ASR systems configured in `asr_models`, usually:
@@ -304,6 +319,20 @@ results/$protocol/$model/$split/$subset/dialect_id.csv
 ```
 
 Dialect prediction uses language predictions to decide whether an utterance should be sent to the English VoxLect model. The language and dialect stages run over `eval_models`; the summary helper currently prints aggregate counts for `original` and `$llm_model`.
+
+### `12_dialect_loglogits.sh`
+
+Projects VoxLect dialect log-logits for `original` and every model in `eval_models`. It writes tabular outputs under:
+
+```text
+results/$protocol/dialect_logits/
+```
+
+and graph files rooted at:
+
+```text
+graphs/dialect_logits*
+```
 
 ### `20_naturalness_feats.sh`
 
@@ -457,20 +486,20 @@ The cluster feature CSV includes one PCA feature per correlated group plus a `ge
 
 Scripts `40` and `41` are based on the Distributional Baselines for conversational prosody and rhythm. See [References](#references) for the paper citation and full implementation.
 
-### `50_check_missing_files.sh`
+### `60_check_missing_files.sh`
 
-Checks whether the expected output files from scripts `01` through `41` have been produced. It sources `config.sh`, then verifies the expected metadata, transcript, metric, language/dialect, naturalness, STANCE, explainable-feature, baseline-score, and correlation-cluster files for every relevant split, subset, and model.
+Checks whether the expected output files from scripts `01` through `41` and scripts `61` through `63` have been produced. It sources `config.sh`, then verifies the expected metadata, transcript, metric, language/dialect, naturalness, STANCE, explainable-feature, baseline-score, correlation-cluster, report, benchmark-table, and article-graph files for every relevant split, subset, and model.
 
 Run it from the benchmark directory with:
 
 ```bash
-bash 50_check_missing_files.sh
+bash 60_check_missing_files.sh
 ```
 
 By default it prints every expected file as either `found` or `missing`, plus an `all computed` summary for groups where every expected file exists. To print only missing files, use:
 
 ```bash
-bash 50_check_missing_files.sh --missing-only
+bash 60_check_missing_files.sh --missing-only
 ```
 
 Example default output:
@@ -482,15 +511,15 @@ Example default output:
 
 The script exits with status `0` if all expected files exist and `1` if any file is missing.
 
-### `51_generate_report.sh`
+### `61_generate_report.sh`
 
 Generates human-readable reports from pipeline outputs. It has three optional stages:
 
 ```bash
-bash 51_generate_report.sh --short
-bash 51_generate_report.sh --graphs
-bash 51_generate_report.sh --long
-bash 51_generate_report.sh --all
+bash 61_generate_report.sh --short
+bash 61_generate_report.sh --graphs
+bash 61_generate_report.sh --long
+bash 61_generate_report.sh --all
 ```
 
 If no option is passed, the script runs all stages.
@@ -509,7 +538,7 @@ The graph stage writes plots under:
 reports/$protocol/$model/graphs/
 ```
 
-It includes `emotion_scatter.png`, a 2x3 grid comparing full-question vs full-answer Arousal, Dominance, and Valence from `SER_AVD.csv`. Columns are Arousal, Dominance, and Valence; rows are improvised and naturalistic. It also includes `emo_naturalness_by_relationship.png`, a single horizontal violin plot comparing original and model emotional-naturalness logits across naturalistic relationship categories.
+It includes `emotion_scatter.png`, a 2x3 grid comparing full-question vs full-answer Arousal, Dominance, and Valence from `SER_AVD.csv`. Columns are Arousal, Dominance, and Valence; rows are improvised and naturalistic. It also includes `emo_naturalness_by_relationship.png`, a single horizontal violin plot comparing original and model emotional-naturalness logits across naturalistic relationship categories, plus `cluster_explainables.png` and `general_explainable.png` for the correlation-cluster PCA features created by script `41`.
 
 The long report stage writes:
 
@@ -519,17 +548,18 @@ reports/$protocol/$model/detailed_report.html
 
 Report generation uses `statistical_test` from `config.sh`, defaulting to Welch t-test if the variable is unset. Explainable features listed in `ignored_explainable_features` are omitted where applicable. The current short-report and graph explainable sections use the normalized script `40` feature files and only report `total_duration_s`, `voiced_duration_s`, `voiced_ratio`, and `f0_p*` columns.
 
-### `52_benchmark.sh`
+### `62_benchmark.sh`
 
-Generates compact benchmark CSV rows and a merged benchmark table from the outputs of scripts `10`, `11`, `22`, `31`, and `41`. It has two optional stages:
+Generates compact benchmark CSV rows, a merged benchmark table, and a LaTeX table from the outputs of scripts `10`, `11`, `22`, `31`, and `41`. It has three optional stages:
 
 ```bash
-bash 52_benchmark.sh --lines
-bash 52_benchmark.sh --merge
-bash 52_benchmark.sh --all
+bash 62_benchmark.sh --lines
+bash 62_benchmark.sh --merge
+bash 62_benchmark.sh --latex
+bash 62_benchmark.sh --all
 ```
 
-Aliases `--stage1` and `--stage2` are also supported. If no option is passed, both stages are run.
+Aliases `--stage1`, `--stage2`, and `--stage3` are also supported. If no option is passed, all three stages are run.
 
 Stage 1, `--lines`, writes one two-line CSV per evaluated model under:
 
@@ -537,10 +567,10 @@ Stage 1, `--lines`, writes one two-line CSV per evaluated model under:
 reports/$protocol/benchmark/$model.csv
 ```
 
-Each row aggregates test-set metrics across `improvised` and `naturalistic`, including latency, UTMOS, WER, ASR-to-ASR WER variation, interruption rate and timing, language and dialect percentages, emotional naturalness, STANCE shifts, and the general explainable-feature PCA value. Numeric values are rounded with `--n-digits`, which currently defaults to `3` in `52_benchmark.sh`:
+Each row aggregates test-set metrics across `improvised` and `naturalistic`, including latency, UTMOS, WER, ASR-to-ASR WER variation, interruption rate and timing, language and dialect percentages, emotional naturalness, STANCE shifts, and the general explainable-feature PCA value. Numeric values are rounded with `--n-digits`, which currently defaults to `3` in `62_benchmark.sh`. Add `--use-std` to include standard-deviation columns for mean-valued metrics:
 
 ```bash
-bash 52_benchmark.sh --lines --n-digits 3
+bash 62_benchmark.sh --lines --n-digits 3 --use-std
 ```
 
 Stage 2, `--merge`, concatenates the per-model CSV files into one protocol-level table:
@@ -549,7 +579,13 @@ Stage 2, `--merge`, concatenates the per-model CSV files into one protocol-level
 reports/$protocol/benchmark.csv
 ```
 
-### `53_generate_article_graphs.sh`
+Stage 3, `--latex`, converts the merged benchmark CSV into:
+
+```text
+reports/$protocol/benchmark.tex
+```
+
+### `63_generate_article_graphs.sh`
 
 Generates protocol-level article figures that compare all evaluated systems in single figures. The script activates the `spearbench` conda environment, submits each requested graph with `python_cmd`, and writes PNGs under:
 
@@ -560,15 +596,15 @@ graphs/
 With no arguments, all eight stages run. Stage flags are:
 
 ```bash
-bash 53_generate_article_graphs.sh --stage1  # Intelligibility and Speech Quality
-bash 53_generate_article_graphs.sh --stage2  # Interruptions and Latency
-bash 53_generate_article_graphs.sh --stage3  # Dialects
-bash 53_generate_article_graphs.sh --stage4  # Emotional Naturalness
-bash 53_generate_article_graphs.sh --stage5  # AVD consistency
-bash 53_generate_article_graphs.sh --stage6  # Stances
-bash 53_generate_article_graphs.sh --stage7  # EXplainable features
-bash 53_generate_article_graphs.sh --stage8  # WER by answer audio length
-bash 53_generate_article_graphs.sh --all
+bash 63_generate_article_graphs.sh --stage1  # Intelligibility and Speech Quality
+bash 63_generate_article_graphs.sh --stage2  # Interruptions and Latency
+bash 63_generate_article_graphs.sh --stage3  # Dialects
+bash 63_generate_article_graphs.sh --stage4  # Emotional Naturalness
+bash 63_generate_article_graphs.sh --stage5  # AVD consistency
+bash 63_generate_article_graphs.sh --stage6  # Stances
+bash 63_generate_article_graphs.sh --stage7  # EXplainable features
+bash 63_generate_article_graphs.sh --stage8  # WER by answer audio length
+bash 63_generate_article_graphs.sh --all
 ```
 
 Output filenames include the stage number:
@@ -576,13 +612,17 @@ Output filenames include the stage number:
 ```text
 graphs/stage1_article_intelligibility_speech_quality.png
 graphs/stage2_article_interruptions_latency.png
+graphs/stage2_article_interruptions_latency.tex
 graphs/stage3_article_dialects.png
+graphs/stage3_dialects_nochange.png
 graphs/stage4_article_emotional_naturalness.png
 graphs/stage4_article_emotional_naturalness_short.png
 graphs/stage4_article_emotional_naturalness_violin.png
 graphs/stage5_article_avd_consistency.png
 graphs/stage6_article_stances.png
+graphs/stage6_article_stances_spider.png
 graphs/stage7_article_explainable_features.png
+graphs/stage7_article_explainable_features_combined.png
 graphs/stage8_article_wer_answer_length.png
 ```
 
@@ -590,11 +630,11 @@ The current figures use these encodings:
 
 - Stage 1: boxplots for CER, WER, and UTMOS, with CER/WER merged across ASR systems and columns for improvised vs naturalistic.
 - Stage 2: histograms for latency and interrupted time, restricted to streaming systems `original` and `gpt-realtime-2`, plus an interruption-rate bar plot for the binary interruption flag. It also writes `graphs/stage2_article_interruptions_latency.tex`, a LaTeX table with model, dataset, latency mean/std, mean interrupted time, and interruption rate.
-- Stage 3: log-scale spider plot for dialect score profiles, clamped at `1e-5`, plus merged question-to-answer dialect change-rate bars.
+- Stage 3: log-scale spider plot for dialect score profiles, clamped at `1e-5`, plus merged question-to-answer dialect change-rate bars and a dialect no-change companion figure.
 - Stage 4: emotional naturalness boxplots for Overall, Naturalistic, Improvised, and naturalistic relationship categories, with each panel title showing the original-set sample count. It also writes a short boxplot figure containing only Overall/Naturalistic/Improvised and a violin version of those three panels.
 - Stage 5: AVD question-answer consistency in a 2x2 grid, using the fourth panel for the legend.
 - Stage 6: positive-stance spider plot using stance names, plus polarity agreement heatmaps.
-- Stage 7: normalized f0 profile line plot. The x-axis uses `f0_min_raw`, `f0_p10`, `f0_p25`, `f0_median_raw`, `f0_p75`, `f0_p90`, and `f0_max_raw`; each evaluated model has one curve, with additional curves for original questions and original answers. Shaded bands show plus/minus one standard deviation.
+- Stage 7: normalized f0 profile line plot. The x-axis uses `f0_min_raw`, `f0_p10`, `f0_p25`, `f0_median_raw`, `f0_p75`, `f0_p90`, and `f0_max_raw`; each evaluated model has one curve, with additional curves for original questions and original answers. Shaded bands show plus/minus one standard deviation. A combined companion figure is also written.
 - Stage 8: scatter plots of WER percentage against answer audio length for improvised and naturalistic answers.
 
 Rendered article figures:
@@ -659,14 +699,15 @@ graphs/
 detailed_report.html
 ```
 
-Benchmark-table artifacts from script `52` are written under:
+Benchmark-table artifacts from script `62` are written under:
 
 ```text
 reports/$protocol/benchmark/$model.csv
 reports/$protocol/benchmark.csv
+reports/$protocol/benchmark.tex
 ```
 
-Article figures from script `53` are written under:
+Article figures from script `63` are written under:
 
 ```text
 graphs/stage*_article_*.png

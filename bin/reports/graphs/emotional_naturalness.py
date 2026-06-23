@@ -28,7 +28,16 @@ def companion_output_path(output_path: Path, suffix: str) -> Path:
     return output_path.with_name(f"{output_path.stem}_{suffix}{output_path.suffix}")
 
 
-def draw_naturalness_panel(ax, data, title: str, plot_systems: list[str], system_colors: dict[str, str], *, kind: str) -> None:
+def draw_naturalness_panel(
+    ax,
+    data,
+    title: str,
+    plot_systems: list[str],
+    system_colors: dict[str, str],
+    *,
+    kind: str,
+    tick_labelsize: int = 9,
+) -> None:
     if data.empty or not plot_systems:
         ax.set_axis_off()
         return
@@ -50,8 +59,8 @@ def draw_naturalness_panel(ax, data, title: str, plot_systems: list[str], system
         sns.boxplot(**common_kwargs, showfliers=False)
     ax.set_title(title_with_original_n(title, data))
     ax.set_ylabel("")
-    ax.tick_params(axis="x", labelsize=9)
-    ax.tick_params(axis="y", labelsize=9)
+    ax.tick_params(axis="x", labelsize=tick_labelsize)
+    ax.tick_params(axis="y", labelsize=tick_labelsize)
 
 
 def draw_summary_panels(axes, scores, subset_order: list[str], systems: list[str], system_colors: dict[str, str], *, kind: str) -> None:
@@ -73,8 +82,8 @@ def save_short_figure(scores, subset_order: list[str], systems: list[str], syste
     n_panels = len(subset_order) + (1 if include_overall else 0)
     if scores.empty or n_panels == 0:
         return
-    height_per_panel = 2.8 * (1.3 if kind == "violin" else 1.0)
-    fig, axes = plt.subplots(n_panels, 1, figsize=(15, max(7.5, height_per_panel * n_panels)), squeeze=False)
+    height_per_panel = 2* (1.3 if kind == "violin" else 1.0)
+    fig, axes = plt.subplots(n_panels, 1, figsize=(15, height_per_panel * n_panels), squeeze=False)
     axes = axes[:, 0]
     if include_overall:
         draw_summary_panels(axes, scores, subset_order, systems, system_colors, kind=kind)
@@ -88,6 +97,20 @@ def save_short_figure(scores, subset_order: list[str], systems: list[str], syste
         axes[-1].set_xlabel("Naturalness logit")
     title_suffix = " Violin Plots" if kind == "violin" else ""
     fig.suptitle(f"Emotional Naturalness Across Systems{title_suffix}", y=1.02)
+    fig.tight_layout()
+    save_figure(fig, output_path)
+
+
+def save_merged_figure(scores, systems: list[str], system_colors: dict[str, str], output_path: Path, *, kind: str = "box") -> None:
+    if scores.empty:
+        return
+    plot_systems = [system for system in systems if system in set(scores["system"])]
+    if not plot_systems:
+        return
+    fig, ax = plt.subplots(1, 1, figsize=(15, 5))
+    draw_naturalness_panel(ax, scores, "Merged", plot_systems, system_colors, kind=kind, tick_labelsize=18)
+    ax.set_xlabel("Naturalness logit", fontsize=18)
+    ax.set_title("")
     fig.tight_layout()
     save_figure(fig, output_path)
 
@@ -169,6 +192,13 @@ def main() -> int:
         systems,
         system_colors,
         companion_output_path(args.output_path, "violin"),
+        kind="violin",
+    )
+    save_merged_figure(
+        scores,
+        systems,
+        system_colors,
+        companion_output_path(args.output_path, "merged"),
         kind="violin",
     )
     return 0

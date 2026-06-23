@@ -1,6 +1,7 @@
-protocol,model,avg_latency,avg_UTMOS,avg_WER,WER_std_between_asr_models,interrupted_pct,avg_interruption_time,EN_lang_%,same_dialect_%,NA_dialect_%,avg_emo_naturalness_logit,same_stance_as_question_%,more_negative_stance_%,more_positive_stance_%,avg_general_expl_feat
-seamless_2t_2s_questions,gpt-audio-1.5,131.544,4.362,0.058,0.004,0.000,,100.000,74.633,97.379,-4.369,95.122,2.439,2.962,-1.257
-seamless_2t_2s_questions,gpt-realtime-2,104.820,4.274,0.150,0.006,29.922,11260.979,99.844,75.133,98.027,-4.378,94.889,3.066,2.385,-0.622
-seamless_2t_2s_questions,original,752.525,2.217,5.729,0.228,40.305,2495.889,97.818,74.124,76.641,-4.368,100.000,0.000,0.000,-0.670
-seamless_2t_2s_questions,Qwen2.5-Omni-7B,277.120,4.195,0.193,0.018,0.000,,95.231,52.144,65.565,-5.082,96.567,2.146,1.717,1.040
-seamless_2t_2s_questions,Qwen3-Omni-30B-A3B-Instruct,27.743,4.337,0.079,0.011,0.000,,90.461,69.504,89.593,-4.371,96.610,1.695,2.684,-0.134
+protocol,model,UTMOS,WER_%,CER_%,latency_ms,interrupted_time_ms,interruptions_%,english_answers_%,same_dialect_as_question_%,north_american_dialect_%,dialectal_entrainment_spearman,dialectal_variance,emotional_naturalness_logit,arousal_question_answer_corr,valence_question_answer_corr,dominance_question_answer_corr,stance_same_as_question_%,stance_more_negative_%,stance_more_positive_%,explainable_duration_s,explainable_voiced_ratio,explainable_normalized_f0_std_avg
+seamless_2t_2s_questions,gpt-audio-1.5,4.362,5.796,1.390,130.863,0.000,0.000,100.000,74.633,97.379,0.457,104.248,10.908,0.113,0.288,0.092,98.021,0.761,1.218,9.723,0.548,0.118
+seamless_2t_2s_questions,gpt-realtime-2,4.275,14.910,5.817,103.864,431.069,23.580,100.000,75.133,98.027,0.407,89.985,10.893,0.060,0.208,0.081,97.546,1.534,0.920,19.297,0.508,0.164
+seamless_2t_2s_questions,mini-omni,3.923,6.718,4.791,114.607,1243.446,58.060,100.000,65.837,84.738,0.407,138.524,9.215,-0.016,0.197,-0.021,95.660,4.151,0.189,11.429,0.592,0.128
+seamless_2t_2s_questions,original,2.222,27.138,17.218,742.055,520.914,33.835,99.272,74.124,76.641,0.528,250.639,11.096,0.525,0.356,0.511,97.095,1.529,1.682,21.949,0.494,0.275
+seamless_2t_2s_questions,Qwen2.5-Omni-7B,4.192,19.370,7.501,277.361,0.000,0.000,98.899,52.144,65.565,0.285,84.462,10.195,-0.023,-0.026,-0.027,97.335,1.567,1.254,7.211,0.384,0.175
+seamless_2t_2s_questions,Qwen3-Omni-30B-A3B-Instruct,4.338,7.923,3.272,27.246,0.000,0.000,98.140,69.504,89.593,0.477,204.471,10.906,0.075,0.288,0.063,97.218,1.082,2.009,8.566,0.671,0.219

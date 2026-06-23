@@ -40,7 +40,7 @@ def draw_dialect_profile(ax_radar, scores, systems: list[str], palette: dict[str
     profile = scores.groupby(["system", "dialect"], dropna=False)["score"].median().unstack("dialect").reindex(index=systems, columns=DIALECT_PROFILE_PLOT_LABELS)
     angles = np.linspace(0, 2 * np.pi, len(DIALECT_PROFILE_PLOT_LABELS), endpoint=False)
     closed_angles = np.concatenate([angles, angles[:1]])
-    score_floor = 1e-5
+    score_floor = 1e-6
     max_score = float(np.nanmax(profile.to_numpy())) if profile.notna().any().any() else 1.0
     max_score = max(max_score, score_floor * 10.0)
     for system in systems:
@@ -48,16 +48,16 @@ def draw_dialect_profile(ax_radar, scores, systems: list[str], palette: dict[str
             continue
         values = profile.loc[system].fillna(score_floor).clip(lower=score_floor).to_numpy(dtype=float)
         closed_values = np.concatenate([values, values[:1]])
-        linestyle = ":" if system == ORIGINAL else "-"
+        linestyle = "--" if system == ORIGINAL else "-"
         ax_radar.plot(closed_angles, closed_values, color=palette[system], linewidth=2.0, linestyle=linestyle, label=system)
         ax_radar.fill(closed_angles, closed_values, color=palette[system], alpha=0.08)
         legend_handles.append(Line2D([0], [0], color=palette[system], linewidth=2.0, linestyle=linestyle, label=system))
     ax_radar.set_xticks(angles)
-    ax_radar.set_xticklabels(DIALECT_PROFILE_PLOT_LABELS, fontsize=11)
+    ax_radar.set_xticklabels(DIALECT_PROFILE_PLOT_LABELS, fontsize=22)
     ax_radar.set_yscale("log")
     ax_radar.set_ylim(score_floor, max_score * 1.08)
-    ax_radar.set_yticks([1e-5, 1e-4, 1e-3, 1e-2, 1e-1, 1.0])
-    ax_radar.set_yticklabels(["1e-5", "1e-4", "1e-3", "1e-2", "1e-1", "1"], fontsize=10)
+    ax_radar.set_yticks([1e-6, 1e-5, 1e-4, 1e-3, 1e-2, 1e-1, 1.0])
+    ax_radar.set_yticklabels(["1e-6", "", "1e-4", "", "1e-2", "", "1"], fontsize=20)
     ax_radar.grid(True, alpha=0.45)
     return legend_handles
 
@@ -133,9 +133,9 @@ def main() -> int:
         )
         sns.barplot(data=summary, x="system", y="changed_percent", hue="system", order=systems, hue_order=systems, palette=palette, legend=False, ax=ax_bar)
         ax_bar.set_xlabel("")
-        ax_bar.set_ylabel("Changed (%)")
-        ax_bar.tick_params(axis="x", rotation=25, labelsize=11)
-        ax_bar.tick_params(axis="y", labelsize=9)
+        ax_bar.set_ylabel("Changed (%)", fontsize=22)
+        ax_bar.tick_params(axis="x", rotation=25, labelsize=22)
+        ax_bar.tick_params(axis="y", labelsize=18)
     else:
         ax_bar.set_axis_off()
 

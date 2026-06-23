@@ -11,3 +11,5 @@ reports/*/*/graphs/feat_graphs/*
 reports/*/*/graphs/basic_metric_graphs/*
 bin/llm_proxies/mini-omni-utils/utils/assets/silero_vad.onnx
 graphs/*
+reports/*/*
+!reports/*/benchmark*

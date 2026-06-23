@@ -10,7 +10,7 @@ import pandas as pd
 import seaborn as sns
 from matplotlib.colors import LinearSegmentedColormap
 
-from utils import add_common_graph_args, all_systems, load_stance_values, save_figure, system_palette
+from utils import ORIGINAL, add_common_graph_args, all_systems, load_stance_values, save_figure, system_palette
 
 
 def companion_output_path(output_path: Path, suffix: str) -> Path:
@@ -33,6 +33,8 @@ def stance_question_labels(data: pd.DataFrame, questions: list[int]) -> list[str
         values = values[values != ""]
         label = values.iloc[0] if not values.empty else f"Q{qidx}"
         label = label.replace("|", " ").replace("/", " ").split()[0] if label.strip() else f"Q{qidx}"
+        if label.lower() == "disorganization":
+            label = "Organization"
         labels.append(label)
     return labels
 
@@ -56,28 +58,32 @@ def draw_stance_radar(
         sub["question_index"] = pd.to_numeric(sub["question_index"], errors="coerce").astype("Int64")
         sub["positive"] = (sub["system_polarity"] == "positive").astype(float)
         rates = sub.groupby("question_index")["positive"].mean().mul(100.0).reindex(questions).fillna(0.0).to_numpy(dtype=float)
+        invert_mask = np.asarray([label.lower() == "organization" for label in question_labels], dtype=bool)
+        rates[invert_mask] = 100.0 - rates[invert_mask]
         closed_rates = np.concatenate([rates, rates[:1]])
-        ax_radar.plot(closed_angles, closed_rates, color=palette[system], linewidth=2.0, label=system)
-        ax_radar.fill(closed_angles, closed_rates, color=palette[system], alpha=0.08)
-    ax_radar.set_title("Positive STANCE Rate by Question", pad=24)
+        line_style = "--" if system == ORIGINAL else "-"
+        ax_radar.plot(closed_angles, closed_rates, color=palette[system], linestyle=line_style, linewidth=4.0, label=system)
+        fill_alpha = 0.08 if system == ORIGINAL else 0.0
+        ax_radar.fill(closed_angles, closed_rates, color=palette[system], alpha=fill_alpha)
     ax_radar.set_xticks(angles)
-    ax_radar.set_xticklabels(question_labels, fontsize=label_size)
+    ax_radar.set_xticklabels(question_labels, fontsize=2 * label_size)
     ax_radar.set_ylim(0, 100)
     ax_radar.set_yticks([0, 25, 50, 75, 100])
-    ax_radar.set_yticklabels(["0", "25", "50", "75", "100"], fontsize=max(8, label_size - 2))
-    ax_radar.grid(True, alpha=0.45)
+    ax_radar.set_yticklabels(["0%", "25%", "50%", "75%", "100%"], fontsize=max(16, 2 * (label_size - 2)))
+    ax_radar.grid(True, alpha=0.45, linewidth=2.0)
+    ax_radar.tick_params(axis="both", width=2.0, length=8)
     legend_fontsize = legend_size if legend_size is not None else max(8, label_size - 2)
     ax_radar.legend(
-        title="Model",
-        loc="upper left",
-        ncol=1,
+        title="System",
+        loc="upper center",
+        ncol=len(systems_with_data),
         bbox_to_anchor=legend_anchor,
         frameon=True,
-        fontsize=legend_fontsize,
-        title_fontsize=legend_fontsize + 1,
+        fontsize=1.7 * legend_fontsize,
+        title_fontsize=2 * (legend_fontsize + 1),
         borderpad=0.55,
         labelspacing=0.55,
-        handlelength=1.7,
+        handlelength=2.4,
     )
 
 
@@ -89,9 +95,9 @@ def save_spider_only_figure(
     question_labels: list[str],
     output_path: Path,
 ) -> None:
-    fig = plt.figure(figsize=(13, 13))
+    fig = plt.figure(figsize=(20,20))
     ax_radar = fig.add_subplot(1, 1, 1, projection="polar")
-    draw_stance_radar(ax_radar, data, systems_with_data, palette, questions, question_labels, legend_anchor=(-0.18, 1.08), label_size=12, legend_size=12)
+    draw_stance_radar(ax_radar, data, systems_with_data, palette, questions, question_labels, legend_anchor=(0.5, 1.18), label_size=12, legend_size=12)
     fig.tight_layout()
     save_figure(fig, output_path)
 
@@ -125,7 +131,7 @@ def main() -> int:
         ax = fig.add_subplot(gs[1 + idx // heatmap_cols, idx % heatmap_cols])
         ax.set_axis_off()
 
-    draw_stance_radar(ax_radar, data, systems_with_data, palette, questions, question_labels)
+    draw_stance_radar(ax_radar, data, systems_with_data, palette, questions, question_labels, legend_anchor=(0.5, 1.18))
 
     polarity = ["negative", "positive"]
     for ax, system in zip(heatmap_axes, systems_with_data):
@@ -141,11 +147,10 @@ def main() -> int:
         ax.set_title(system)
         ax.set_xlabel("Answer stance")
         ax.set_ylabel("Question stance")
-        ax.tick_params(axis="x", rotation=0)
-        ax.tick_params(axis="y", rotation=0)
+        ax.tick_params(axis="x", rotation=0, labelsize=18, width=2.0, length=8)
+        ax.tick_params(axis="y", rotation=0, labelsize=18, width=2.0, length=8)
 
-    fig.suptitle("STANCE Polarity Across Systems", y=1.02)
-    fig.tight_layout()
+    fig.tight_layout(rect=(0, 0, 1, 0.94))
     save_figure(fig, args.output_path)
     save_spider_only_figure(data, systems_with_data, palette, questions, question_labels, companion_output_path(args.output_path, "spider"))
     return 0
