@@ -63,7 +63,7 @@ while [[ $# -gt 0 ]]; do
       ;;
     -h|--help)
       cat <<EOF
-Usage: bash 53_generate_article_graphs.sh [--stage1 ... --stage8] [--all]
+Usage: bash 63_generate_article_graphs.sh [--stage1 ... --stage8] [--all]
 
 Stages:
   --stage1, --intelligibility          Intelligibility and Speech Quality

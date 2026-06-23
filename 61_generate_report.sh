@@ -27,7 +27,7 @@ while [[ $# -gt 0 ]]; do
       ;;
     -h|--help)
       cat <<EOF
-Usage: bash 51_generate_report.sh [--short] [--graphs] [--long] [--all]
+Usage: bash 61_generate_report.sh [--short] [--graphs] [--long] [--all]
 
 Stages:
   --short   Stage 1: write reports/llm_model/report.txt and metrics CSVs

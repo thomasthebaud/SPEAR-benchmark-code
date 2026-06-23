@@ -12,7 +12,7 @@ while [[ $# -gt 0 ]]; do
       ;;
     -h|--help)
       cat <<EOF
-Usage: bash 50_check_missing_files.sh [--missing-only]
+Usage: bash 60_check_missing_files.sh [--missing-only]
 
 Options:
   --missing-only  Only print missing files. By default, print every expected file.
@@ -205,7 +205,7 @@ for subset in "${subsets[@]}"; do
   done
 done
 
-# 51_generate_report.sh: generate short reports, per-model graphs, and detailed HTML reports.
+# 61_generate_report.sh: generate short reports, per-model graphs, and detailed HTML reports.
 report_graphs=(
   basic_metrics.png
   stances.png
@@ -229,7 +229,7 @@ for model in "${eval_models[@]}"; do
   check_files "51" "$model" "reports" "${expected[@]}"
 done
 
-# 52_benchmark.sh: generate per-model benchmark CSVs, merged benchmark CSV, and LaTeX table.
+# 62_benchmark.sh: generate per-model benchmark CSVs, merged benchmark CSV, and LaTeX table.
 expected=(
   "reports/$protocol/benchmark.csv"
   "reports/$protocol/benchmark.tex"
@@ -239,7 +239,7 @@ for model in "${models[@]}"; do
 done
 check_files "52" "all" "benchmark" "${expected[@]}"
 
-# 53_generate_article_graphs.sh: generate article figures and companion tables.
+# 63_generate_article_graphs.sh: generate article figures and companion tables.
 check_files "53" "all" "graphs" \
   "graphs/stage1_article_intelligibility_speech_quality.png" \
   "graphs/stage2_article_interruptions_latency.png" \

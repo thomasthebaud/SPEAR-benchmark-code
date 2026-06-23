@@ -46,7 +46,7 @@ while [[ $# -gt 0 ]]; do
       ;;
     -h|--help)
       cat <<EOF
-Usage: bash 52_benchmark.sh [--lines] [--merge] [--latex] [--all] [--use-std] [--n-digits N]
+Usage: bash 62_benchmark.sh [--lines] [--merge] [--latex] [--all] [--use-std] [--n-digits N]
 
 Stages:
   --lines    Stage 1: generate one benchmark CSV line per model
