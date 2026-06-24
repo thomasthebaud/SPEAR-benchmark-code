@@ -97,6 +97,14 @@ def read_report_text(report_dir: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
+def read_summary_text(report_dir: Path) -> str:
+    path = report_dir / "summary.txt"
+    if not path.exists():
+        return "missing summary"
+    text = path.read_text(encoding="utf-8").strip()
+    return text or "missing summary"
+
+
 
 def rows_to_html_table(rows: list[list[str]]) -> str:
     if not rows:
@@ -505,12 +513,23 @@ def summary_cards(metrics: dict[str, Optional[pd.DataFrame]]) -> str:
             stance_questions = stances[stances["metric"].astype(str).str.match(r"^Q\d+$")] if "metric" in stances else stances
             mean_stance = pd.to_numeric(stance_questions["mean_diff"], errors="coerce").mean()
             bits.append(f'<p><strong>Mean STANCE diff:</strong> {fmt_float(mean_stance)} across {len(stance_questions)} stances</p>')
-        if not explain.empty:
-            best_idx = pd.to_numeric(explain["auroc"], errors="coerce").idxmax()
-            best = explain.loc[best_idx]
-            bits.append(f'<p><strong>Best explainable AUROC:</strong> {html.escape(str(best.get("metric")))} ({fmt_float(best.get("auroc"))})</p>')
         cards.append('<section class="card">' + "\n".join(bits) + '</section>')
     return '<div class="cards">' + "\n".join(cards) + '</div>'
+
+
+def dialectal_metrics_table(metrics: dict[str, Optional[pd.DataFrame]]) -> pd.DataFrame:
+    rows = []
+    wanted = {"Dialectal entrainment", "Dialectal variance"}
+    for subset in SUBSETS:
+        frame = metrics.get(subset)
+        if frame is None or frame.empty or not {"section", "metric"}.issubset(frame.columns):
+            continue
+        sub = frame[(frame["section"] == "Language and Dialect ID") & frame["metric"].astype(str).isin(wanted)].copy()
+        if sub.empty:
+            continue
+        sub.insert(0, "subset", subset)
+        rows.append(sub)
+    return pd.concat(rows, ignore_index=True) if rows else pd.DataFrame()
 
 
 def build_html(args, metrics: dict[str, Optional[pd.DataFrame]], report_text: str) -> str:
@@ -521,15 +540,8 @@ def build_html(args, metrics: dict[str, Optional[pd.DataFrame]], report_text: st
     dialect_table = dialect_id_summary_table(metrics)
     stance_desc_table = metric_rows(metrics, "STANCE Descriptions")
     stance_results_table = metric_rows(metrics, "STANCE Results")
-    cluster_feature_table = cluster_feature_rows(metrics)
-
-    explain_sections = []
-    for subset in SUBSETS:
-        explain_sections.append(f'<h3>{html.escape(subset.title())}</h3>')
-        explain_sections.append('<h4>Highest AUROC Features</h4>')
-        explain_sections.append(table_html(top_bottom_explainables(metrics, subset, True), columns=["metric", "mean_diff", "std_diff", "p_value", "n", "auroc", "accuracy"]))
-        explain_sections.append('<h4>Lowest AUROC Features</h4>')
-        explain_sections.append(table_html(top_bottom_explainables(metrics, subset, False), columns=["metric", "mean_diff", "std_diff", "p_value", "n", "auroc", "accuracy"]))
+    dialectal_table = dialectal_metrics_table(metrics)
+    summary_text = read_summary_text(report_dir)
 
     return f'''<!doctype html>
 <html lang="en">
@@ -558,6 +570,7 @@ def build_html(args, metrics: dict[str, Optional[pd.DataFrame]], report_text: st
     .metric-table th {{ background:#eef3f8; font-weight:700; }}
     .figure {{ width:100%; max-width:1120px; display:block; margin:14px auto 24px; border:1px solid var(--line); border-radius:6px; background:white; }}
     .muted {{ color:var(--muted); }}
+    .summary-paragraph {{ background:white; border:1px solid var(--line); border-radius:8px; padding:16px; white-space:pre-wrap; }}
     details {{ margin-top:16px; }}
     summary {{ cursor:pointer; color:var(--accent); font-weight:700; margin-bottom:12px; }}
     .gallery {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:14px; }}
@@ -574,6 +587,11 @@ def build_html(args, metrics: dict[str, Optional[pd.DataFrame]], report_text: st
 </header>
 <main>
   <section>
+    <h2>Summary paragraph</h2>
+    <p class="summary-paragraph">{html.escape(summary_text)}</p>
+  </section>
+
+  <section>
     <h2>Data, Models, and Setup</h2>
     {data_models_setup_grid(report_text)}
   </section>
@@ -589,6 +607,8 @@ def build_html(args, metrics: dict[str, Optional[pd.DataFrame]], report_text: st
     <h2>Language and Dialect ID</h2>
     {table_html(language_table, columns=["subset", "% Eng in models' answers", "% Eng in original answers", "second most spoken language in models' answers", "percentage 2nd language in models' answers", "second most spoken language in original answers", "percentage 2nd language in original answers"])}
     {table_html(dialect_table, columns=["Subset", "Question/Answer", *DIALECT_LABELS])}
+    <h3>Dialectal Metrics</h3>
+    {table_html(dialectal_table, columns=["subset", "metric", "mean_diff", "n", "detail"])}
     {img_tag(report_dir / "graphs" / "dialect_confusion.png", report_dir, "Dialect question-to-answer confusion matrix")}
     {img_tag(report_dir / "graphs" / "dialect_scores.png", report_dir, "Dialect score spider profiles for question and answer fields")}
   </section>
@@ -613,12 +633,8 @@ def build_html(args, metrics: dict[str, Optional[pd.DataFrame]], report_text: st
 
   <section>
     <h2>Explainable Features</h2>
-    <p>Explainable feature rows report model-minus-original mean differences, p-values, and the Stage 41 classification AUROC/accuracy. Correlation-cluster rows come from script 41 PCA cluster features.</p>
-    <h3>Correlation Cluster Features</h3>
-    {table_html(cluster_feature_table, columns=["subset", "metric", "mean_diff", "std_diff", "p_value", "n", "detail"])}
-    {img_tag(report_dir / "graphs" / "cluster_explainables.png", report_dir, "Correlation cluster explainable feature violins")}
-    {img_tag(report_dir / "graphs" / "general_explainable.png", report_dir, "General explainable feature histogram")}
-    {''.join(explain_sections)}
+    <p>Explainable feature rows report model-minus-original mean differences and p-values for the reported f0, duration, and voiced-ratio features.</p>
+    {img_tag(report_dir / "graphs" / "f0_question_answer_boxplot.png", report_dir, "Questions, original answers, and model answers f0 profile box plot")}
     {img_tag(report_dir / "graphs" / "explainables.png", report_dir, "Explainable feature violin plots")}
     {feature_gallery(report_dir)}
   </section>

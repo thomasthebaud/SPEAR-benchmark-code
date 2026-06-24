@@ -22,6 +22,25 @@ SUBSETS = ["improvised", "naturalistic"]
 DATASET_PALETTE = {"original": "#4C72B0", "model": "#DD8452"}
 EXCLUDED_REPORT_METRICS = {"question_end_time"}
 REPORTED_EXPLAINABLE_FEATURES = {"total_duration_s", "voiced_duration_s", "voiced_ratio"}
+NON_EXPLAINABLE_COLUMNS = {
+    "orig_id",
+    "vendor_id",
+    "session_id",
+    "conversation_id",
+    "audio_path",
+    "speakers",
+    "relationship",
+    "relationship_detail",
+    "total_duration",
+    "question_end_time",
+    "extraction_status",
+    "f0_status",
+    "lexical_status",
+    "lexical_status_reason",
+    "temporal_alignment_source",
+    "temporal_status",
+    "answered_speaker",
+}
 RELATIONSHIP_ORDER = [
     "coworkers",
     "dating/spouse/romantic_partner",
@@ -124,6 +143,30 @@ def explainable_feature_file(results_root: Path, model: str, subset: str) -> Pat
     return result_file(results_root, model, "test", subset, "distrib_baselines_features_normalized.csv")
 
 
+def explainable_question_feature_file(results_root: Path, subset: str) -> Path:
+    return result_file(results_root, ORIGINAL, "test", subset, "distrib_baselines_features_normalized_q.csv")
+
+
+F0_BOX_FEATURES = [
+    "f0_min_raw",
+    "f0_p10",
+    "f0_p25",
+    "f0_median_raw",
+    "f0_p75",
+    "f0_p90",
+    "f0_max_raw",
+]
+F0_BOX_LABELS = {
+    "f0_min_raw": "min",
+    "f0_p10": "10%",
+    "f0_p25": "25%",
+    "f0_median_raw": "50%",
+    "f0_p75": "75%",
+    "f0_p90": "90%",
+    "f0_max_raw": "max",
+}
+
+
 def available_explainable_features(results_root: Path, model: str, subset: str) -> List[str]:
     features = set()
     for label_model in [ORIGINAL, model]:
@@ -136,6 +179,29 @@ def available_explainable_features(results_root: Path, model: str, subset: str) 
             if is_reported_explainable_feature(str(column)) and str(column) not in EXCLUDED_REPORT_METRICS
         )
     return sorted(features)
+
+
+def numeric_explainable_columns(frame: pd.DataFrame) -> set[str]:
+    features = set()
+    for column in frame.columns:
+        feature = str(column)
+        if feature in EXCLUDED_REPORT_METRICS or feature in NON_EXPLAINABLE_COLUMNS:
+            continue
+        if numeric(frame[column]).notna().any():
+            features.add(feature)
+    return features
+
+
+def available_all_explainable_features(results_root: Path, model: str, subset: str) -> List[str]:
+    feature_sets = []
+    for label_model in [ORIGINAL, model]:
+        frame = safe_read_csv(explainable_feature_file(results_root, label_model, subset))
+        if frame is None:
+            continue
+        feature_sets.append(numeric_explainable_columns(frame))
+    if not feature_sets:
+        return []
+    return sorted(set.intersection(*feature_sets))
 
 
 def load_feature_values(results_root: Path, model: str, subset: str, feature: str) -> Optional[pd.DataFrame]:
@@ -402,6 +468,94 @@ def graph_basic_metrics_histograms(results_root: Path, model: str, output_path: 
     fig.suptitle("Intelligibility and Interruptions histograms: Original vs Model", y=1.04)
     fig.tight_layout(rect=(0, 0, 1, 0.96))
     save_figure(fig, output_path)
+
+def f0_boxplot_rows(frame: pd.DataFrame, label: str, subset: str) -> list[pd.DataFrame]:
+    rows = []
+    for feature in F0_BOX_FEATURES:
+        if feature not in frame.columns or feature in EXCLUDED_REPORT_METRICS:
+            continue
+        values = numeric(frame[feature]).dropna()
+        if values.empty:
+            continue
+        rows.append(
+            pd.DataFrame(
+                {
+                    "label": label,
+                    "subset": subset,
+                    "feature": feature,
+                    "feature_label": F0_BOX_LABELS.get(feature, feature),
+                    "value": values.to_numpy(dtype=float),
+                }
+            )
+        )
+    return rows
+
+
+def load_f0_question_answer_values(results_root: Path, model: str) -> pd.DataFrame:
+    rows = []
+    for subset in SUBSETS:
+        question = safe_read_csv(explainable_question_feature_file(results_root, subset))
+        if question is not None:
+            rows.extend(f0_boxplot_rows(question, "questions", subset))
+
+        original = safe_read_csv(explainable_feature_file(results_root, ORIGINAL, subset))
+        if original is not None:
+            rows.extend(f0_boxplot_rows(original, "original answers", subset))
+
+        model_frame = safe_read_csv(explainable_feature_file(results_root, model, subset))
+        if model_frame is not None:
+            rows.extend(f0_boxplot_rows(model_frame, "model answers", subset))
+
+    if not rows:
+        return pd.DataFrame(columns=["label", "subset", "feature", "feature_label", "value"])
+    return pd.concat(rows, ignore_index=True)
+
+
+def graph_f0_question_answer_boxplot(results_root: Path, model: str, output_path: Path) -> None:
+    data = load_f0_question_answer_values(results_root, model)
+    if data.empty:
+        print("[WARN] Missing f0/voiced-ratio explainable rows; skipping f0_question_answer_boxplot.png.")
+        return
+
+    subsets = [subset for subset in SUBSETS if subset in set(data["subset"])]
+    feature_order = [F0_BOX_LABELS[feature] for feature in F0_BOX_FEATURES if F0_BOX_LABELS[feature] in set(data["feature_label"])]
+    label_order = [label for label in ["questions", "original answers", "model answers"] if label in set(data["label"])]
+    palette = {"questions": "#6B6B6B", "original answers": DATASET_PALETTE["original"], "model answers": DATASET_PALETTE["model"]}
+
+    fig, axes = plt.subplots(1, len(subsets), figsize=(9.2 * len(subsets), 6.2), sharey=False, squeeze=False)
+    legend_handles = None
+    legend_labels = None
+    for ax, subset in zip(axes[0], subsets):
+        sub = data[data["subset"] == subset]
+        sns.boxplot(
+            data=sub,
+            x="feature_label",
+            y="value",
+            hue="label",
+            order=feature_order,
+            hue_order=label_order,
+            palette=palette,
+            showfliers=False,
+            linewidth=1.0,
+            width=0.78,
+            ax=ax,
+        )
+        handles, labels = ax.get_legend_handles_labels()
+        if handles and legend_handles is None:
+            legend_handles, legend_labels = handles, labels
+        remove_axis_legend(ax)
+        ax.set_title(subset.title())
+        ax.set_xlabel("f0 feature / voiced ratio")
+        ax.set_ylabel("Normalized value")
+        ax.grid(True, axis="y", alpha=0.35)
+        ax.tick_params(axis="x", rotation=20)
+
+    if legend_handles:
+        fig.legend(legend_handles, legend_labels, title="Audio", loc="upper center", ncol=len(legend_handles), bbox_to_anchor=(0.5, 1.03), frameon=True)
+    fig.suptitle("Questions, Original Answers, and Model Answers: f0 Profile and Voiced Ratio", y=1.055)
+    fig.tight_layout(rect=(0, 0, 1, 0.95))
+    save_figure(fig, output_path)
+
 
 def graph_feature_histograms(results_root: Path, model: str, output_dir: Path) -> None:
     features = sorted({feature for subset in SUBSETS for feature in available_explainable_features(results_root, model, subset)})
@@ -1065,7 +1219,7 @@ def graph_explainable_scatter(results_root: Path, model: str, output_path: Path)
         if original is None or model_frame is None:
             continue
 
-        features = available_explainable_features(results_root, model, subset)
+        features = available_all_explainable_features(results_root, model, subset)
 
         pvalues = {}
         if subset in metrics_by_subset:
@@ -1199,6 +1353,7 @@ def main() -> int:
     graph_emotion_scatter(args.results_root, args.model, graphs_dir / "emotion_scatter.png")
     graph_dialect_confusion(args.results_root, args.model, graphs_dir / "dialect_confusion.png")
     graph_dialect_scores(args.results_root, args.model, graphs_dir / "dialect_scores.png")
+    graph_f0_question_answer_boxplot(args.results_root, args.model, graphs_dir / "f0_question_answer_boxplot.png")
     graph_explainable_scatter(args.results_root, args.model, graphs_dir / "explainables.png")
     return 0
 

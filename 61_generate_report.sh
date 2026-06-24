@@ -4,10 +4,14 @@ set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")"
 source config.sh
 source cmd.sh
+source openai_keys.sh
+
+summary_llm_model="${summary_llm_model:-gpt-5.4-mini-2026-03-17}"
 
 run_short=0
 run_graphs=0
 run_long=0
+run_summary=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -20,19 +24,24 @@ while [[ $# -gt 0 ]]; do
     --long|--stage3)
       run_long=1
       ;;
+    --summary|--stage4)
+      run_summary=1
+      ;;
     --all)
       run_short=1
       run_graphs=1
       run_long=1
+      run_summary=1
       ;;
     -h|--help)
       cat <<EOF
-Usage: bash 61_generate_report.sh [--short] [--graphs] [--long] [--all]
+Usage: bash 61_generate_report.sh [--short] [--graphs] [--long] [--summary] [--all]
 
 Stages:
   --short   Stage 1: write reports/llm_model/report.txt and metrics CSVs
   --graphs  Stage 2: generate matplotlib/seaborn graphs
   --long    Stage 3: generate reports/llm_model/detailed_report.html
+  --summary Stage 4: generate reports/llm_model/summary.txt and refresh detailed_report.html
   --all     Run all stages
 
 If no stage is passed, all stages are run.
@@ -46,6 +55,13 @@ EOF
   esac
   shift
 done
+
+if [[ "$run_short" -eq 0 && "$run_graphs" -eq 0 && "$run_long" -eq 0 && "$run_summary" -eq 0 ]]; then
+  run_short=1
+  run_graphs=1
+  run_long=1
+  run_summary=1
+fi
 
 
 if [[ "$run_short" -eq 1 ]]; then
@@ -101,6 +117,39 @@ if [[ "$run_long" -eq 1 ]]; then
   done
   wait
   echo "Detailed HTML report generation finished for ${eval_models[@]}."
+fi
+
+if [[ "$run_summary" -eq 1 ]]; then
+  if [[ -z "${openai_api_key:-}" ]]; then
+    echo "Missing openai_api_key. Set it in openai_keys.sh before running Stage 4." >&2
+    exit 1
+  fi
+
+  for model in "${eval_models[@]}"; do
+    report_dir="reports/$protocol/$model"
+    echo "Stage 4: generating summary for model:$model with $summary_llm_model"
+    python bin/reports/generate_summary.py \
+        --protocol "$protocol" \
+        --model "$model" \
+        --report-dir "$report_dir" \
+        --summary-model "$summary_llm_model" \
+        --api-key "$openai_api_key" \
+        --organization "${org:-}" &
+  done
+  wait
+  echo "Summary generation finished for ${eval_models[@]}."
+
+  for model in "${eval_models[@]}"; do
+    report_dir="reports/$protocol/$model"
+    echo "Stage 4: refreshing detailed HTML report with summary for model:$model"
+    python bin/reports/generate_html_report.py \
+        --protocol "$protocol" \
+        --model "$model" \
+        --report-dir "$report_dir" \
+        --ignore-features "${ignored_explainable_features[@]:-}" &
+  done
+  wait
+  echo "Detailed HTML report refresh finished for ${eval_models[@]}."
 fi
 
 echo "report generation finished"

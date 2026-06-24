@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import ast
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -295,6 +296,70 @@ def dialect_id_csv(args, model: str, subset: str) -> Path:
     return args.results_root / model / "test" / subset / "dialect_id.csv"
 
 
+def dialect_logits_csv(args, model: str) -> Path:
+    return args.results_root / model / "test" / "dialect_logits.csv"
+
+
+def parse_vector(value) -> Optional[np.ndarray]:
+    if pd.isna(value):
+        return None
+    try:
+        parsed = ast.literal_eval(str(value))
+    except (SyntaxError, ValueError):
+        return None
+    if not isinstance(parsed, (list, tuple)) or not parsed:
+        return None
+    try:
+        vector = np.asarray(parsed, dtype=float)
+    except (TypeError, ValueError):
+        return None
+    if vector.ndim != 1 or not np.isfinite(vector).all():
+        return None
+    return vector
+
+
+def least_squares_slope_flattened(question_vectors: List[np.ndarray], answer_vectors: List[np.ndarray]) -> float:
+    if not question_vectors or not answer_vectors:
+        return np.nan
+    question = np.concatenate([vector.ravel() for vector in question_vectors])
+    answer = np.concatenate([vector.ravel() for vector in answer_vectors])
+    finite = np.isfinite(question) & np.isfinite(answer)
+    question = question[finite]
+    answer = answer[finite]
+    if len(question) < 2 or np.unique(question).size < 2 or np.unique(answer).size < 2:
+        return np.nan
+    question = (question - question.min()) / (question.max() - question.min())
+    answer = (answer - answer.min()) / (answer.max() - answer.min())
+    slope, _ = np.polyfit(question, answer, deg=1)
+    return float(slope)
+
+
+def answer_total_variance(answer_vectors: List[np.ndarray]) -> float:
+    if not answer_vectors:
+        return np.nan
+    matrix = np.vstack(answer_vectors)
+    if matrix.shape[0] < 2:
+        return 0.0
+    return float(np.nanvar(matrix, axis=0, ddof=1).sum())
+
+
+def dialect_logit_metrics(args, subset: str) -> Tuple[float, float, int]:
+    frame = safe_read_csv(dialect_logits_csv(args, args.model))
+    if frame is None or not {"question_log_logits", "answer_log_logits"}.issubset(frame.columns):
+        return np.nan, np.nan, 0
+    if "subset" in frame.columns:
+        frame = frame[frame["subset"].astype(str) == subset]
+    question_vectors: List[np.ndarray] = []
+    answer_vectors: List[np.ndarray] = []
+    for _, row in frame.iterrows():
+        question = parse_vector(row["question_log_logits"])
+        answer = parse_vector(row["answer_log_logits"])
+        if question is None or answer is None or question.shape != answer.shape:
+            continue
+        question_vectors.append(question)
+        answer_vectors.append(answer)
+    return least_squares_slope_flattened(question_vectors, answer_vectors), answer_total_variance(answer_vectors), len(answer_vectors)
+
 
 LANGUAGE_NAME_OVERRIDES = {
     "eng": "English",
@@ -484,6 +549,25 @@ def dialect_id_section(args, metrics_by_subset: Dict[str, List[Dict[str, Any]]],
             rows = metrics_by_subset[subset][before_count:]
             percentages = {row["metric"].split(": ", 1)[1].removesuffix(" (%)"): row["mean_diff"] for row in rows}
             text_lines.append("	".join([subset, label, *(fmt(percentages.get(dialect)) for dialect in DIALECT_LABELS)]))
+    text_lines.append("")
+
+    text_lines.append("Dialectal logit metrics")
+    text_lines.append("subset	dialectal_entrainment_spearman	dialectal_variance	n")
+    for subset in SUBSETS:
+        entrainment, variance, n_value = dialect_logit_metrics(args, subset)
+        for metric, value in [("Dialectal entrainment", entrainment), ("Dialectal variance", variance)]:
+            metrics_by_subset[subset].append(
+                metric_row(
+                    metric,
+                    value,
+                    np.nan,
+                    np.nan,
+                    n=n_value,
+                    section="Language and Dialect ID",
+                    detail="computed from dialect_logits.csv question_log_logits and answer_log_logits",
+                )
+            )
+        text_lines.append("	".join([subset, fmt(entrainment), fmt(variance), fmt(n_value, 0)]))
     text_lines.append("")
 
 

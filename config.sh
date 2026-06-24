@@ -12,6 +12,7 @@ llm_model="gpt-realtime-2"
 # llm_model="Qwen3-Omni-30B-A3B-Instruct"
 llm_model="Qwen2.5-Omni-7B"
 llm_model="mini-omni" #https://huggingface.co/gpt-omni/mini-omni
+llm_model='gemini-2.5-flash-native-audio-preview'
 # llm_model="original"
 
 eval_models=("gpt-audio-1.5" "gpt-realtime-2" "Qwen3-Omni-30B-A3B-Instruct" "Qwen2.5-Omni-7B" "mini-omni")
@@ -39,5 +40,5 @@ stance_llm_model="gpt-audio-1.5"
 # Statistical test used for report p-values. Options: "Welch t-test", "Mann-Whitney U Test", "Wilcoxon Signed-Rank Test"
 statistical_test="Mann-Whitney U Test"
 # Explainable feature columns ignored by scripts 41 and 51.
-ignored_explainable_features=("f0_n_voiced_frames" "f0_total_duration_s" "f0_mean_raw")
+ignored_explainable_features=()
 
