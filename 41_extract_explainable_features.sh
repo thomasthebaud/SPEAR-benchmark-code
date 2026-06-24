@@ -27,7 +27,7 @@ while [[ $# -gt 0 ]]; do
       ;;
     -h|--help)
       cat <<EOF
-Usage: bash 40_extract_explainable_features.sh [--extract] [--normalize] [--all]
+Usage: bash 41_extract_explainable_features.sh [--extract] [--normalize] [--all]
 
 Stages:
   --stage1, --extract      Extract explainable features.
@@ -47,22 +47,26 @@ EOF
 done
 
 if [[ "$run_extract" -eq 1 ]]; then
-  # for split in 'test' 'dev'; do
-  #   for subset in 'improvised' 'naturalistic'; do
-  #     for model in "original" "${eval_models[@]}"; do
-  #       metadata=data/$protocol/outputs/$model/$split/$subset/metadata.csv
-  #       output=results/$protocol/$model/$split/$subset/distrib_baselines_features.csv
+  for split in 'test' 'dev'; do
+    for subset in 'improvised' 'naturalistic'; do
+      for model in "original" "${eval_models[@]}"; do
+        metadata=data/$protocol/outputs/$model/$split/$subset/metadata.csv
+        output=results/$protocol/$model/$split/$subset/distrib_baselines_features.csv
 
-  #       echo "Extract explainable features for split:$split subset:$subset model:$model"
-  #       $(python_cmd 'SB40-S1' --cpu) bin/distrib_baselines/extract_features.py \
-  #           --metadata "$metadata" \
-  #           --relationships-csv "$seamless_assets_dir/relationships.csv" \
-  #           --output "$output" &
+        if [[ ! -f "$metadata" ]]; then
+          echo "Skipping missing metadata: $metadata"
+          continue
+        fi
 
-  #     done
-  #   done
-  # done
+        echo "Extract explainable features for split:$split subset:$subset model:$model"
+        $(python_cmd 'SB41-S1-A' --cpu) bin/distrib_baselines/extract_features.py \
+            --metadata "$metadata" \
+            --relationships-csv "$seamless_assets_dir/relationships.csv" \
+            --output "$output" &
 
+      done
+    done
+  done
   for split in 'test' 'dev'; do
     for subset in 'improvised' 'naturalistic'; do
       model="original"
@@ -70,7 +74,7 @@ if [[ "$run_extract" -eq 1 ]]; then
       output=results/$protocol/$model/$split/$subset/distrib_baselines_features_q.csv
 
       echo "Extract explainable features for the questions of split:$split subset:$subset"
-      $(python_cmd 'SB40-S1' --cpu) bin/distrib_baselines/extract_features.py \
+      $(python_cmd 'SB41-S1-Q' --cpu) bin/distrib_baselines/extract_features.py \
           --metadata "$metadata" \
           --relationships-csv "$seamless_assets_dir/relationships.csv" \
           --output "$output" \
@@ -91,7 +95,7 @@ if [[ "$run_normalize" -eq 1 ]]; then
         output=results/$protocol/$model/$split/$subset/distrib_baselines_features_normalized.csv
 
         echo "Normalize explainable features for split:$split subset:$subset model:$model"
-        $(python_cmd 'SB40-S2' --cpu) bin/distrib_baselines/normalize_features_by_answered_speaker.py \
+        $(python_cmd 'SB41-S2-A' --cpu) bin/distrib_baselines/normalize_features_by_answered_speaker.py \
             --metadata "$metadata" \
             --features "$features" \
             --output "$output" &
@@ -108,7 +112,7 @@ if [[ "$run_normalize" -eq 1 ]]; then
       output=results/$protocol/$model/$split/$subset/distrib_baselines_features_normalized_q.csv
 
       echo "Normalize explainable features of the questions for split:$split subset:$subset"
-      $(python_cmd 'SB40-S2' --cpu) bin/distrib_baselines/normalize_features_by_answered_speaker.py \
+      $(python_cmd 'SB41-S2-Q' --cpu) bin/distrib_baselines/normalize_features_by_answered_speaker.py \
           --metadata "$metadata" \
           --features "$features" \
           --output "$output" \

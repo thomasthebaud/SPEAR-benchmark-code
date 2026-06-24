@@ -27,7 +27,7 @@ while [[ $# -gt 0 ]]; do
       ;;
     -h|--help)
       cat <<EOF
-Usage: bash 41_use_features_for_baseline.sh [--scores] [--clusters] [--all]
+Usage: bash 42_use_features_for_baseline.sh [--scores] [--clusters] [--all]
 
 Stages:
   --scores    Stage 1: train dev-set explainable-feature baselines and score test utterances
@@ -49,7 +49,7 @@ done
 if [[ "$run_scores" -eq 1 ]]; then
   echo "Stage 1: train dev-set explainable-feature baselines and score test utterances for model:"${eval_models[@]}""
   for model in "${eval_models[@]}"; do
-    $(python_cmd 'SB41-S1' --cpu) bin/distrib_baselines/compute_features_scores.py \
+    $(python_cmd 'SB42-S1' --cpu) bin/distrib_baselines/compute_features_scores.py \
         --results-root "results/$protocol" \
         --model $model \
         --subsets improvised naturalistic \
@@ -63,7 +63,7 @@ fi
 if [[ "$run_clusters" -eq 1 ]]; then
   echo "Stage 2: analyze explainable-feature correlations jointly for original and model:"${eval_models[@]}""
   for model in "${eval_models[@]}"; do
-    $(python_cmd 'SB41-S2' --cpu) bin/distrib_baselines/analyse_correlations.py \
+    $(python_cmd 'SB42-S2' --cpu) bin/distrib_baselines/analyse_correlations.py \
         --results-root "results/$protocol" \
         --model $model \
         --subsets improvised naturalistic \

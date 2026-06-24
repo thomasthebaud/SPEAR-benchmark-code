@@ -422,17 +422,34 @@ results/$protocol/$model/$split/improvised/merged_stances.csv
 
 Scripts `30` and `31` are based on the StanceBench audio LLM interpersonal stance evaluation setup. See [References](#references) for the paper citation and full implementation.
 
-### `40_extract_explainable_features.sh`
+### `40_preprocess_audios.sh`
+
+Creates word-level transcription and VAD JSON files used by the explainable baseline feature extractor. It runs WhisperX alignment plus Silero VAD through `bin/distrib_baselines/preprocess_audio_alignments.py` and writes Seamless-style JSON files under each output directory:
+
+```text
+data/$protocol/outputs/$model/$split/$subset/baseline_prepreprocess/
+```
+
+Each JSON contains:
+
+- `metadata:transcript`: word-level transcript segments with `word`, `start`, `end`, and optional `score`;
+- `metadata:vad`: speech activity segments with `start` and `end`.
+
+The script can preprocess answer audio from `answer_audio_path` and question/context audio from `audio_path`, depending on the active block in the shell script. Script `41` will use these JSON files when they exist and fall back to metadata-derived estimates when they do not.
+
+### `41_extract_explainable_features.sh`
 
 Extracts and normalizes explainable distributional baseline features. With no arguments, both stages run; stages can also be selected explicitly:
 
 ```bash
-bash 40_extract_explainable_features.sh --extract
-bash 40_extract_explainable_features.sh --normalize
-bash 40_extract_explainable_features.sh --all
+bash 41_extract_explainable_features.sh --extract
+bash 41_extract_explainable_features.sh --normalize
+bash 41_extract_explainable_features.sh --all
 ```
 
-Stage 1, `--extract`, computes prosodic, lexical, temporal, and relationship-aware features from metadata and audio. Answer-side features are written as:
+Stage 1, `--extract`, computes prosodic, lexical, temporal, and relationship-aware features from metadata and audio. For lexical and temporal features, `bin/distrib_baselines/extract_features.py` first looks for matching JSON files from script `40` in `baseline_prepreprocess/`. If a JSON exists, lexical text comes from `metadata:transcript`, temporal word timings come from `metadata:transcript[*].words`, and VAD comes from `metadata:vad`. If no JSON exists, the extractor falls back to transcript and duration estimates from `metadata.csv`.
+
+Answer-side features are written as:
 
 ```text
 results/$protocol/$model/$split/$subset/distrib_baselines_features.csv
@@ -456,14 +473,14 @@ For original question-side features, the normalizer is called with `--questions`
 results/$protocol/original/$split/$subset/distrib_baselines_features_normalized_q.csv
 ```
 
-### `41_use_features_for_baseline.sh`
+### `42_use_features_for_baseline.sh`
 
-Uses the explainable features from script `40`. It has two optional stages:
+Uses the normalized explainable features from script `41`. It has two optional stages:
 
 ```bash
-bash 41_use_features_for_baseline.sh --scores
-bash 41_use_features_for_baseline.sh --clusters
-bash 41_use_features_for_baseline.sh --all
+bash 42_use_features_for_baseline.sh --scores
+bash 42_use_features_for_baseline.sh --clusters
+bash 42_use_features_for_baseline.sh --all
 ```
 
 If no option is passed, both stages are run.
@@ -484,11 +501,11 @@ results/$protocol/$model/test/$subset/correlation_cluster_features_rho0p8.csv
 
 The cluster feature CSV includes one PCA feature per correlated group plus a `general_explainable_feature_rho0p8` PCA feature across all groups. Features listed in `ignored_explainable_features` in `config.sh` are excluded from both stages and from reports.
 
-Scripts `40` and `41` are based on the Distributional Baselines for conversational prosody and rhythm. See [References](#references) for the paper citation and full implementation.
+Scripts `40`, `41`, and `42` are based on the Distributional Baselines for conversational prosody and rhythm. See [References](#references) for the paper citation and full implementation.
 
 ### `60_check_missing_files.sh`
 
-Checks whether the expected output files from scripts `01` through `41` and scripts `61` through `63` have been produced. It sources `config.sh`, then verifies the expected metadata, transcript, metric, language/dialect, naturalness, STANCE, explainable-feature, baseline-score, correlation-cluster, report, benchmark-table, and article-graph files for every relevant split, subset, and model.
+Checks whether the expected output files from scripts `01` through `42` and scripts `61` through `63` have been produced. It sources `config.sh`, then verifies the expected metadata, transcript, metric, language/dialect, naturalness, STANCE, explainable-feature, baseline-score, correlation-cluster, report, benchmark-table, and article-graph files for every relevant split, subset, and model.
 
 Run it from the benchmark directory with:
 
@@ -524,7 +541,7 @@ bash 61_generate_report.sh --all
 
 If no option is passed, the script runs all stages.
 
-The short report loops over every model in `eval_models`. It reads base metrics, naturalness scores, merged STANCE metrics, and normalized explainable-feature outputs from script `40`. The explainable-feature report is restricted to `total_duration_s`, `voiced_duration_s`, `voiced_ratio`, and columns whose names start with `f0_p`. It writes:
+The short report loops over every model in `eval_models`. It reads base metrics, naturalness scores, merged STANCE metrics, and normalized explainable-feature outputs from script `41`. The explainable-feature report is restricted to `total_duration_s`, `voiced_duration_s`, `voiced_ratio`, and columns whose names start with `f0_p`. It writes:
 
 ```text
 reports/$protocol/$model/report.txt
@@ -538,7 +555,7 @@ The graph stage writes plots under:
 reports/$protocol/$model/graphs/
 ```
 
-It includes `emotion_scatter.png`, a 2x3 grid comparing full-question vs full-answer Arousal, Dominance, and Valence from `SER_AVD.csv`. Columns are Arousal, Dominance, and Valence; rows are improvised and naturalistic. It also includes `emo_naturalness_by_relationship.png`, a single horizontal violin plot comparing original and model emotional-naturalness logits across naturalistic relationship categories, plus `cluster_explainables.png` and `general_explainable.png` for the correlation-cluster PCA features created by script `41`.
+It includes `emotion_scatter.png`, a 2x3 grid comparing full-question vs full-answer Arousal, Dominance, and Valence from `SER_AVD.csv`. Columns are Arousal, Dominance, and Valence; rows are improvised and naturalistic. It also includes `emo_naturalness_by_relationship.png`, a single horizontal violin plot comparing original and model emotional-naturalness logits across naturalistic relationship categories, plus `cluster_explainables.png` and `general_explainable.png` for the correlation-cluster PCA features created by script `42`.
 
 The long report stage writes:
 
@@ -546,7 +563,7 @@ The long report stage writes:
 reports/$protocol/$model/detailed_report.html
 ```
 
-Report generation uses `statistical_test` from `config.sh`, defaulting to Welch t-test if the variable is unset. Explainable features listed in `ignored_explainable_features` are omitted where applicable. The current short-report and graph explainable sections use the normalized script `40` feature files and only report `total_duration_s`, `voiced_duration_s`, `voiced_ratio`, and `f0_p*` columns.
+Report generation uses `statistical_test` from `config.sh`, defaulting to Welch t-test if the variable is unset. Explainable features listed in `ignored_explainable_features` are omitted where applicable. The current short-report and graph explainable sections use the normalized script `41` feature files and only report `total_duration_s`, `voiced_duration_s`, `voiced_ratio`, and `f0_p*` columns.
 
 ### `62_benchmark.sh`
 
@@ -782,7 +799,7 @@ Used by scripts `30_run_LLM_inference_STANCEs.sh` and `31_compute_STANCE_metrics
 
 ### Distributional Baselines
 
-Used by scripts `40_extract_explainable_features.sh` and `41_use_features_for_baseline.sh`.
+Used by scripts `40_preprocess_audios.sh`, `41_extract_explainable_features.sh`, and `42_use_features_for_baseline.sh`.
 
 - Paper: `Distributional Baselines for Conversational Prosody and Rhythm`
 - ArXiv: TBD; [search by title](https://arxiv.org/search/?query=Distributional+Baselines+for+Conversational+Prosody+and+Rhythm&searchtype=all)
