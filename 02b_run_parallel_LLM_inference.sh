@@ -6,6 +6,11 @@ source config.sh
 source openai_keys.sh
 source cmd.sh
 
+api_key="$openai_api_key"
+if [[ "$llm_model" == gemini-* ]]; then
+    api_key="$gemini_api_key"
+fi
+
 num_gpus="${N_GPUS:-1}"
 execution_flag="${EXECUTION_FLAG:---gpu}"
 
@@ -85,7 +90,7 @@ run_one_shard() {
         --prompt "$prompt" \
         --split "$split" \
         --subset "$subset" \
-        --openai-api-key "$openai_api_key" \
+        --openai-api-key "$api_key" \
         --org "$org" \
         --shard-index "$shard_index" \
         --num-shards "$num_gpus" \

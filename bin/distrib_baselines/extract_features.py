@@ -2,6 +2,7 @@
 import argparse
 import ast
 import csv
+import json
 import re
 import traceback
 from collections import Counter
@@ -268,6 +269,106 @@ def transcript_text(row: pd.Series, *, questions: bool = False) -> str:
     return text if isinstance(text, str) else ""
 
 
+
+def transcript_text_from_json(json_path: Path) -> str:
+    with json_path.open(encoding="utf-8") as infile:
+        data = json.load(infile)
+
+    texts = []
+    for segment in data.get("metadata:transcript", []):
+        transcript = segment.get("transcript")
+        if isinstance(transcript, str) and transcript.strip():
+            texts.append(transcript.strip())
+            continue
+
+        words = [
+            str(word.get("word", "")).strip()
+            for word in segment.get("words", [])
+            if str(word.get("word", "")).strip()
+        ]
+        if words:
+            texts.append(" ".join(words))
+
+    return " ".join(texts).strip()
+
+
+def feature_text(row: pd.Series, *, questions: bool = False) -> str:
+    json_path = preprocessed_json_path(row, Path.cwd(), questions=questions)
+    if json_path is not None:
+        text = transcript_text_from_json(json_path)
+        if text:
+            return text
+    return transcript_text(row, questions=questions)
+
+
+
+def extract_words_from_json(json_path: Path) -> List[Dict[str, float]]:
+    with json_path.open(encoding="utf-8") as infile:
+        data = json.load(infile)
+
+    words: List[Dict[str, float]] = []
+    for segment in data.get("metadata:transcript", []):
+        for word in segment.get("words", []):
+            start = word.get("start")
+            end = word.get("end")
+            if start is None or end is None:
+                continue
+            try:
+                start_f = float(start)
+                end_f = float(end)
+            except (TypeError, ValueError):
+                continue
+            if end_f <= start_f:
+                continue
+            words.append({"start": start_f, "end": end_f})
+
+    words.sort(key=lambda item: item["start"])
+    return words
+
+
+def extract_vad_from_json(json_path: Path) -> List[Tuple[float, float]]:
+    with json_path.open(encoding="utf-8") as infile:
+        data = json.load(infile)
+
+    segments: List[Tuple[float, float]] = []
+    for segment in data.get("metadata:vad", []):
+        start = segment.get("start")
+        end = segment.get("end")
+        if start is None or end is None:
+            continue
+        try:
+            start_f = float(start)
+            end_f = float(end)
+        except (TypeError, ValueError):
+            continue
+        if end_f <= start_f:
+            continue
+        segments.append((start_f, end_f))
+
+    segments.sort(key=lambda item: item[0])
+    return segments
+
+
+def preprocessed_json_path(row: pd.Series, base_dir: Path, *, questions: bool = False) -> Optional[Path]:
+    audio_column = "audio_path" if questions else "answer_audio_path"
+    audio_value = row.get(audio_column)
+    if not isinstance(audio_value, str) or not audio_value.strip():
+        return None
+
+    audio_path = resolve_path(audio_value, base_dir)
+    search_dirs = []
+    if audio_path.parent:
+        search_dirs.append(audio_path.parent / "baseline_prepreprocess")
+    metadata_output_dir = audio_path.parent.parent if audio_path.parent.name in {"audio", "audios"} else audio_path.parent
+    search_dirs.append(metadata_output_dir / "baseline_prepreprocess")
+
+    for directory in search_dirs:
+        candidate = directory / f"{audio_path.stem}.json"
+        if candidate.exists():
+            return candidate
+    return None
+
+
 def estimate_timed_words(text: str, start: float, end: float) -> List[Dict[str, float]]:
     tokens = iter_text_tokens(text)
     if not tokens or end <= start:
@@ -282,6 +383,12 @@ def estimate_timed_words(text: str, start: float, end: float) -> List[Dict[str, 
 
 
 def build_words_and_vad(row: pd.Series, *, questions: bool = False) -> Tuple[List[Dict[str, float]], List[Tuple[float, float]], str]:
+    json_path = preprocessed_json_path(row, Path.cwd(), questions=questions)
+    if json_path is not None:
+        words = extract_words_from_json(json_path)
+        vad = extract_vad_from_json(json_path)
+        return words, vad, "baseline_prepreprocess_json"
+
     duration_column = "question_end_time" if questions else "answer_duration"
     duration = row.get(duration_column, row.get("total_duration", 0.0))
     try:
@@ -364,7 +471,7 @@ def main() -> int:
             traceback.print_exc()
 
         try:
-            out.update(compute_lexical_features(transcript_text(meta_row, questions=args.questions), nlp))
+            out.update(compute_lexical_features(feature_text(meta_row, questions=args.questions), nlp))
         except Exception as exc:
             out["lexical_status"] = "ERROR"
             out["lexical_status_reason"] = str(exc)
