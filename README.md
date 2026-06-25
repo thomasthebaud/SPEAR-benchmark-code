@@ -817,6 +817,18 @@ Used by scripts `40_preprocess_audios.sh`, `41_extract_explainable_features.sh`,
 }
 ```
 
+### Turn Taking Surprisal
+
+https://github.com/TedZhangHao/turn-taking-naturalness
+
+Used by scripts `50_turn_taking_inference`.
+
+- Paper: `TBD`
+- ArXiv: TBD; [search by title](https://arxiv.org/search/?query=Distributional+Baselines+for+Conversational+Prosody+and+Rhythm&searchtype=all)
+- Code: [https://github.com/TedZhangHao/turn-taking-naturalness](https://github.com/TedZhangHao/turn-taking-naturalness)
+
+BibTex: TODO
+
 ## Contact
 
 For questions, please contact:

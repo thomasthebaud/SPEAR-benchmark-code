@@ -31,7 +31,7 @@ while [[ $# -gt 0 ]]; do
       run_short=1
       run_graphs=1
       run_long=1
-      run_summary=1
+      run_summary=0
       ;;
     -h|--help)
       cat <<EOF
