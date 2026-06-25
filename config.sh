@@ -13,6 +13,7 @@ llm_model="gpt-realtime-2"
 llm_model="Qwen2.5-Omni-7B"
 llm_model="mini-omni" #https://huggingface.co/gpt-omni/mini-omni
 llm_model='gemini-2.5-flash-native-audio-preview'
+llm_model='gemini-3.1-flash-live-preview'
 # llm_model="original"
 
 eval_models=("gpt-audio-1.5" "gpt-realtime-2" "Qwen3-Omni-30B-A3B-Instruct" "Qwen2.5-Omni-7B" "mini-omni")
