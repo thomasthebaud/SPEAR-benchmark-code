@@ -59,8 +59,12 @@ def load_answer(row):
 
 def clean_reference(text: str) -> str:
     # if '<...>' in text: return text.split('<...>')[-1]
-    pattern = r'(?:P\d{4}A?:\s*)'
-    return re.sub(pattern, '', text)
+    speaker_pattern = r'(?:P\d{4}A?:\s*)'
+    heading_pattern = r"^\s*\*\*[^*]+\*\*\s*[:\-–—]?\s*"
+    text = re.sub(speaker_pattern, '', str(text))
+    text = re.sub(heading_pattern, '', text)
+    if '   ' in text:text=text.split('   ')[-1]
+    return re.sub(speaker_pattern, '', text)
 
 def get_metric(metadata, fn, name):
     metrics = []

@@ -54,7 +54,7 @@ needs_transcription() {
     asr_name="${asr_name##*/}"
     asr_name="${asr_name// /_}"
 
-    $(python_cmd "SB03-check-${asr_name}" --cpu) bin/check_transcription_needed.py \
+    python bin/check_transcription_needed.py \
         --input-metadata "data/$protocol/outputs/$model/$split/$subset/metadata.csv" \
         --output-path "data/$protocol/outputs/$model/$split/$subset/${asr_name}_transcripts.csv"
 }

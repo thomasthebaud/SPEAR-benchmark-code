@@ -87,13 +87,13 @@ def load_f0_profiles(results_root: Path, systems: list[str]) -> pd.DataFrame:
     for subset in ["improvised", "naturalistic"]:
         original_answers = read_normalized_or_raw_f0(results_root, ORIGINAL, subset, raw_fallback=True)
         if original_answers is not None:
-            rows.extend(profile_value_rows(original_answers, "original answers", subset))
-            combined_frames.setdefault("original answers", []).append(original_answers)
+            rows.extend(profile_value_rows(original_answers, "human", subset))
+            combined_frames.setdefault("human", []).append(original_answers)
 
         original_questions = read_normalized_or_raw_f0(results_root, ORIGINAL, subset, questions=True)
         if original_questions is not None:
-            rows.extend(profile_value_rows(original_questions, "original questions", subset))
-            combined_frames.setdefault("original questions", []).append(original_questions)
+            rows.extend(profile_value_rows(original_questions, "human", subset))
+            combined_frames.setdefault("human", []).append(original_questions)
 
         for system in model_systems:
             frame = read_normalized_or_raw_f0(results_root, system, subset)
@@ -180,10 +180,10 @@ def main() -> int:
         return 0
 
     subsets = [subset for subset in ["improvised", "naturalistic"] if subset in set(data["subset"])]
-    labels = ["original questions", "original answers"] + [system for system in systems if system != ORIGINAL]
+    labels = ["human"] + [system for system in systems if system != ORIGINAL]
     labels = [label for label in labels if label in set(data["label"])]
     palette = system_palette([ORIGINAL] + [system for system in systems if system != ORIGINAL])
-    colors = {"original answers": palette[ORIGINAL], "original questions": "#6B6B6B"}
+    colors = {"human": palette[ORIGINAL]}
     colors.update({system: palette[system] for system in systems if system != ORIGINAL and system in palette})
 
     ignored_features = set(args.ignore_features or [])

@@ -18,6 +18,7 @@ GROUPS = {
     "interrupted_time_ms": "Interruptions",
     "interrupted_time_ms_std": "Interruptions",
     "interruptions_%": "Interruptions",
+    "turn_taking_naturalness": "Turn-Taking",
     "english_answers_%": "Language and Dialect",
     "same_dialect_as_question_%": "Language and Dialect",
     "north_american_dialect_%": "Language and Dialect",
@@ -37,7 +38,7 @@ GROUPS = {
     "explainable_voiced_ratio_std": "Explainable Features",
     "explainable_normalized_f0_std_avg": "Explainable Features",
 }
-GROUP_ORDER = ["Speech quality", "Interruptions", "Language and Dialect", "Emotions", "Stances", "Explainable Features"]
+GROUP_ORDER = ["Speech quality", "Interruptions", "Turn-Taking", "Language and Dialect", "Emotions", "Stances", "Explainable Features"]
 ROW_END = " " + chr(92) * 2
 
 METRIC_ORDER = [
@@ -47,6 +48,7 @@ METRIC_ORDER = [
     "latency_ms",
     "interrupted_time_ms",
     "interruptions_%",
+    "turn_taking_naturalness",
     "english_answers_%",
     "dialectal_entrainment_spearman",
     "dialectal_variance",
@@ -69,6 +71,7 @@ HEADER_ROWS = {
     "latency_ms": ("Latency", "", "(ms)"),
     "interrupted_time_ms": ("Interr.", "time", "(ms)"),
     "interruptions_%": ("Interr.", "", r"\%"),
+    "turn_taking_naturalness": ("Naturalness", "", ""),
     "english_answers_%": ("English", "answers", r"\%"),
     "dialectal_entrainment_spearman": ("Dialectal", "entrain.", r"$\beta$"),
     "dialectal_variance": ("Dialectal", "variance", r"$tr(\Sigma)$"),
@@ -96,6 +99,7 @@ LABELS = {
     "interrupted_time_ms": "Interrupted time",
     "interrupted_time_ms_std": "Interrupted time std",
     "interruptions_%": "Interruptions",
+    "turn_taking_naturalness": "Naturalness",
     "english_answers_%": "English answers",
     "same_dialect_as_question_%": "Same dialect",
     "north_american_dialect_%": "North American",
@@ -128,6 +132,7 @@ UNITS = {
     "interrupted_time_ms": "ms",
     "interrupted_time_ms_std": "ms",
     "interruptions_%": r"\%",
+    "turn_taking_naturalness": "score",
     "english_answers_%": r"\%",
     "same_dialect_as_question_%": r"\%",
     "north_american_dialect_%": r"\%",
@@ -180,6 +185,8 @@ def format_value(value, column: str) -> str:
         return str(int(round(number)))
     if column == "dialectal_variance":
         return f"{number:.1f}"
+    if column == "turn_taking_naturalness":
+        return f"{-number:.2f}"
     if column == "emotional_naturalness_logit":
         return f"{number:.2f}"
     if unit == "s":
@@ -235,15 +242,29 @@ def split_header_rows(columns: list[str]) -> tuple[list[str], list[str], list[st
 
 
 def display_model_name(model: str) -> str:
-    return "human" if str(model) == "original" else str(model)
+    text = "human" if str(model) == "original" else str(model)
+    replacements = {
+        "human": "Human",
+        "gpt-": "GPT-",
+        "gemini-": "Gemini-",
+        "mini-omni": "Mini-Omni",
+    }
+    for prefix, replacement in replacements.items():
+        if text.startswith(prefix):
+            return replacement + text[len(prefix):]
+    return text[:1].upper() + text[1:] if text else text
 
 
 def is_human_baseline(row: dict[str, str]) -> bool:
     return str(row.get("model", "")) in {"original", "human"}
 
 
+def format_model_name(model: str) -> str:
+    return rf"\texttt{{{latex_escape(display_model_name(model))}}}"
+
+
 def row_for(frame_row: dict[str, str], columns: list[str]) -> str:
-    cells = [latex_escape(display_model_name(frame_row.get("model", "")))]
+    cells = [format_model_name(frame_row.get("model", ""))]
     cells.extend(format_value(frame_row.get(column), column) for column in columns)
     return " & ".join(cells) + ROW_END
 

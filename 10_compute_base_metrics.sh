@@ -18,7 +18,7 @@ for split in 'test' 'dev'; do
                 --asr-models "${asr_models[@]}" \
                 --VAD-model "$VAD_model" \
                 --UTMOS-model "$UTMOS_model" \
-                --force-recompute & #'WER' 'CER' &
+                --force-recompute 'WER' 'CER' &
             sleep 1
 
         done

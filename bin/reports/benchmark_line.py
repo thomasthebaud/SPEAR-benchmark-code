@@ -21,6 +21,8 @@ F0_PROFILE_FEATURES = [
     "f0_max_raw",
 ]
 F0_FEATURE_FALLBACKS = {"f0_p52": "f0_p25"}
+TURNTAKING_EXPERIMENT = "group4-dualturn-full-all6-fvad256"
+TURNTAKING_FILE = f"turntaking.{TURNTAKING_EXPERIMENT}.csv"
 
 
 def display_model_name(model: str) -> str:
@@ -124,6 +126,10 @@ def dialect_logits_path(results_root: Path, model: str) -> Path:
 
 def naturalness_path(results_root: Path, model: str, subset: str) -> Path:
     return results_root / model / "test" / subset / "naturalness_scores_normalized.csv"
+
+
+def turntaking_path(results_root: Path, model: str, subset: str) -> Path:
+    return results_root / model / "test" / subset / TURNTAKING_FILE
 
 
 def stances_path(results_root: Path, model: str, subset: str) -> Path:
@@ -362,6 +368,17 @@ def naturalness_values(results_root: Path, model: str, subsets: list[str]) -> pd
     return pd.concat(values, ignore_index=True).dropna()
 
 
+def turntaking_naturalness_values(results_root: Path, model: str, subsets: list[str]) -> pd.Series:
+    values = []
+    for subset in subsets:
+        frame = safe_read_csv(turntaking_path(results_root, model, subset))
+        if frame is not None and "naturalness_score" in frame.columns:
+            values.append(numeric(frame["naturalness_score"]))
+    if not values:
+        return pd.Series(dtype="float64")
+    return pd.concat(values, ignore_index=True).dropna()
+
+
 def avd_correlation(results_root: Path, model: str, subsets: list[str], dimension: str) -> float:
     question_values = []
     answer_values = []
@@ -508,6 +525,7 @@ def compute_benchmark_line(args: argparse.Namespace) -> dict[str, object]:
             "dialectal_variance": dialect_variance,
         }
     )
+    row["turn_taking_naturalness"] = mean_std(turntaking_naturalness_values(args.results_root, args.model, args.subsets))[0]
     add_mean_std(row, "emotional_naturalness_logit", naturalness_values(args.results_root, args.model, args.subsets), use_std=args.use_std)
     row.update(
         {

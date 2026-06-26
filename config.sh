@@ -18,7 +18,7 @@ llm_model='gemini-3.1-flash-live-preview'
 
 eval_models=("gpt-audio-1.5" "gpt-realtime-2" "Qwen3-Omni-30B-A3B-Instruct" "Qwen2.5-Omni-7B" "mini-omni" "gemini-2.5-flash-native-audio-preview" "gemini-3.1-flash-live-preview")
 # eval_models=($llm_model)
-eval_models=("gemini-2.5-flash-native-audio-preview" "gemini-3.1-flash-live-preview")
+# eval_models=("gemini-2.5-flash-native-audio-preview" "gemini-3.1-flash-live-preview")
 
 # Inference models
 # 03_transcribe
