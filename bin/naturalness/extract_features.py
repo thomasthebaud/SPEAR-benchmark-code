@@ -220,20 +220,21 @@ def warn_old_feature_metadata(output_dir):
     )
 
 
-def feature_metadata_has_turn_scores(row, output_dir):
+def completed_pair_stems_from_feature_metadata(output_dir):
     csv_path = output_dir / "metadata.csv"
     if not csv_path.exists() or csv_path.stat().st_size == 0:
-        return False
-    key = Path(row["audio_path"]).stem.lower()
+        return set()
+
     required_sources = {"question", "answer"}
-    seen_sources = set()
+    sources_by_pair = {}
     try:
         with csv_path.open(newline="", encoding="utf-8") as csv_file:
             reader = csv.DictReader(csv_file)
             if not reader.fieldnames or not set(TURN_SCORE_COLUMNS).issubset(reader.fieldnames):
-                return False
+                return set()
             for metadata_row in reader:
-                if str(metadata_row.get("pair_stem", "")).strip().lower() != key:
+                key = str(metadata_row.get("pair_stem", "")).strip().lower()
+                if not key:
                     continue
                 source = str(metadata_row.get("vad_source", "")).strip().lower()
                 if source.startswith("existing_"):
@@ -241,12 +242,59 @@ def feature_metadata_has_turn_scores(row, output_dir):
                 if source not in required_sources:
                     continue
                 if all(str(metadata_row.get(column, "")).strip() for column in TURN_SCORE_COLUMNS):
-                    seen_sources.add(source)
-                if seen_sources == required_sources:
-                    return True
-    except Exception:
-        return False
-    return False
+                    sources_by_pair.setdefault(key, set()).add(source)
+    except Exception as exc:
+        tqdm.write(f"Warning: could not read existing feature metadata {csv_path}: {exc}")
+        return set()
+
+    return {key for key, sources in sources_by_pair.items() if sources == required_sources}
+
+
+def feature_metadata_has_turn_scores(row, output_dir):
+    key = Path(row["audio_path"]).stem.lower()
+    return key in completed_pair_stems_from_feature_metadata(output_dir)
+
+
+def append_failure_jsonl(output_dir, row_index, row, exc):
+    path = output_dir / "feature_extraction_failures.jsonl"
+    record = {
+        "row_index": int(row_index),
+        "audio_path": str(row.get("audio_path", "")),
+        "answer_audio_path": str(row.get("answer_audio_path", "")),
+        "error_type": type(exc).__name__,
+        "error": str(exc),
+    }
+    with path.open("a", encoding="utf-8") as outfile:
+        outfile.write(json.dumps(record, ensure_ascii=False) + "\n")
+
+
+def remove_feature_metadata_rows(output_dir, pair_stem):
+    csv_path = output_dir / "metadata.csv"
+    if not csv_path.exists() or csv_path.stat().st_size == 0:
+        return
+
+    pair_stem = str(pair_stem).strip().lower()
+    try:
+        with csv_path.open(newline="", encoding="utf-8") as csv_file:
+            reader = csv.DictReader(csv_file)
+            fieldnames = reader.fieldnames
+            if not fieldnames:
+                return
+            rows = [
+                row
+                for row in reader
+                if str(row.get("pair_stem", "")).strip().lower() != pair_stem
+            ]
+    except Exception as exc:
+        tqdm.write(f"Warning: could not clean stale metadata rows for {pair_stem}: {exc}")
+        return
+
+    tmp_path = csv_path.with_suffix(f"{csv_path.suffix}.tmp")
+    with tmp_path.open("w", newline="", encoding="utf-8") as csv_file:
+        writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(rows)
+    os.replace(tmp_path, csv_path)
 
 
 def num_chunks_for_duration(duration, args):
@@ -502,17 +550,35 @@ if __name__ == "__main__":
     print("Model Loaded. Starting feature extraction...")
 
     metadata = pd.read_csv(args.metadata)
+    completed_pair_stems = completed_pair_stems_from_feature_metadata(output_dir)
+    if completed_pair_stems:
+        print(f"Loaded {len(completed_pair_stems)} completed pair(s) from existing feature metadata: {output_dir / 'metadata.csv'}")
+
     too_short = 0
     already_computed = 0
+    failed = 0
     for idx, row in tqdm(metadata.iterrows(), desc=f"Extracting emotions", total=len(metadata)):
-        if float(row['question_end_time'] - row["context_end_time"]) < args.min_len_question:
-            too_short += 1
+        try:
+            if float(row['question_end_time'] - row["context_end_time"]) < args.min_len_question:
+                too_short += 1
+                continue
+
+            pair_stem = Path(row["audio_path"]).stem.lower()
+            if pair_stem in completed_pair_stems and combined_embeddings_exist(row, args, output_dir):
+                already_computed += 1
+                continue
+
+            remove_feature_metadata_rows(output_dir, pair_stem)
+            process_question_answer(row, model, device, args, output_dir)
+            completed_pair_stems.add(pair_stem)
+        except Exception as exc:
+            failed += 1
+            tqdm.write(f"Warning: failed row {idx} ({row.get('audio_path', '')}): {type(exc).__name__}: {exc}")
+            append_failure_jsonl(output_dir, idx, row, exc)
             continue
-        if combined_embeddings_exist(row, args, output_dir) and feature_metadata_has_turn_scores(row, output_dir):
-            already_computed += 1
-            continue
-        process_question_answer(row, model, device, args, output_dir)
+
     print(
-        f"Finished processing. {already_computed}/{len(metadata)} pairs skipped because embeddings already exist; "
-        f"{too_short}/{len(metadata)} pairs skipped due to short question length (< {args.min_len_question} seconds)."
+        f"Finished processing. {already_computed}/{len(metadata)} pairs skipped because existing metadata and embeddings were complete; "
+        f"{too_short}/{len(metadata)} pairs skipped due to short question length (< {args.min_len_question} seconds); "
+        f"{failed}/{len(metadata)} pairs failed and were logged to {output_dir / 'feature_extraction_failures.jsonl'}."
     )

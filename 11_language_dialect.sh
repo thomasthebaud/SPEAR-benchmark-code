@@ -131,7 +131,7 @@ if [[ "$run_Summary" -eq 1 ]];then
     # Stage 3: print a compact summary for every split/subset/model result.
     python3 bin/language_dialect_summary.py \
         --results-dir "results/$protocol" \
-        --models original "$llm_model"
+        --models "${eval_models[@]}"
 fi
 
 exit

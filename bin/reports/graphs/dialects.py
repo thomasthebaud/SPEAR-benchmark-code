@@ -50,7 +50,8 @@ def draw_dialect_profile(ax_radar, scores, systems: list[str], palette: dict[str
         closed_values = np.concatenate([values, values[:1]])
         linestyle = "--" if system == ORIGINAL else "-"
         ax_radar.plot(closed_angles, closed_values, color=palette[system], linewidth=2.0, linestyle=linestyle, label=system)
-        ax_radar.fill(closed_angles, closed_values, color=palette[system], alpha=0.08)
+        if system == ORIGINAL:
+            ax_radar.fill(closed_angles, closed_values, color=palette[system], alpha=0.08)
         legend_handles.append(Line2D([0], [0], color=palette[system], linewidth=2.0, linestyle=linestyle, label=system))
     ax_radar.set_xticks(angles)
     ax_radar.set_xticklabels(DIALECT_PROFILE_PLOT_LABELS, fontsize=22)
@@ -66,7 +67,7 @@ def add_dialect_legend(
     ax_radar,
     legend_handles: list[Line2D],
     *,
-    bbox_to_anchor=(0.5, 1.18),
+    bbox_to_anchor=(0.5, 1.32),
     fontsize: int = 9,
     title_fontsize: int = 10,
 ) -> None:
@@ -90,12 +91,12 @@ def add_dialect_legend(
 def save_nochange_figure(scores, systems: list[str], palette: dict[str, str], output_path: Path) -> None:
     if scores.empty:
         return
-    fig = plt.figure(figsize=(14, 12))
+    fig = plt.figure(figsize=(21, 18))
     ax_radar = fig.add_subplot(1, 1, 1, projection="polar")
     add_dialect_legend(
         ax_radar,
         draw_dialect_profile(ax_radar, scores, systems, palette),
-        bbox_to_anchor=(0.5, 1.14),
+        bbox_to_anchor=(0.5, 1.28),
         fontsize=12,
         title_fontsize=13,
     )
@@ -116,7 +117,7 @@ def main() -> int:
         print("[WARN] No dialect rows found.")
         return 0
 
-    fig = plt.figure(figsize=(14, 16))
+    fig = plt.figure(figsize=(21, 24))
     gs = fig.add_gridspec(2, 1, height_ratios=[3.0, 1.0])
     ax_radar = fig.add_subplot(gs[0, 0], projection="polar")
     ax_bar = fig.add_subplot(gs[1, 0])
@@ -140,7 +141,7 @@ def main() -> int:
         ax_bar.set_axis_off()
 
     add_dialect_legend(ax_radar, legend_handles)
-    fig.tight_layout(rect=(0, 0, 1, 0.94))
+    fig.tight_layout(rect=(0, 0, 1, 0.88))
     save_figure(fig, args.output_path)
     save_nochange_figure(scores, systems, palette, args.output_path.with_name("stage3_dialects_nochange.png"))
     return 0

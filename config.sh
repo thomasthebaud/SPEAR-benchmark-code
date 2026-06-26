@@ -16,8 +16,9 @@ llm_model='gemini-2.5-flash-native-audio-preview'
 llm_model='gemini-3.1-flash-live-preview'
 # llm_model="original"
 
-eval_models=("gpt-audio-1.5" "gpt-realtime-2" "Qwen3-Omni-30B-A3B-Instruct" "Qwen2.5-Omni-7B" "mini-omni")
+eval_models=("gpt-audio-1.5" "gpt-realtime-2" "Qwen3-Omni-30B-A3B-Instruct" "Qwen2.5-Omni-7B" "mini-omni" "gemini-2.5-flash-native-audio-preview" "gemini-3.1-flash-live-preview")
 # eval_models=($llm_model)
+eval_models=("gemini-2.5-flash-native-audio-preview" "gemini-3.1-flash-live-preview")
 
 # Inference models
 # 03_transcribe
@@ -35,6 +36,13 @@ ser_model='tiantiaf/whisper-large-v3-msp-podcast-emotion-dim'
 emo_naturalness_checkpoint='models/naturalness/last_model.pt' 
 # 30/31 stances
 stance_llm_model="gpt-audio-1.5"
+# 40
+whisperx_model="large-v2"
+
+
+# 61 reports comments
+summary_llm_model="gpt-5.4-mini-2026-03-17"
+
 
 
 # For reporting

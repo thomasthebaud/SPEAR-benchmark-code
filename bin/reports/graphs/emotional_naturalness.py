@@ -115,6 +115,63 @@ def save_merged_figure(scores, systems: list[str], system_colors: dict[str, str]
     save_figure(fig, output_path)
 
 
+def save_histogram_kde_figure(scores, systems: list[str], system_colors: dict[str, str], output_path: Path) -> None:
+    if scores.empty:
+        return
+    plot_systems = [system for system in systems if system in set(scores["system"])]
+    if not plot_systems:
+        return
+    fig, ax = plt.subplots(1, 1, figsize=(11, 3.48))
+    sns.histplot(
+        data=scores,
+        x="naturalness_logit",
+        hue="system",
+        hue_order=plot_systems,
+        palette={system: system_colors[system] for system in plot_systems},
+        bins=40,
+        element="step",
+        stat="density",
+        common_norm=False,
+        alpha=0.22,
+        linewidth=1.4,
+        ax=ax,
+    )
+    for system in plot_systems:
+        sub = scores.loc[scores["system"] == system, "naturalness_logit"].dropna()
+        if sub.nunique() < 2:
+            continue
+        sns.kdeplot(
+            x=sub,
+            color=system_colors[system],
+            linestyle="--" if system == ORIGINAL else "-",
+            linewidth=1.8,
+            ax=ax,
+        )
+    legend = ax.get_legend()
+    legend_handles = []
+    legend_labels = []
+    if legend is not None:
+        legend_handles = getattr(legend, "legend_handles", None) or getattr(legend, "legendHandles", [])
+        legend_labels = [text.get_text() for text in legend.get_texts()]
+        legend.remove()
+    ax.set_xlabel("Emotional Naturalness Scores")
+    ax.set_ylabel("Density")
+    ax.tick_params(axis="both", labelsize=9)
+    if legend_handles:
+        fig.legend(
+            legend_handles,
+            legend_labels,
+            title="System",
+            loc="upper center",
+            ncol=min(len(legend_labels), 4),
+            bbox_to_anchor=(0.5, 1.14),
+            fontsize=9,
+            title_fontsize=10,
+        )
+    fig.tight_layout(rect=(0, 0, 1, 0.90))
+    save_figure(fig, output_path)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Article graph: emotional naturalness.")
     add_common_graph_args(parser)
@@ -200,6 +257,12 @@ def main() -> int:
         system_colors,
         companion_output_path(args.output_path, "merged"),
         kind="violin",
+    )
+    save_histogram_kde_figure(
+        scores,
+        systems,
+        system_colors,
+        companion_output_path(args.output_path, "histogram"),
     )
     return 0
 

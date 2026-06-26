@@ -8,7 +8,7 @@ source cmd.sh
 
 for split in 'test' 'dev'; do
     for subset in 'improvised' 'naturalistic'; do
-        for model in $llm_model; do #'original' "${eval_models[@]}"; do
+        for model in "${eval_models[@]}"; do
           metadata=data/$protocol/outputs/$model/$split/$subset/metadata.csv
           metrics=results/$protocol/$model/$split/$subset
           pickle_dir=data/$protocol/inputs/$split/$subset
@@ -33,7 +33,7 @@ echo "All naturalness scores computed for original and ${eval_models[@]} outputs
 
 for subset in 'improvised' 'naturalistic'; do
     ref_dir=results/$protocol/original/dev/$subset
-    for model in $llm_model; do #'original' "${eval_models[@]}"; do
+    for model in "${eval_models[@]}"; do
         data_dir=results/$protocol/$model/test/$subset
 
         echo "Normalize Naturalness score for subset:$subset model:$model using ref_dir:$ref_dir"

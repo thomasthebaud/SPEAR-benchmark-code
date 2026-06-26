@@ -111,8 +111,20 @@ def result_file(results_root: Path, model: str, *parts: str) -> Path:
     return path
 
 
+def humanize_original_label(text: object) -> object:
+    if not isinstance(text, str):
+        return text
+    return text.replace("ORIGINAL", "HUMAN").replace("Original", "Human").replace("original", "human")
+
+
+def humanize_figure_text(fig) -> None:
+    for artist in fig.findobj(lambda item: hasattr(item, "get_text") and hasattr(item, "set_text")):
+        artist.set_text(humanize_original_label(artist.get_text()))
+
+
 def save_figure(fig, output_path: Path, *, dpi: int = 180, bbox_inches: str = "tight") -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
+    humanize_figure_text(fig)
     fig.savefig(output_path, dpi=dpi, bbox_inches=bbox_inches)
     plt.close(fig)
     print(f"Wrote {output_path}")

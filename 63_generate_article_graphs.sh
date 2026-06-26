@@ -12,7 +12,7 @@ run_emotional_naturalness=0
 run_avd=0
 run_stances=0
 run_explainable=0
-run_wer_length=0
+run_turntaking_naturalness=0
 
 if [[ $# -eq 0 ]]; then
   run_intelligibility=1
@@ -22,7 +22,7 @@ if [[ $# -eq 0 ]]; then
   run_avd=1
   run_stances=1
   run_explainable=1
-  run_wer_length=1
+  run_turntaking_naturalness=1
 fi
 
 while [[ $# -gt 0 ]]; do
@@ -48,8 +48,8 @@ while [[ $# -gt 0 ]]; do
     --explainable|--stage7)
       run_explainable=1
       ;;
-    --wer-length|--stage8)
-      run_wer_length=1
+    --turntaking-naturalness|--wer-length|--stage8)
+      run_turntaking_naturalness=1
       ;;
     --all)
       run_intelligibility=1
@@ -59,7 +59,7 @@ while [[ $# -gt 0 ]]; do
       run_avd=1
       run_stances=1
       run_explainable=1
-      run_wer_length=1
+      run_turntaking_naturalness=1
       ;;
     -h|--help)
       cat <<EOF
@@ -73,7 +73,7 @@ Stages:
   --stage5, --avd                      AVD consistency
   --stage6, --stances                  Stances
   --stage7, --explainable              EXplainable features
-  --stage8, --wer-length               WER by answer audio length
+  --stage8, --turntaking-naturalness   Turn-taking naturalness histogram
   --all                                Run all stages
 
 If no stage is passed, all stages are run.
@@ -143,8 +143,8 @@ if [[ "$run_explainable" -eq 1 ]]; then
   run_graph_stage "EXplainable features" "explainable_features.py" "stage7_article_explainable_features.png" "7"
 fi
 
-if [[ "$run_wer_length" -eq 1 ]]; then
-  run_graph_stage "WER by Answer Audio Length" "wer_answer_length.py" "stage8_article_wer_answer_length.png" "8"
+if [[ "$run_turntaking_naturalness" -eq 1 ]]; then
+  run_graph_stage "Turn-taking Naturalness Histogram" "turntaking_naturalness_histogram.py" "stage8_article_turntaking_naturalness_histogram.png" "8"
 fi
 
 wait

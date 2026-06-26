@@ -7,7 +7,7 @@ source cmd.sh
 
 experiment="group4-dualturn-full-all6-fvad256"
 models_to_score=("original" "${eval_models[@]}")
-
+models_to_score=("${eval_models[@]}")
 for split in 'test' 'dev'; do
   for subset in 'improvised' 'naturalistic'; do
     for model in "${models_to_score[@]}"; do

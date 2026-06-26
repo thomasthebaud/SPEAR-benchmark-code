@@ -50,16 +50,25 @@ def rel(path: Path, base: Path) -> str:
         return html.escape(str(path))
 
 
-def fmt_float(value):
+def humanize_original_label(text: object) -> object:
+    if not isinstance(text, str):
+        return text
+    return text.replace("ORIGINAL", "HUMAN").replace("Original", "Human").replace("original", "human")
+
+
+def fmt_float(value, digits: int = 4, trim: bool = False):
     if pd.isna(value):
         return ""
     try:
         value = float(value)
     except Exception:
-        return value
-    if value != 0 and abs(value) < 1e-3:
+        return humanize_original_label(value)
+    if not trim and value != 0 and abs(value) < 10 ** -digits:
         return f"{value:.3e}"
-    return f"{value:.4f}"
+    text = f"{value:.{digits}f}"
+    if trim:
+        text = text.rstrip("0").rstrip(".")
+    return text if text else "0"
 
 
 def table_html(frame: Optional[pd.DataFrame], columns=None, max_rows: Optional[int] = None) -> str:
@@ -87,6 +96,10 @@ def table_html(frame: Optional[pd.DataFrame], columns=None, max_rows: Optional[i
         view[col] = view[col].map(fmt_float)
     if "n" in view.columns:
         view["n"] = pd.to_numeric(view["n"], errors="coerce").astype("Int64")
+    for col in view.columns:
+        if view[col].dtype == object or pd.api.types.is_string_dtype(view[col]):
+            view[col] = view[col].map(humanize_original_label)
+    view = view.rename(columns={col: humanize_original_label(col) for col in view.columns})
     return view.to_html(index=False, classes="metric-table", escape=True, border=0)
 
 
@@ -94,7 +107,7 @@ def read_report_text(report_dir: Path) -> str:
     path = report_dir / "report.txt"
     if not path.exists():
         return "report.txt not found. Run Stage 1 first."
-    return path.read_text(encoding="utf-8")
+    return humanize_original_label(path.read_text(encoding="utf-8"))
 
 
 def read_summary_text(report_dir: Path) -> str:
@@ -102,13 +115,14 @@ def read_summary_text(report_dir: Path) -> str:
     if not path.exists():
         return "missing summary"
     text = path.read_text(encoding="utf-8").strip()
-    return text or "missing summary"
+    return humanize_original_label(text) or "missing summary"
 
 
 
 def rows_to_html_table(rows: list[list[str]]) -> str:
     if not rows:
         return ""
+    rows = [[str(humanize_original_label(cell)) for cell in row] for row in rows]
     header = rows[0]
     body = rows[1:]
     thead = "<thead><tr>" + "".join(f"<th>{html.escape(cell)}</th>" for cell in header) + "</tr></thead>"
@@ -439,7 +453,7 @@ def stance_result_table(metrics: dict[str, Optional[pd.DataFrame]]) -> pd.DataFr
 def img_tag(path: Path, report_dir: Path, alt: str, css_class: str = "figure") -> str:
     if not path.exists():
         return f'<p class="muted">Missing graph: {html.escape(str(path))}</p>'
-    return f'<img class="{css_class}" src="{rel(path, report_dir)}" alt="{html.escape(alt)}" loading="lazy">'
+    return f'<img class="{css_class}" src="{rel(path, report_dir)}" alt="{html.escape(str(humanize_original_label(alt)))}" loading="lazy">'
 
 
 def feature_gallery(report_dir: Path) -> str:
@@ -532,10 +546,36 @@ def dialectal_metrics_table(metrics: dict[str, Optional[pd.DataFrame]]) -> pd.Da
     return pd.concat(rows, ignore_index=True) if rows else pd.DataFrame()
 
 
+def turntaking_surprisal_display_table(frame: Optional[pd.DataFrame]) -> pd.DataFrame:
+    if frame is None or frame.empty:
+        return pd.DataFrame()
+    columns = [
+        "metric",
+        "model - improvised",
+        "model - naturalistic",
+        "original - improvised",
+        "original - naturalistic",
+    ]
+    rows = []
+    for metric in frame["metric"].dropna().astype(str).drop_duplicates():
+        sub = frame[frame["metric"].astype(str) == metric]
+        row = {"metric": metric}
+        for subset in SUBSETS:
+            subset_rows = sub[sub["subset"].astype(str) == subset]
+            if subset_rows.empty:
+                continue
+            source = subset_rows.iloc[0]
+            row[f"model - {subset}"] = fmt_float(source.get("model_value"), digits=3, trim=True)
+            row[f"original - {subset}"] = fmt_float(source.get("original_value"), digits=3, trim=True)
+        rows.append(row)
+    return pd.DataFrame(rows, columns=columns)
+
+
 def build_html(args, metrics: dict[str, Optional[pd.DataFrame]], report_text: str) -> str:
     report_dir = args.report_dir
     emo_table = metric_rows(metrics, "Emotional Naturalness")
     basic_table = metric_rows(metrics, "Intelligibility and Interruption Metrics")
+    turntaking_table = turntaking_surprisal_display_table(metric_rows(metrics, "Turn Taking Surprisal"))
     language_table = language_id_summary_table(metrics)
     dialect_table = dialect_id_summary_table(metrics)
     stance_desc_table = metric_rows(metrics, "STANCE Descriptions")
@@ -604,6 +644,12 @@ def build_html(args, metrics: dict[str, Optional[pd.DataFrame]], report_text: st
   </section>
 
   <section>
+    <h2>Turn Taking Surprisal</h2>
+    {table_html(turntaking_table, columns=["metric", "model - improvised", "model - naturalistic", "original - improvised", "original - naturalistic"])}
+    {img_tag(report_dir / "graphs" / "turntaking_surprisal.png", report_dir, "Turn-taking surprisal metric violin plots")}
+  </section>
+
+  <section>
     <h2>Language and Dialect ID</h2>
     {table_html(language_table, columns=["subset", "% Eng in models' answers", "% Eng in original answers", "second most spoken language in models' answers", "percentage 2nd language in models' answers", "second most spoken language in original answers", "percentage 2nd language in original answers"])}
     {table_html(dialect_table, columns=["Subset", "Question/Answer", *DIALECT_LABELS])}
@@ -633,9 +679,14 @@ def build_html(args, metrics: dict[str, Optional[pd.DataFrame]], report_text: st
 
   <section>
     <h2>Explainable Features</h2>
-    <p>Explainable feature rows report model-minus-original mean differences and p-values for the reported f0, duration, and voiced-ratio features.</p>
+    <p>Explainable feature rows report model-minus-original mean differences and p-values for numeric pitch, lexical, and temporal features.</p>
+    <h3>Pitch Based</h3>
     {img_tag(report_dir / "graphs" / "f0_question_answer_boxplot.png", report_dir, "Questions, original answers, and model answers f0 profile box plot")}
-    {img_tag(report_dir / "graphs" / "explainables.png", report_dir, "Explainable feature violin plots")}
+    {img_tag(report_dir / "graphs" / "explainables_pitch.png", report_dir, "Pitch-based explainable feature violin plots")}
+    <h3>Lexical Features</h3>
+    {img_tag(report_dir / "graphs" / "explainables_lexical.png", report_dir, "Lexical explainable feature violin plots")}
+    <h3>Temporal Features</h3>
+    {img_tag(report_dir / "graphs" / "explainables_temporal.png", report_dir, "Temporal explainable feature violin plots")}
     {feature_gallery(report_dir)}
   </section>
 </main>
@@ -657,7 +708,7 @@ def main() -> int:
     report_text = read_report_text(args.report_dir)
     html_text = build_html(args, metrics, report_text)
     output_path = args.report_dir / "detailed_report.html"
-    output_path.write_text(html_text, encoding="utf-8")
+    output_path.write_text(str(humanize_original_label(html_text)), encoding="utf-8")
     print(f"Wrote {output_path}")
     return 0
 

@@ -63,6 +63,29 @@ def write_csv(path: Path, rows: list[dict[str, Any]], fieldnames: list[str]) -> 
         writer.writerows(rows)
 
 
+def read_completed_output_rows(path: Path) -> dict[int, dict[str, str]]:
+    if not path.is_file() or path.stat().st_size == 0:
+        return {}
+    completed: dict[int, dict[str, str]] = {}
+    try:
+        with path.open(newline="", encoding="utf-8") as handle:
+            reader = csv.DictReader(handle)
+            if not reader.fieldnames or "row_index" not in reader.fieldnames:
+                return {}
+            for row in reader:
+                if str(row.get("status", "")).strip().lower() != "ok":
+                    continue
+                try:
+                    row_index = int(row.get("row_index", ""))
+                except (TypeError, ValueError):
+                    continue
+                completed[row_index] = row
+    except Exception as exc:
+        tqdm.write(f"Warning: could not read existing turn-taking output {path}: {exc}")
+        return {}
+    return completed
+
+
 def resolve_audio_path(value: str, base_dir: Path) -> Path:
     path = Path(value)
     if path.is_absolute():
@@ -252,6 +275,7 @@ def main() -> int:
     parser.add_argument("--unit-pre-s", type=float, default=2.0)
     parser.add_argument("--unit-post-s", type=float, default=0.0)
     parser.add_argument("--base-dir", type=Path, default=Path.cwd(), help="Base directory for relative audio paths.")
+    parser.add_argument("--force-recompute", action="store_true", help="Recompute all rows even when output already has completed rows.")
     args = parser.parse_args()
 
     if not args.metadata.is_file():
@@ -304,7 +328,20 @@ def main() -> int:
         unit_mode="boundaries",
     )
 
-    out_rows: list[dict[str, Any] | None] = [None] * len(rows)
+    completed_rows = {} if args.force_recompute else read_completed_output_rows(args.output)
+    out_rows: list[dict[str, Any] | None] = []
+    for idx, source_row in enumerate(rows):
+        completed = completed_rows.get(idx)
+        expected_answer_stem = Path(source_row.get("answer_audio_path", "")).stem
+        completed_answer_stem = Path(str(completed.get("answer_audio_path", ""))).stem if completed else ""
+        if completed is not None and expected_answer_stem and completed_answer_stem == expected_answer_stem:
+            out_rows.append(completed)
+        else:
+            out_rows.append(None)
+    skipped_count = sum(1 for row in out_rows if row is not None)
+    if skipped_count:
+        tqdm.write(f"Loaded {skipped_count} completed row(s) from existing output: {args.output}")
+
     prepared_batch: list[dict[str, Any]] = []
     batch_indices: list[int] = []
     batch_audio_paths: list[Path] = []
@@ -369,6 +406,9 @@ def main() -> int:
         batch_audio_paths = []
 
     for idx, row in enumerate(rows):
+        if out_rows[idx] is not None:
+            mark_progress("ok")
+            continue
         raw_question_path = row.get("audio_path", "")
         raw_answer_path = row.get("answer_audio_path", "")
         if not raw_question_path:
@@ -438,7 +478,7 @@ def main() -> int:
     ]
     write_csv(args.output, final_rows, fields)
     ok = sum(1 for row in final_rows if row.get("status") == "ok")
-    tqdm.write(f"Wrote {args.output} ({ok}/{len(final_rows)} rows scored)")
+    tqdm.write(f"Wrote {args.output} ({ok}/{len(final_rows)} rows scored; {skipped_count} reused)")
     return 0
 
 

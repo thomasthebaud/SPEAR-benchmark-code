@@ -87,7 +87,7 @@ def main() -> int:
         title="System",
         loc="lower center",
         bbox_to_anchor=(0.5, -0.14),
-        ncol=len(systems),
+        ncol=max(1, (len(systems) + 1) // 2),
         frameon=True,
     )
     fig.tight_layout(rect=(0, 0.18, 1, 1), w_pad=0.4)

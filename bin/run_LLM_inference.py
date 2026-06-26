@@ -46,6 +46,20 @@ def load_proxy_module(model_name: str):
     return module
 
 
+def clean_metadata_text(value):
+    if isinstance(value, str):
+        return value.replace("\r\n", " ").replace("\r", " ").replace("\n", " ")
+    return value
+
+
+def clean_metadata_frame(frame: pd.DataFrame) -> pd.DataFrame:
+    frame = frame.copy()
+    object_columns = frame.select_dtypes(include=["object", "string"]).columns
+    for col in object_columns:
+        frame[col] = frame[col].map(clean_metadata_text)
+    return frame
+
+
 def ensure_output_columns(frame: pd.DataFrame) -> pd.DataFrame:
     frame = frame.copy()
     for col in ["answer_audio_path", "transcript_answer", "answer_start_time", "answer_duration", "finish_reason"]:
@@ -53,13 +67,13 @@ def ensure_output_columns(frame: pd.DataFrame) -> pd.DataFrame:
             frame[col] = pd.Series(index=frame.index, dtype="object")
         else:
             frame[col] = frame[col].astype("object")
-    return frame
+    return clean_metadata_frame(frame)
 
 
 def save_output_metadata(frame: pd.DataFrame, output_csv: Path) -> None:
     output_csv.parent.mkdir(parents=True, exist_ok=True)
     tmp_csv = output_csv.with_suffix(output_csv.suffix + ".tmp")
-    frame.to_csv(tmp_csv, index=False)
+    clean_metadata_frame(frame).to_csv(tmp_csv, index=False)
     tmp_csv.replace(output_csv)
 
 
@@ -180,7 +194,7 @@ if __name__ == "__main__":
         if answer_start_time is None: answer_start_time = row['question_end_time']
         # 0 if no delay or non streaming model, negative if interruption, positive if delayed
         output_row = row.copy()
-        output_row['transcript_answer'] = transcript_answer
+        output_row['transcript_answer'] = clean_metadata_text(transcript_answer)
         output_row['answer_start_time'] = f"{answer_start_time - row['question_end_time']:.3f}"
         output_row['answer_audio_path'] = str(output_path)
         output_row['answer_duration'] = len(audio_output) / sr

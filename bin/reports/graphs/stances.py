@@ -76,7 +76,7 @@ def draw_stance_radar(
     ax_radar.legend(
         title="System",
         loc="upper center",
-        ncol=len(systems_with_data),
+        ncol=max(1, (len(systems_with_data) + 1) // 2),
         bbox_to_anchor=legend_anchor,
         frameon=True,
         fontsize=1.7 * legend_fontsize,

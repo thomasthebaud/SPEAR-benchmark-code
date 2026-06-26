@@ -16,7 +16,22 @@ SPLITS = ["dev", "test"]
 ORIGINAL = "original"
 EXCLUDED_REPORT_METRICS = {"question_end_time"}
 REPORTED_EXPLAINABLE_FEATURES = {"total_duration_s", "voiced_duration_s", "voiced_ratio"}
+NON_EXPLAINABLE_FEATURE_COLUMNS = {
+    "temporal_alignment_source",
+    "temporal_status",
+    "lexical_status",
+    "lexical_status_reason",
+    "f0_status",
+    "extraction_status",
+}
 STATISTICAL_TESTS = {"Welch t-test", "Mann-Whitney U Test", "Wilcoxon Signed-Rank Test"}
+TURNTAKING_SURPRISAL_FILE = "turntaking.group4-dualturn-full-all6-fvad256.csv"
+TURNTAKING_SURPRISAL_METRICS = [
+    "mean_nll",
+    "tail_nll",
+    "dialog_nll",
+    "naturalness_score",
+]
 DIALECT_LABELS = [
     "East Asia",
     "English",
@@ -67,10 +82,25 @@ def fmt(value: Any, digits: int = 4) -> str:
     return str(value)
 
 
+def fmt_max_decimals(value: Any, digits: int = 3) -> str:
+    if value is None or pd.isna(value):
+        return "nan"
+    if isinstance(value, (int, np.integer)):
+        return str(int(value))
+    if isinstance(value, (float, np.floating)):
+        text = f"{float(value):.{digits}f}".rstrip("0").rstrip(".")
+        return text if text else "0"
+    return str(value)
+
+
 def pvalue_text(value: float) -> str:
     if pd.isna(value):
         return "nan"
     return f"{value:.3g}"
+
+
+def humanize_original_label(text: str) -> str:
+    return str(text).replace("ORIGINAL", "HUMAN").replace("Original", "Human").replace("original", "human")
 
 
 def metric_row(
@@ -140,8 +170,19 @@ def feature_csv(args, model: str, split: str, subset: str) -> Path:
     return args.results_root / model / split / subset / "distrib_baselines_features_normalized.csv"
 
 
+def turntaking_surprisal_csv(args, model: str, subset: str) -> Path:
+    return args.results_root / model / "test" / subset / TURNTAKING_SURPRISAL_FILE
+
+
 def is_reported_explainable_feature(feature: str) -> bool:
-    return feature in REPORTED_EXPLAINABLE_FEATURES or feature.startswith("f0_p")
+    if feature in NON_EXPLAINABLE_FEATURE_COLUMNS:
+        return False
+    return (
+        feature in REPORTED_EXPLAINABLE_FEATURES
+        or feature.startswith("f0_p")
+        or feature.startswith("lexical_")
+        or feature.startswith("temporal_")
+    )
 
 
 def available_explainable_features(args, subset: str) -> List[str]:
@@ -153,7 +194,9 @@ def available_explainable_features(args, subset: str) -> List[str]:
         features.update(
             str(column)
             for column in frame.columns
-            if is_reported_explainable_feature(str(column)) and str(column) not in EXCLUDED_REPORT_METRICS
+            if is_reported_explainable_feature(str(column))
+            and str(column) not in EXCLUDED_REPORT_METRICS
+            and numeric(frame[column]).notna().any()
         )
     return sorted(features)
 
@@ -702,6 +745,65 @@ def add_interruption_count_row(
     text_lines.append("	".join([subset, "number of dialogues with interruption", f"{model_value}/{len(model_values)}", original_text, fmt(mean_diff, 0)]))
 
 
+def turntaking_surprisal_section(args, metrics_by_subset: Dict[str, List[Dict[str, Any]]], text_lines: List[str]) -> None:
+    text_lines.append("Turn Taking Surprisal")
+    text_lines.append("----------------------")
+    text_lines.append("metric	model - improvised	model - naturalistic	original - improvised	original - naturalistic")
+    display_rows: Dict[str, Dict[str, Any]] = {}
+    for subset in SUBSETS:
+        original = safe_read_csv(turntaking_surprisal_csv(args, ORIGINAL, subset))
+        model = safe_read_csv(turntaking_surprisal_csv(args, args.model, subset))
+        if original is None or model is None:
+            continue
+        for metric in TURNTAKING_SURPRISAL_METRICS:
+            if metric not in original.columns or metric not in model.columns:
+                continue
+            original_values = numeric(original[metric]).dropna()
+            model_values = numeric(model[metric]).dropna()
+            if metric == "naturalness_score":
+                original_values = -1.0 * original_values
+                model_values = -1.0 * model_values
+            if original_values.empty and model_values.empty:
+                continue
+            pvalue = statistical_pvalue(original_values, model_values, args.statistical_test)
+            model_mean = model_values.mean() if not model_values.empty else np.nan
+            original_mean = original_values.mean() if not original_values.empty else np.nan
+            diff_mean = model_mean - original_mean
+            diff_std = np.sqrt(model_values.var(ddof=1) + original_values.var(ddof=1))
+            n_value = int(min(len(original_values), len(model_values)))
+            row = metric_row(
+                metric,
+                diff_mean,
+                diff_std,
+                pvalue,
+                n=n_value,
+                section="Turn Taking Surprisal",
+                detail=f"{TURNTAKING_SURPRISAL_FILE}; model-original; p-value is {args.statistical_test}",
+                model_value=model_mean,
+                original_value=original_mean,
+            )
+            metrics_by_subset[subset].append(row)
+            display = display_rows.setdefault(metric, {"metric": metric})
+            display[f"model - {subset}"] = model_mean
+            display[f"original - {subset}"] = original_mean
+    for metric in TURNTAKING_SURPRISAL_METRICS:
+        display = display_rows.get(metric)
+        if display is None:
+            continue
+        text_lines.append(
+            "	".join(
+                [
+                    metric,
+                    fmt_max_decimals(display.get("model - improvised")),
+                    fmt_max_decimals(display.get("model - naturalistic")),
+                    fmt_max_decimals(display.get("original - improvised")),
+                    fmt_max_decimals(display.get("original - naturalistic")),
+                ]
+            )
+        )
+    text_lines.append("")
+
+
 def base_metrics_section(args, metrics_by_subset: Dict[str, List[Dict[str, Any]]], text_lines: List[str]) -> None:
     text_lines.append("Intelligibility and Interruption Metrics")
     text_lines.append("----------------------------------------")
@@ -1063,7 +1165,8 @@ def write_outputs(args, metrics_by_subset: Dict[str, List[Dict[str, Any]]], text
         pd.DataFrame(rows, columns=columns).to_csv(metrics_path, index=False)
         print(f"Wrote metrics: {metrics_path}")
 
-    report_path.write_text("\n".join(align_tabular_blocks(text_lines)) + "\n", encoding="utf-8")
+    report_text = "\n".join(align_tabular_blocks(text_lines)) + "\n"
+    report_path.write_text(humanize_original_label(report_text), encoding="utf-8")
     print(f"Wrote report: {report_path}")
 
 
@@ -1100,6 +1203,7 @@ def main() -> int:
     setup_section(args, text_lines)
     setup_details_section(args, text_lines)
     base_metrics_section(args, metrics_by_subset, text_lines)
+    turntaking_surprisal_section(args, metrics_by_subset, text_lines)
     language_id_section(args, metrics_by_subset, text_lines)
     dialect_id_section(args, metrics_by_subset, text_lines)
     emotional_naturalness_section(args, metrics_by_subset, text_lines)

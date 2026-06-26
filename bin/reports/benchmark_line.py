@@ -23,6 +23,10 @@ F0_PROFILE_FEATURES = [
 F0_FEATURE_FALLBACKS = {"f0_p52": "f0_p25"}
 
 
+def display_model_name(model: str) -> str:
+    return "human" if str(model) == "original" else str(model)
+
+
 def safe_read_csv(path: Path, *, warn_missing: bool = True) -> Optional[pd.DataFrame]:
     if not path.exists():
         if warn_missing:
@@ -487,7 +491,7 @@ def compute_benchmark_line(args: argparse.Namespace) -> dict[str, object]:
 
     row: dict[str, object] = {
         "protocol": args.protocol,
-        "model": args.model,
+        "model": display_model_name(args.model),
     }
     add_mean_std(row, "UTMOS", concat_columns(frames, ["UTMOS"]), use_std=args.use_std)
     add_mean_std(row, "WER_%", concat_columns(frames, metric_columns(frames, "WER"), scale=100.0), use_std=args.use_std)

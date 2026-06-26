@@ -234,8 +234,16 @@ def split_header_rows(columns: list[str]) -> tuple[list[str], list[str], list[st
     return top, middle, units
 
 
+def display_model_name(model: str) -> str:
+    return "human" if str(model) == "original" else str(model)
+
+
+def is_human_baseline(row: dict[str, str]) -> bool:
+    return str(row.get("model", "")) in {"original", "human"}
+
+
 def row_for(frame_row: dict[str, str], columns: list[str]) -> str:
-    cells = [latex_escape(frame_row.get("model", ""))]
+    cells = [latex_escape(display_model_name(frame_row.get("model", "")))]
     cells.extend(format_value(frame_row.get(column), column) for column in columns)
     return " & ".join(cells) + ROW_END
 
@@ -244,8 +252,8 @@ def make_table(rows: list[dict[str, str]], fieldnames: list[str]) -> str:
     if not columns:
         raise ValueError("No recognized benchmark metric columns found.")
 
-    original = [row for row in rows if row.get("model", "") == "original"]
-    models = [row for row in rows if row.get("model", "") != "original"]
+    original = [row for row in rows if is_human_baseline(row)]
+    models = [row for row in rows if not is_human_baseline(row)]
 
     header_top, header_middle, header_units = split_header_rows(columns)
     lines = [

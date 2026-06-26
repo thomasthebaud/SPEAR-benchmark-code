@@ -126,6 +126,8 @@ for split in 'test' 'dev'; do
             --assets_dir "$seamless_assets_dir" \
             --question-index "$idx" &
 
+            sleep 1
+
             done
         done
     done
@@ -205,7 +207,7 @@ for split in 'test' 'dev'; do
                 --eval_model "$stance_llm_model" \
                 --openai-api-key "$openai_api_key" \
                 --openai-org "$org" \
-                "${force_args[@]}" 
+                "${force_args[@]}" &
               
               sleep 1
 

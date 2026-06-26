@@ -17,6 +17,8 @@ import wave
 from pathlib import Path
 from typing import Any
 
+from tqdm.auto import tqdm
+
 
 TARGET_SAMPLE_RATE = 16000
 
@@ -494,9 +496,10 @@ def main() -> int:
     failures = 0
     started = time.time()
 
-    for idx, (row_idx, wav_path) in enumerate(pending, start=1):
+    progress = tqdm(pending, total=len(pending), unit="file", desc="Preprocessing audio alignments")
+    for row_idx, wav_path in progress:
         output_path = output_json_path(wav_path, args.output_dir)
-        logging.info("[%d/%d] %s -> %s", idx, len(pending), wav_path, output_path)
+        progress.set_postfix_str(wav_path.name, refresh=False)
         try:
             if not wav_path.exists():
                 raise FileNotFoundError(wav_path)

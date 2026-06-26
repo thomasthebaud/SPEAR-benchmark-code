@@ -10,7 +10,7 @@ echo "Projecting dialect log-logits for protocol $protocol"
 mkdir -p "results/$protocol/dialect_logits" graphs
 
 dialect_logit_models=()
-for model in original "${eval_models[@]}"; do
+for model in "original" "${eval_models[@]}"; do
   already_added=0
   for existing in "${dialect_logit_models[@]}"; do
     if [[ "$existing" == "$model" ]]; then

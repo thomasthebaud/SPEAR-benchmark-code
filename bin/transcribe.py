@@ -161,6 +161,47 @@ def resolve_audio_path(audio_path: str, data_dir: Path) -> Path:
 
     return path
 
+
+def has_transcript(value) -> bool:
+    if pd.isna(value):
+        return False
+    return str(value).strip() != ""
+
+
+def answer_path_matches(current, previous) -> bool:
+    if pd.isna(current) or pd.isna(previous):
+        return False
+    current = str(current)
+    previous = str(previous)
+    return current == previous or Path(current).name == Path(previous).name
+
+
+def load_reusable_transcripts(output_path: Path, metadata: pd.DataFrame, *, force_recompute: bool) -> pd.Series:
+    reusable = pd.Series("", index=metadata.index, dtype="object")
+    if force_recompute or not output_path.exists():
+        return reusable
+
+    try:
+        previous = pd.read_csv(output_path)
+    except Exception as exc:
+        print(f"Warning: could not read existing transcripts {output_path}: {exc}; recomputing all rows")
+        return reusable
+
+    if "ASR_transcript_answer" not in previous.columns:
+        return reusable
+
+    for idx in metadata.index:
+        if idx not in previous.index:
+            continue
+        transcript = previous.at[idx, "ASR_transcript_answer"]
+        if not has_transcript(transcript):
+            continue
+        if "answer_audio_path" in previous.columns and not answer_path_matches(metadata.at[idx, "answer_audio_path"], previous.at[idx, "answer_audio_path"]):
+            continue
+        reusable.at[idx] = str(transcript)
+    return reusable
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--data_dir", help="Directory containing audio files")
@@ -179,18 +220,33 @@ if __name__ == "__main__":
     output_dir.mkdir(parents=True, exist_ok=True)
     output_path = output_dir / f"{asr_output_name(args.model)}_transcripts.csv"
 
-    if output_path.exists() and not args.force_recompute:
-        exit(f"##### {output_path} already computed #####")
-    elif output_path.exists():
+    if output_path.exists() and args.force_recompute:
         print(f"{output_path} already computed, recomputing")
 
     metadata = pd.read_csv(metadata_path)
     # metadata['ASR_transcript_question'] = ''
-    metadata['ASR_transcript_answer'] = ''
+    metadata['ASR_transcript_answer'] = load_reusable_transcripts(
+        output_path,
+        metadata,
+        force_recompute=args.force_recompute,
+    )
+    missing_indices = [idx for idx in metadata.index if not has_transcript(metadata.at[idx, 'ASR_transcript_answer'])]
+
+    if not missing_indices:
+        metadata.to_csv(output_path, index=False)
+        print(f"##### {output_path} already complete ({len(metadata)} rows) #####")
+        raise SystemExit(0)
+
+    reused = len(metadata) - len(missing_indices)
+    if reused:
+        print(f"Reusing {reused} existing transcript row(s); computing {len(missing_indices)} missing row(s)")
+    else:
+        print(f"Computing {len(missing_indices)} transcript row(s)")
 
     asr_model = build_asr_model(args.model)
 
-    for idx, row in tqdm(metadata.iterrows(), total=metadata.shape[0], desc=f'transcribing answers with {args.model}', mininterval=64):
+    for idx in tqdm(missing_indices, total=len(missing_indices), desc=f'transcribing answers with {args.model}', mininterval=64):
+        row = metadata.loc[idx]
         audio_path = resolve_audio_path(row['answer_audio_path'], input_dir)
         metadata.at[idx, 'ASR_transcript_answer'] = transcribe_audio(
             asr_model,
@@ -198,4 +254,4 @@ if __name__ == "__main__":
         )
 
     metadata.to_csv(output_path, index=False)
-    print(f"Saved transcripts to {output_path}")
+    print(f"Saved transcripts to {output_path} ({reused} reused, {len(missing_indices)} computed)")

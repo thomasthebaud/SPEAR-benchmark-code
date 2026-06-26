@@ -22,6 +22,78 @@ SUBSETS = ["improvised", "naturalistic"]
 DATASET_PALETTE = {"original": "#4C72B0", "model": "#DD8452"}
 EXCLUDED_REPORT_METRICS = {"question_end_time"}
 REPORTED_EXPLAINABLE_FEATURES = {"total_duration_s", "voiced_duration_s", "voiced_ratio"}
+TURNTAKING_SURPRISAL_FILE = "turntaking.group4-dualturn-full-all6-fvad256.csv"
+TURNTAKING_SURPRISAL_METRICS = [
+    "mean_nll",
+    "tail_nll",
+    "dialog_nll",
+    "naturalness_score",
+]
+EXPLAINABLE_FEATURE_GROUPS = {
+    "pitch": {
+        "title": "Pitch-Based Explainable Feature Distributions",
+        "features": {
+            "f0_mean_raw",
+            "f0_median_raw",
+            "f0_std_raw",
+            "f0_min_raw",
+            "f0_max_raw",
+            "f0_range_raw",
+            "f0_p10",
+            "f0_p90",
+            "f0_range_p10_p90",
+            "f0_mean_p10_p90",
+            "f0_std_p10_p90",
+            "f0_p25",
+            "f0_p75",
+            "f0_range_p25_p75",
+            "f0_mean_p25_p75",
+            "f0_std_p25_p75",
+        },
+        "prefixes": ("f0_",),
+    },
+    "lexical": {
+        "title": "Lexical Explainable Feature Distributions",
+        "features": {
+            "total_words",
+            "unique_words",
+            "mean_asr_confidence",
+            "low_conf_flag",
+            "content_word_count",
+            "function_word_count",
+            "lexical_density",
+            "ttr",
+            "mattr_small",
+            "mattr_large",
+            "mattr_ratio",
+            "mtld",
+            "hapax_ratio",
+            "lexical_entropy",
+            "backchannel_ratio",
+            "discourse_marker_ratio",
+        },
+        "prefixes": ("lexical_",),
+    },
+    "temporal": {
+        "title": "Temporal Explainable Feature Distributions",
+        "features": {
+            "total_duration_s",
+            "voiced_duration_s",
+            "voiced_ratio",
+            "n_voiced_frames",
+            "speech_active_time_s",
+            "pause_count",
+            "pause_total_duration_s",
+            "pause_mean_duration_s",
+            "pause_ratio",
+            "speech_rate_wps",
+            "speech_rate_wpm",
+            "articulation_rate_wps",
+            "articulation_rate_wpm",
+        },
+        "prefixes": ("temporal_",),
+    },
+}
 NON_EXPLAINABLE_COLUMNS = {
     "orig_id",
     "vendor_id",
@@ -122,8 +194,20 @@ def result_file(results_root: Path, model: str, *parts: str) -> Path:
     return path
 
 
+def humanize_original_label(text: object) -> object:
+    if not isinstance(text, str):
+        return text
+    return text.replace("ORIGINAL", "HUMAN").replace("Original", "Human").replace("original", "human")
+
+
+def humanize_figure_text(fig) -> None:
+    for artist in fig.findobj(lambda item: hasattr(item, "get_text") and hasattr(item, "set_text")):
+        artist.set_text(humanize_original_label(artist.get_text()))
+
+
 def save_figure(fig, output_path: Path, *, dpi: int = 180, bbox_inches: str = "tight") -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
+    humanize_figure_text(fig)
     fig.savefig(output_path, dpi=dpi, bbox_inches=bbox_inches)
     plt.close(fig)
     print(f"Wrote {output_path}")
@@ -139,8 +223,19 @@ def is_reported_explainable_feature(feature: str) -> bool:
     return feature in REPORTED_EXPLAINABLE_FEATURES or feature.startswith("f0_p")
 
 
+def explainable_feature_group(feature: str) -> Optional[str]:
+    for group_name, spec in EXPLAINABLE_FEATURE_GROUPS.items():
+        if feature in spec["features"] or any(feature.startswith(prefix) for prefix in spec["prefixes"]):
+            return group_name
+    return None
+
+
 def explainable_feature_file(results_root: Path, model: str, subset: str) -> Path:
     return result_file(results_root, model, "test", subset, "distrib_baselines_features_normalized.csv")
+
+
+def turntaking_surprisal_file(results_root: Path, model: str, subset: str) -> Path:
+    return result_file(results_root, model, "test", subset, TURNTAKING_SURPRISAL_FILE)
 
 
 def explainable_question_feature_file(results_root: Path, subset: str) -> Path:
@@ -392,6 +487,7 @@ def graph_basic_metric_histograms(results_root: Path, model: str, output_dir: Pa
         fig.suptitle(f"{metric}: Original vs Model", y=1.03)
         fig.tight_layout()
         out_path = output_dir / f"{sanitize_filename(metric)}.png"
+        humanize_figure_text(fig)
         fig.savefig(out_path, dpi=180, bbox_inches="tight")
         plt.close(fig)
     print(f"Wrote basic metric histograms to {output_dir}")
@@ -594,6 +690,7 @@ def graph_feature_histograms(results_root: Path, model: str, output_dir: Path) -
             ax.set_ylabel("Density")
         fig.tight_layout()
         out_path = output_dir / f"{sanitize_filename(feature)}.png"
+        humanize_figure_text(fig)
         fig.savefig(out_path, dpi=180, bbox_inches="tight")
         plt.close(fig)
 
@@ -1204,7 +1301,85 @@ def graph_general_explainable_histogram(results_root: Path, model: str, output_p
     fig.tight_layout()
     save_figure(fig, output_path)
 
-def graph_explainable_scatter(results_root: Path, model: str, output_path: Path) -> None:
+def load_turntaking_surprisal_values(results_root: Path, model: str) -> pd.DataFrame:
+    rows = []
+    for subset in SUBSETS:
+        for label_model, label in [(ORIGINAL, "original"), (model, "model")]:
+            frame = safe_read_csv(turntaking_surprisal_file(results_root, label_model, subset))
+            if frame is None:
+                continue
+            for metric in TURNTAKING_SURPRISAL_METRICS:
+                if metric not in frame.columns:
+                    continue
+                values = numeric(frame[metric]).dropna()
+                if values.empty:
+                    continue
+                rows.append(pd.DataFrame({"subset": subset, "dataset": label, "metric": metric, "value": values}))
+    if not rows:
+        return pd.DataFrame()
+    data = pd.concat(rows, ignore_index=True)
+    naturalness_mask = data["metric"] == "naturalness_score"
+    data.loc[naturalness_mask, "value"] = -1.0 * data.loc[naturalness_mask, "value"]
+    return data
+
+
+def graph_turntaking_surprisal(results_root: Path, model: str, output_path: Path) -> None:
+    data = load_turntaking_surprisal_values(results_root, model)
+    if data.empty:
+        print(f"[WARN] No turn-taking surprisal values found; skipping {output_path.name}.")
+        return
+    metrics = [metric for metric in TURNTAKING_SURPRISAL_METRICS if metric in set(data["metric"])]
+    subsets = [subset for subset in SUBSETS if subset in set(data["subset"])]
+    fig_height = max(2.8 + 0.55 * len(metrics), 4.2)
+    fig, axes = plt.subplots(1, len(subsets), figsize=(8.5 * len(subsets), fig_height), sharex=False, squeeze=False)
+    legend_handles = None
+    legend_labels = None
+    for col_idx, subset in enumerate(subsets):
+        ax = axes[0, col_idx]
+        sub = data[data["subset"] == subset]
+        if sub.empty:
+            ax.axis("off")
+            continue
+        sns.violinplot(
+            data=sub,
+            x="value",
+            y="metric",
+            hue="dataset",
+            order=metrics,
+            hue_order=["original", "model"],
+            palette=DATASET_PALETTE,
+            orient="h",
+            inner="quartile",
+            cut=0,
+            linewidth=0.8,
+            density_norm="width",
+            ax=ax,
+        )
+        if legend_handles is None:
+            legend_handles = [Patch(facecolor=DATASET_PALETTE[label], label=label) for label in ["original", "model"]]
+            legend_labels = ["original", "model"]
+        remove_axis_legend(ax)
+        ax.set_title(subset.title())
+        ax.set_xlabel("Metric value")
+        ax.set_ylabel("Metric" if col_idx == 0 else "")
+        if col_idx != 0:
+            ax.set_yticks([])
+            ax.tick_params(axis="y", left=False, labelleft=False)
+    if legend_handles:
+        fig.legend(legend_handles, legend_labels, title="Dataset", loc="upper center", ncol=2, bbox_to_anchor=(0.5, 1.03))
+    fig.suptitle("Turn-Taking Surprisal Metrics: Original vs Model", y=1.08)
+    fig.tight_layout(rect=(0, 0, 1, 0.98))
+    save_figure(fig, output_path)
+
+
+def graph_explainable_scatter(
+    results_root: Path,
+    model: str,
+    output_path: Path,
+    *,
+    feature_group: Optional[str] = None,
+    title: str = "Explainable Feature Distributions: Original vs Model",
+) -> None:
     report_dir = output_path.parents[1]
     metrics_by_subset: Dict[str, pd.DataFrame] = {}
     for subset in SUBSETS:
@@ -1220,6 +1395,8 @@ def graph_explainable_scatter(results_root: Path, model: str, output_path: Path)
             continue
 
         features = available_all_explainable_features(results_root, model, subset)
+        if feature_group is not None:
+            features = [feature for feature in features if explainable_feature_group(feature) == feature_group]
 
         pvalues = {}
         if subset in metrics_by_subset:
@@ -1261,13 +1438,13 @@ def graph_explainable_scatter(results_root: Path, model: str, output_path: Path)
                 )
 
     if not rows:
-        print("[WARN] No explainable feature values found; skipping explainables.png.")
+        print(f"[WARN] No explainable feature values found; skipping {output_path.name}.")
         return
 
     data = pd.concat(rows, ignore_index=True)
     available_subsets = [subset for subset in SUBSETS if subset in set(data["subset"])]
     if not available_subsets:
-        print("[WARN] No subset data found; skipping explainables.png.")
+        print(f"[WARN] No subset data found; skipping {output_path.name}.")
         return
 
     max_features = max(data[data["subset"] == subset]["feature_label"].nunique() for subset in available_subsets)
@@ -1328,10 +1505,21 @@ def graph_explainable_scatter(results_root: Path, model: str, output_path: Path)
 
     if legend_handles:
         fig.legend(legend_handles, legend_labels, title="Dataset", loc="upper center", ncol=2, bbox_to_anchor=(0.5, 1.01))
-    fig.suptitle("Explainable Feature Distributions: Original vs Model", y=1.035)
+    fig.suptitle(title, y=1.035)
     fig.text(0.5, 0.005, "Significance: * p<0.05, ** p<0.01, *** p<0.001; orange background p<0.05, red background p<0.001", ha="center", fontsize=11)
     fig.tight_layout(rect=(0, 0.02, 1, 0.98))
     save_figure(fig, output_path)
+
+
+def graph_explainable_feature_groups(results_root: Path, model: str, graphs_dir: Path) -> None:
+    for group_name, spec in EXPLAINABLE_FEATURE_GROUPS.items():
+        graph_explainable_scatter(
+            results_root,
+            model,
+            graphs_dir / f"explainables_{group_name}.png",
+            feature_group=group_name,
+            title=f"{spec['title']}: Original vs Model",
+        )
 
 
 def main() -> int:
@@ -1346,6 +1534,7 @@ def main() -> int:
     graphs_dir = args.output_dir / "graphs"
     graph_basic_metric_histograms(args.results_root, args.model, graphs_dir / "basic_metric_graphs")
     graph_basic_metrics_histograms(args.results_root, args.model, graphs_dir / "basic_metrics.png")
+    graph_turntaking_surprisal(args.results_root, args.model, graphs_dir / "turntaking_surprisal.png")
     graph_feature_histograms(args.results_root, args.model, graphs_dir / "feat_graphs")
     graph_stances(args.results_root, args.model, graphs_dir / "stances.png")
     graph_emotional_naturalness(args.results_root, args.model, graphs_dir / "emo_naturalness.png")
@@ -1354,7 +1543,7 @@ def main() -> int:
     graph_dialect_confusion(args.results_root, args.model, graphs_dir / "dialect_confusion.png")
     graph_dialect_scores(args.results_root, args.model, graphs_dir / "dialect_scores.png")
     graph_f0_question_answer_boxplot(args.results_root, args.model, graphs_dir / "f0_question_answer_boxplot.png")
-    graph_explainable_scatter(args.results_root, args.model, graphs_dir / "explainables.png")
+    graph_explainable_feature_groups(args.results_root, args.model, graphs_dir)
     return 0
 
 

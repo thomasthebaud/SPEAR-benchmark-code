@@ -6,8 +6,6 @@ source config.sh
 source cmd.sh
 source openai_keys.sh
 
-summary_llm_model="${summary_llm_model:-gpt-5.4-mini-2026-03-17}"
-
 run_short=0
 run_graphs=0
 run_long=0
@@ -42,7 +40,7 @@ Stages:
   --graphs  Stage 2: generate matplotlib/seaborn graphs
   --long    Stage 3: generate reports/llm_model/detailed_report.html
   --summary Stage 4: generate reports/llm_model/summary.txt and refresh detailed_report.html
-  --all     Run all stages
+  --all     Run all stages except summary (to avoid using too many tokens unnecessarily)
 
 If no stage is passed, all stages are run.
 EOF

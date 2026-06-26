@@ -444,6 +444,7 @@ def main() -> int:
     args.output.parent.mkdir(parents=True, exist_ok=True)
     rows: List[Dict[str, Any]] = []
     base_dir = Path.cwd()
+    missed_pitch_analyses = 0
 
     for _, meta_row in tqdm(metadata.iterrows(), total=len(metadata), desc=f"extracting explainable feats from {args.metadata.parent}"):
         audio_column = "audio_path" if args.questions else "answer_audio_path"
@@ -467,8 +468,8 @@ def main() -> int:
         try:
             out.update(compute_f0_features(audio_path))
         except Exception as exc:
-            out["f0_status"] = f"ERROR: {exc}"
-            traceback.print_exc()
+            missed_pitch_analyses += 1
+            out["f0_status"] = f"PITCH_ANALYSIS_MISSED: {exc}"
 
         try:
             out.update(compute_lexical_features(feature_text(meta_row, questions=args.questions), nlp))
@@ -487,6 +488,7 @@ def main() -> int:
 
     pd.DataFrame(rows).to_csv(args.output, index=False)
     print(f"Wrote {len(rows)} rows to {args.output}")
+    print(f"Missed pitch analyses: {missed_pitch_analyses}")
     return 0
 
 
