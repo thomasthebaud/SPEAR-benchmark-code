@@ -190,16 +190,38 @@ def load_reusable_transcripts(output_path: Path, metadata: pd.DataFrame, *, forc
     if "ASR_transcript_answer" not in previous.columns:
         return reusable
 
+    previous_by_audio_path = {}
+    if "answer_audio_path" in previous.columns:
+        for _, row in previous.iterrows():
+            transcript = row.get("ASR_transcript_answer")
+            audio_path = row.get("answer_audio_path")
+            if has_transcript(transcript) and not pd.isna(audio_path):
+                previous_by_audio_path[str(audio_path)] = str(transcript)
+                previous_by_audio_path[Path(str(audio_path)).name] = str(transcript)
+
     for idx in metadata.index:
-        if idx not in previous.index:
-            continue
-        transcript = previous.at[idx, "ASR_transcript_answer"]
-        if not has_transcript(transcript):
-            continue
-        if "answer_audio_path" in previous.columns and not answer_path_matches(metadata.at[idx, "answer_audio_path"], previous.at[idx, "answer_audio_path"]):
-            continue
-        reusable.at[idx] = str(transcript)
+        if idx in previous.index:
+            transcript = previous.at[idx, "ASR_transcript_answer"]
+            if has_transcript(transcript):
+                if "answer_audio_path" not in previous.columns or answer_path_matches(metadata.at[idx, "answer_audio_path"], previous.at[idx, "answer_audio_path"]):
+                    reusable.at[idx] = str(transcript)
+                    continue
+
+        audio_path = metadata.at[idx, "answer_audio_path"]
+        if not pd.isna(audio_path):
+            reusable_transcript = previous_by_audio_path.get(str(audio_path))
+            if reusable_transcript is None:
+                reusable_transcript = previous_by_audio_path.get(Path(str(audio_path)).name)
+            if reusable_transcript is not None:
+                reusable.at[idx] = reusable_transcript
     return reusable
+
+
+def validate_shard_args(shard_index: int, num_shards: int) -> None:
+    if num_shards < 1:
+        raise ValueError(f"--num-shards must be >= 1, got {num_shards}")
+    if shard_index < 0 or shard_index >= num_shards:
+        raise ValueError(f"--shard-index must be in [0, {num_shards - 1}], got {shard_index}")
 
 
 if __name__ == "__main__":
@@ -210,23 +232,36 @@ if __name__ == "__main__":
     parser.add_argument("--split",default='test', help="Data split to run inference on (e.g., 'test', 'dev')")
     parser.add_argument("--subset",default='improvised', help="Data subset to run inference on (e.g., 'improvised', 'naturalistic')")
     parser.add_argument("--force-recompute", action='store_true')
+    parser.add_argument("--shard-index", type=int, default=0, help="Zero-based shard index to process.")
+    parser.add_argument("--num-shards", type=int, default=1, help="Total number of metadata shards.")
+    parser.add_argument("--output-csv-name", default=None, help="Output transcript CSV filename inside output_dir.")
 
     args = parser.parse_args()
+    validate_shard_args(args.shard_index, args.num_shards)
     print(f"Starting transcription for {args.split} {args.subset}")
     input_dir = Path(args.data_dir) / args.split / args.subset
     metadata_path = input_dir / f"metadata.csv"
 
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-    output_path = output_dir / f"{asr_output_name(args.model)}_transcripts.csv"
+    default_output_name = f"{asr_output_name(args.model)}_transcripts.csv"
+    output_path = output_dir / (args.output_csv_name or default_output_name)
+    reusable_output_path = output_dir / default_output_name
 
     if output_path.exists() and args.force_recompute:
         print(f"{output_path} already computed, recomputing")
 
     metadata = pd.read_csv(metadata_path)
+    shard_indices = [idx for position, idx in enumerate(metadata.index) if position % args.num_shards == args.shard_index]
+    metadata = metadata.loc[shard_indices].copy()
+
+    if args.num_shards > 1:
+        print(f"Processing shard {args.shard_index + 1}/{args.num_shards} with {len(metadata)} row(s)")
+
     # metadata['ASR_transcript_question'] = ''
+    reusable_path = reusable_output_path if reusable_output_path.exists() else output_path
     metadata['ASR_transcript_answer'] = load_reusable_transcripts(
-        output_path,
+        reusable_path,
         metadata,
         force_recompute=args.force_recompute,
     )
