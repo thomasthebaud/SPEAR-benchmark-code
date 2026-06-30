@@ -8,6 +8,10 @@ latency,Intelligibility and Interruption Metrics,129.13426645930534,929.63604852
 average number of interruptions per dialogues,Intelligibility and Interruption Metrics,0.0,0.5025996533795494,-0.5025996533795494,,,1929,,,interruption_segments
 interrupted time (s),Intelligibility and Interruption Metrics,0.0,0.5204240323512354,-0.5204240323512354,,,1929,,,interrupted
 number of dialogues with interruption,Intelligibility and Interruption Metrics,0/1929,545/1731,-545.0,,,1929,,,interruptions count
+mean_nll,Turn Taking Surprisal,4.358047191194514,4.5246644630427175,-0.16661727184820396,1.2240811644105485,3.727930724741665e-13,1714,,,turntaking.group4-dualturn-full-all6-fvad256.csv; model-original; p-value is Mann-Whitney U Test
+tail_nll,Turn Taking Surprisal,5.289902205797099,5.598169752594041,-0.3082675467969418,1.4385222729978415,1.6362984930487533e-25,1714,,,turntaking.group4-dualturn-full-all6-fvad256.csv; model-original; p-value is Mann-Whitney U Test
+dialog_nll,Turn Taking Surprisal,4.823974698495808,5.0614171078183805,-0.23744240932257288,1.2623547869108092,6.1198773257732095e-21,1714,,,turntaking.group4-dualturn-full-all6-fvad256.csv; model-original; p-value is Mann-Whitney U Test
+naturalness_score,Turn Taking Surprisal,4.823974698495808,5.0614171078183805,-0.23744240932257288,1.2623547869108092,6.1198773257732095e-21,1714,,,turntaking.group4-dualturn-full-all6-fvad256.csv; model-original; p-value is Mann-Whitney U Test
 English language detected in original answers (%),Language and Dialect ID,,,99.01332017760237,,,2027,,,percentage of language_id.csv rows with language=eng; numerator=2007; denominator=2027
 Second most spoken language in original answers,Language and Dialect ID,,,0.3453379378391712,,,2027,,,language=dan; numerator=7; denominator=2027
 English language detected in model answers (%),Language and Dialect ID,,,100.0,,,2055,,,percentage of language_id.csv rows with language=eng; numerator=2055; denominator=2055
@@ -44,6 +48,8 @@ Answer dialect: South African (%),Language and Dialect ID,,,0.0,,,2055,,,percent
 Answer dialect: Southeast Asia (%),Language and Dialect ID,,,0.145985401459854,,,2055,,,percentage of dialect_id.csv rows where answer_dialect=Southeast Asia; numerator=3; denominator=2055
 Answer dialect: South Asia (%),Language and Dialect ID,,,0.0,,,2055,,,percentage of dialect_id.csv rows where answer_dialect=South Asia; numerator=0; denominator=2055
 Answer dialect: Welsh (%),Language and Dialect ID,,,0.0,,,2055,,,percentage of dialect_id.csv rows where answer_dialect=Welsh; numerator=0; denominator=2055
+Dialectal entrainment,Language and Dialect ID,,,0.4634925131531328,,,1688,,,computed from dialect_logits.csv question_log_logits and answer_log_logits
+Dialectal variance,Language and Dialect ID,,,106.41590593693716,,,1688,,,computed from dialect_logits.csv question_log_logits and answer_log_logits
 Emotional naturalness,Emotional Naturalness,,,1.8555272541120482,1.5056445909457716,1.1865891126088355e-56,1158,,,normalized naturalness_logit model-original
 Emotional naturalness by relationship: collaborative_storytelling,Emotional Naturalness,,,2.4576675081253025,,,4,,,relationship_type=collaborative_storytelling; original_mean=9.8109; model_mean=12.2686; original_n=4.0000; model_n=5.0000
 Emotional naturalness by relationship: coworkers,Emotional Naturalness,,,2.433812112896529,,,20,,,relationship_type=coworkers; original_mean=10.5287; model_mean=12.9625; original_n=20.0000; model_n=27.0000
@@ -54,10 +60,34 @@ Emotional naturalness by relationship: friends,Emotional Naturalness,,,1.7890995
 Emotional naturalness by relationship: grounded_gesture,Emotional Naturalness,,,1.4837925417956512,,,16,,,relationship_type=grounded_gesture; original_mean=11.1458; model_mean=12.6296; original_n=16.0000; model_n=19.0000
 Emotional naturalness by relationship: ipc_conversation,Emotional Naturalness,,,1.7456112542997584,,,39,,,relationship_type=ipc_conversation; original_mean=12.3795; model_mean=14.1251; original_n=39.0000; model_n=46.0000
 Emotional naturalness by relationship: stranger,Emotional Naturalness,,,1.702272920887042,,,295,,,relationship_type=stranger; original_mean=12.2346; model_mean=13.9369; original_n=295.0000; model_n=333.0000
-f0_p10,Explainable Features,,,,,,0,0.443662066883336,0.4961070559610706,feature value model-original; p-value is Mann-Whitney U Test
-f0_p25,Explainable Features,,,,,,0,0.4783331853351567,0.6,feature value model-original; p-value is Mann-Whitney U Test
-f0_p75,Explainable Features,,,,,,0,0.6035370380236915,0.7399026763990267,feature value model-original; p-value is Mann-Whitney U Test
-f0_p90,Explainable Features,,,,,,0,0.664157564778802,0.7566909975669099,feature value model-original; p-value is Mann-Whitney U Test
-total_duration_s,Explainable Features,,,,,,0,,,feature value model-original; p-value is Mann-Whitney U Test
-voiced_duration_s,Explainable Features,,,,,,0,,,feature value model-original; p-value is Mann-Whitney U Test
-voiced_ratio,Explainable Features,,,,,,0,,,feature value model-original; p-value is Mann-Whitney U Test
+f0_p10,Explainable Features,,,0.02428612471421543,0.15965443647298105,3.601361048107302e-10,1731,0.5230623590375727,0.7076502732240437,feature value model-original; p-value is Mann-Whitney U Test
+f0_p25,Explainable Features,,,0.03822478690682263,0.15358838215476736,3.651717285177362e-58,1731,0.5422405864576043,0.75,feature value model-original; p-value is Mann-Whitney U Test
+f0_p75,Explainable Features,,,0.0002430616423914067,0.2514977367928075,1.196001482065747e-22,1731,0.6051994864482904,0.7612021857923498,feature value model-original; p-value is Mann-Whitney U Test
+f0_p90,Explainable Features,,,-0.04529300640036582,0.39202976314625326,5.849367479261359e-07,1731,0.6283230895520019,0.7461748633879781,feature value model-original; p-value is Mann-Whitney U Test
+lexical_backchannel_ratio,Explainable Features,,,-0.0430487262804903,0.1870407899589763,1.3145571221042633e-27,1731,0.5313192271328283,0.5565573770491803,feature value model-original; p-value is Mann-Whitney U Test
+lexical_content_word_count,Explainable Features,,,5.9663792538046945,12.657507035336707,1.0500752205213795e-219,1731,0.8021568093668383,0.7866120218579234,feature value model-original; p-value is Mann-Whitney U Test
+lexical_density,Explainable Features,,,0.04864218262518277,0.19394704395757648,3.795655781182765e-37,1731,0.6216513796086908,0.6224043715846994,feature value model-original; p-value is Mann-Whitney U Test
+lexical_discourse_marker_ratio,Explainable Features,,,-0.04498123263536872,0.26461744476547294,3.9120847212904715e-05,1731,0.5231811036450252,0.5360655737704918,feature value model-original; p-value is Mann-Whitney U Test
+lexical_entropy,Explainable Features,,,1.457959624777894,1.4886410795164113,2.5657596882469684e-260,1731,0.8294307835736526,0.8114754098360656,feature value model-original; p-value is Mann-Whitney U Test
+lexical_function_word_count,Explainable Features,,,4.802452398087031,18.09192415763405,4.465923161433383e-161,1731,0.7583422953317647,0.5270491803278688,feature value model-original; p-value is Mann-Whitney U Test
+lexical_hapax_ratio,Explainable Features,,,0.044354545279464364,0.2533333256815177,0.9983166864430884,1731,0.4999799347069374,0.6019125683060109,feature value model-original; p-value is Mann-Whitney U Test
+lexical_mattr_large,Explainable Features,,,0.18177731896959148,0.10413657239133334,2.2599483153343585e-48,159,0.9629290206648696,0.8922155688622755,feature value model-original; p-value is Mann-Whitney U Test
+lexical_mattr_ratio,Explainable Features,,,-0.1063974151265723,0.12995056657967025,2.328599649821752e-22,159,0.8079964061096137,0.7544910179640718,feature value model-original; p-value is Mann-Whitney U Test
+lexical_mattr_small,Explainable Features,,,0.12325079409016326,0.08088431681163964,6.1694846503126365e-43,159,0.9351302785265048,0.8383233532934131,feature value model-original; p-value is Mann-Whitney U Test
+lexical_mtld,Explainable Features,,,59.09312802122677,50.27596926260493,3.97195849705402e-44,159,0.9413477088948786,0.8203592814371258,feature value model-original; p-value is Mann-Whitney U Test
+lexical_total_words,Explainable Features,,,10.768831651891723,30.11072405578042,5.432243870278793e-194,1731,0.78394216523679,0.6967213114754098,feature value model-original; p-value is Mann-Whitney U Test
+lexical_ttr,Explainable Features,,,0.030881040227868306,0.1519473345346704,0.5569492858907757,1731,0.494455091029047,0.6027322404371585,feature value model-original; p-value is Mann-Whitney U Test
+lexical_unique_words,Explainable Features,,,12.599688418941756,18.952992778185205,4.825429415321421e-240,1731,0.8161614854785677,0.7650273224043715,feature value model-original; p-value is Mann-Whitney U Test
+temporal_articulation_rate_wpm,Explainable Features,,,21.39860630484901,74.6661292415187,9.48991393158656e-32,1549,0.6154938335440079,0.6774008050603795,feature value model-original; p-value is Mann-Whitney U Test
+temporal_articulation_rate_wps,Explainable Features,,,0.35664343841415036,1.2444354873586452,9.47848197309478e-32,1549,0.6154940008788425,0.6774008050603795,feature value model-original; p-value is Mann-Whitney U Test
+temporal_pause_count,Explainable Features,,,0.5702546936584447,4.57435227801452,2.719462752008322e-97,1549,0.2963474821629433,0.581081081081081,feature value model-original; p-value is Mann-Whitney U Test
+temporal_pause_mean_duration_s,Explainable Features,,,0.12903654448613905,0.37769496010078574,1.3220715207984319e-42,1549,0.6344950386894872,0.7265669925244393,feature value model-original; p-value is Mann-Whitney U Test
+temporal_pause_ratio,Explainable Features,,,0.01986013930218608,0.14830380693664494,1.0794035615531675e-12,1549,0.5699948226602155,0.5546290971822887,feature value model-original; p-value is Mann-Whitney U Test
+temporal_pause_total_duration_s,Explainable Features,,,0.0438936908408607,2.754125298578291,4.2882674467341127e-75,1549,0.3197345333248996,0.5954571592869465,feature value model-original; p-value is Mann-Whitney U Test
+temporal_speech_active_time_s,Explainable Features,,,2.0858623637517946,7.308791080953473,2.0829979222570797e-130,1549,0.7393373406679538,0.5546290971822887,feature value model-original; p-value is Mann-Whitney U Test
+temporal_speech_rate_wpm,Explainable Features,,,13.797186141886897,71.84764947229485,1.4102592357617107e-31,1549,0.6151507971329518,0.7064404830362278,feature value model-original; p-value is Mann-Whitney U Test
+temporal_speech_rate_wps,Explainable Features,,,0.22995310236478161,1.1974608245382474,1.4232699478146558e-31,1549,0.6151600005488582,0.7064404830362278,feature value model-original; p-value is Mann-Whitney U Test
+temporal_total_duration_s,Explainable Features,,,2.1297560545926544,9.7797946252513,1.874012443949879e-118,1549,0.2721322909042473,0.5603795284646349,feature value model-original; p-value is Mann-Whitney U Test
+total_duration_s,Explainable Features,,,0.5431023922920524,11.36657902133323,1.8779722930577438e-70,1731,,,feature value model-original; p-value is Mann-Whitney U Test
+voiced_duration_s,Explainable Features,,,1.1461828175454745,5.730521339825906,7.57525458276331e-135,1731,,,feature value model-original; p-value is Mann-Whitney U Test
+voiced_ratio,Explainable Features,,,0.06330799230050604,0.21100314328341405,1.7906052015690404e-27,1731,,,feature value model-original; p-value is Mann-Whitney U Test

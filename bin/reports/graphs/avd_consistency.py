@@ -50,12 +50,13 @@ def main() -> int:
                 scatter=False,
                 ci=None,
                 color=palette[system],
-                line_kws={"linewidth": 1.8, "linestyle": line_style},
+                line_kws={"linewidth": 2, "linestyle": line_style},
                 ax=ax,
+                truncate=False
             )
         ax.plot([-1, 1], [-1, 1], color="#555555", linestyle="--", linewidth=1.0, alpha=0.5)
-        ax.set_xlim(-1.02, 1.02)
-        ax.set_ylim(-1.02, 1.02)
+        ax.set_xlim(-1.01, 1.01)
+        ax.set_ylim(-1.01, 1.01)
         ax.set_xticks([-1, 0, 1])
         ax.set_xticklabels(["-1", "0", "+1"])
         ax.set_yticks([-1, 0, 1])
@@ -65,7 +66,7 @@ def main() -> int:
         for label in ax.get_yticklabels():
             label.set_visible(idx == 0)
         ax.set_aspect("equal", adjustable="box")
-        ax.set_title(emotion_titles[emotion])
+        ax.set_title(emotion_titles[emotion], fontsize=30)
         ax.set_xlabel("Question")
         ax.set_ylabel("Answer" if idx == 0 else "")
 
@@ -84,7 +85,6 @@ def main() -> int:
     ]
     fig.legend(
         handles=handles,
-        title="System",
         loc="lower center",
         bbox_to_anchor=(0.5, -0.14),
         ncol=max(1, (len(systems) + 1) // 2),

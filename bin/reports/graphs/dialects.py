@@ -104,6 +104,61 @@ def save_nochange_figure(scores, systems: list[str], palette: dict[str, str], ou
     save_figure(fig, output_path)
 
 
+def save_pointplot_figure(scores, systems: list[str], palette: dict[str, str], output_path: Path) -> None:
+    if scores.empty:
+        return
+
+    plot_data = scores.copy()
+    plot_data["score"] = numeric(plot_data["score"]).clip(lower=1e-6)
+    plot_data = plot_data[plot_data["system"].isin(systems) & plot_data["dialect"].isin(DIALECT_PROFILE_PLOT_LABELS)]
+    plot_data = plot_data.dropna(subset=["score"])
+    if plot_data.empty:
+        return
+
+    fig, ax = plt.subplots(figsize=(24, 10))
+    sns.pointplot(
+        data=plot_data,
+        x="dialect",
+        y="score",
+        hue="system",
+        order=DIALECT_PROFILE_PLOT_LABELS,
+        hue_order=systems,
+        palette=palette,
+        dodge=0.35,
+        errorbar=("ci", 95),
+        capsize=0.08,
+        err_kws={"linewidth": 1.2},
+        markers="o",
+        linestyles=["--" if system == ORIGINAL else "-" for system in systems],
+        ax=ax,
+    )
+    ax.set_xlabel("")
+    ax.set_ylabel("Dialect probability", fontsize=30)
+    ax.set_yscale("log")
+    ax.set_ylim(1e-6, 1.0)
+    ax.set_yticks([1e-6, 1e-5, 1e-4, 1e-3, 1e-2, 1e-1, 1.0])
+    ax.set_yticklabels(["1e-6", "", "1e-4", "", "1e-2", "", "1"])
+    ax.tick_params(axis="x", rotation=25, labelsize=18)
+    ax.tick_params(axis="y", labelsize=18)
+    ax.grid(True, axis="y", alpha=0.35)
+    handles, labels = ax.get_legend_handles_labels()
+    if handles:
+        ax.legend(
+            handles=handles,
+            labels=labels,
+            loc="upper center",
+            bbox_to_anchor=(0.5, 1.18),
+            ncol=len(handles)//2,
+            frameon=True,
+            fontsize=16,
+            borderpad=0.25,
+            columnspacing=1.0,
+            handlelength=1.6,
+        )
+    fig.tight_layout(rect=(0, 0, 1, 0.9))
+    save_figure(fig, output_path)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Article graph: dialects.")
     add_common_graph_args(parser)
@@ -144,6 +199,7 @@ def main() -> int:
     fig.tight_layout(rect=(0, 0, 1, 0.88))
     save_figure(fig, args.output_path)
     save_nochange_figure(scores, systems, palette, args.output_path.with_name("stage3_dialects_nochange.png"))
+    save_pointplot_figure(scores, systems, palette, companion_output_path(args.output_path, "point"))
     return 0
 
 

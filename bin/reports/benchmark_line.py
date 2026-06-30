@@ -23,6 +23,13 @@ F0_PROFILE_FEATURES = [
 F0_FEATURE_FALLBACKS = {"f0_p52": "f0_p25"}
 TURNTAKING_EXPERIMENT = "group4-dualturn-full-all6-fvad256"
 TURNTAKING_FILE = f"turntaking.{TURNTAKING_EXPERIMENT}.csv"
+MODELS_WITHOUT_INTERRUPTION_METRICS = {"gpt-audio-1.5", "mini-omni", "qwen2.5-omni-7b"}
+STANCE_LABEL_OVERRIDES = {
+    "aggression": "Calmness",
+    "inhibition": "Disinhibition",
+    "callousness": "Empathy",
+    "disorganization": "Organization",
+}
 
 
 def display_model_name(model: str) -> str:
@@ -447,6 +454,21 @@ def known_stance_reference(frame: pd.DataFrame) -> pd.Series:
     return frame.apply(row_reference, axis=1).astype("float64")
 
 
+def stance_row_label(row: pd.Series) -> str:
+    for column in ["target_category", "stance_related_categories", "stance_question"]:
+        value = str(row.get(column, "")).strip()
+        if not value or value.lower() in {"nan", "none"}:
+            continue
+        return value.replace("|", " ").replace("/", " ").split()[0].lower()
+    return ""
+
+
+def orient_stance_scores(frame: pd.DataFrame, scores: pd.Series) -> pd.Series:
+    inverted = frame.apply(lambda row: stance_row_label(row) in STANCE_LABEL_OVERRIDES, axis=1)
+    multipliers = pd.Series(np.where(inverted, -1.0, 1.0), index=frame.index)
+    return scores * multipliers
+
+
 def stance_metrics(results_root: Path, model: str, subsets: list[str]) -> tuple[float, float, float]:
     same_numerator = 0
     same_denominator = 0
@@ -458,8 +480,8 @@ def stance_metrics(results_root: Path, model: str, subsets: list[str]) -> tuple[
         frame = safe_read_csv(stances_path(results_root, model, subset), warn_missing=(subset != "naturalistic"))
         if frame is None or "score_llm" not in frame.columns:
             continue
-        reference = known_stance_reference(frame)
-        model_scores = numeric(frame["score_llm"])
+        reference = orient_stance_scores(frame, known_stance_reference(frame))
+        model_scores = orient_stance_scores(frame, numeric(frame["score_llm"]))
         valid = reference.notna() & model_scores.notna()
         reference = reference.loc[valid]
         model_scores = model_scores.loc[valid]
@@ -502,6 +524,7 @@ def resolve_output_path(args: argparse.Namespace) -> Path:
 
 def compute_benchmark_line(args: argparse.Namespace) -> dict[str, object]:
     frames = base_metric_frames(args.results_root, args.model, args.subsets)
+    suppress_interruption_metrics = args.model.lower() in MODELS_WITHOUT_INTERRUPTION_METRICS
     same_dialect_pct, north_america_dialect_pct = dialect_percentages(args.results_root, args.model, args.subsets)
     dialect_entrainment, dialect_variance = dialect_logit_metrics(args.results_root, args.model, args.subsets)
     stance_same_pct, stance_more_negative_pct, stance_more_positive_pct = stance_metrics(args.results_root, args.model, args.subsets)
@@ -513,11 +536,22 @@ def compute_benchmark_line(args: argparse.Namespace) -> dict[str, object]:
     add_mean_std(row, "UTMOS", concat_columns(frames, ["UTMOS"]), use_std=args.use_std)
     add_mean_std(row, "WER_%", concat_columns(frames, metric_columns(frames, "WER"), scale=100.0), use_std=args.use_std)
     add_mean_std(row, "CER_%", concat_columns(frames, metric_columns(frames, "CER"), scale=100.0), use_std=args.use_std)
-    add_mean_std(row, "latency_ms", concat_columns(frames, ["latency"]), use_std=args.use_std)
-    add_mean_std(row, "interrupted_time_ms", concat_columns(frames, ["interrupted"]), use_std=args.use_std)
+    latency_values = concat_columns(frames, ["latency"])
+    latency_values = latency_values[latency_values >= 0.0]
+    add_mean_std(row, "latency_ms", latency_values, use_std=args.use_std)
+
+    if suppress_interruption_metrics:
+        row["interrupted_time_ms"] = np.nan
+        if args.use_std:
+            row["interrupted_time_ms_std"] = np.nan
+        interruptions_pct = np.nan
+    else:
+        add_mean_std(row, "interrupted_time_ms", concat_columns(frames, ["interrupted"]), use_std=args.use_std)
+        interruptions_pct = mean_std(interruption_rate_values(frames))[0]
+
     row.update(
         {
-            "interruptions_%": mean_std(interruption_rate_values(frames))[0],
+            "interruptions_%": interruptions_pct,
             "english_answers_%": english_percentage(args.results_root, args.model, args.subsets),
             "same_dialect_as_question_%": same_dialect_pct,
             "north_american_dialect_%": north_america_dialect_pct,

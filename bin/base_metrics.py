@@ -89,19 +89,26 @@ def compute_cer(row):
     return cer(reference, hypothesis)
 
 def compute_latency(row):
-    waveform_segment, sr = load_audio_mono(row['answer_audio_path'])
-    speech_timestamps = get_speech_timestamps(
-    waveform_segment,
-    get_vad_model(),
-    sampling_rate=sr,
-    return_seconds=True,  # Return speech timestamps in seconds (default is samples)
-    )
-    if len(speech_timestamps)>0:return 1000*float(speech_timestamps[0]['start'])
-    else: return 0
+    question_end_time = float(row['question_end_time'])
+    answer_start_time = float(row.get('answer_start_time', 0.0))
+    answer_vad_start_time = max(0.0, -answer_start_time)
+
+    question_segments = vad_segments(row['audio_path'])
+    answer_segments = vad_segments(row['answer_audio_path'], start_time=answer_vad_start_time)
+
+    question_voice_end = question_segments[-1][1] if question_segments else question_end_time
+    answer_voice_start = answer_segments[0][0] if answer_segments else 0.0
+
+    question_end_delay = max(0.0, question_end_time - question_voice_end)
+    answer_start_delay = max(0.0, answer_voice_start)
+    latency_seconds = question_end_delay + max(0.0, answer_start_time) + answer_start_delay
+    return 1000.0 * latency_seconds
 
 
-def vad_segments(audio_path):
+def vad_segments(audio_path, start_time=0.0):
     waveform, sr = load_audio_mono(audio_path)
+    if start_time > 0.0:
+        waveform = waveform[int(round(start_time * sr)):]
     timestamps = get_speech_timestamps(
         waveform,
         get_vad_model(),

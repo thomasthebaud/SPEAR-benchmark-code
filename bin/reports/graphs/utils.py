@@ -84,6 +84,39 @@ def system_palette(systems: list[str]) -> dict[str, str]:
     return {system: palette[idx] for idx, system in enumerate(systems)}
 
 
+def display_model_label(text: str) -> str:
+    text = str(text).strip()
+    lower_text = text.lower()
+    if lower_text == ORIGINAL:
+        return "Human"
+    if lower_text == "human":
+        return "Human"
+
+    model_markers = ("gpt", "qwen", "gemini", "mini-omni", "whisper")
+    if not any(marker in lower_text for marker in model_markers):
+        return text
+
+    text = re.sub(r"-preview\b", "", text, flags=re.IGNORECASE)
+    parts = re.split(r"([-_\s/]+)", text)
+    acronyms = {"gpt", "asr", "a3b", "30b", "7b"}
+    brands = {"qwen": "Qwen", "gemini": "Gemini", "omni": "Omni"}
+    formatted = []
+    for part in parts:
+        if not part or re.fullmatch(r"[-_\s/]+", part):
+            formatted.append(" " if part.strip() else part)
+            continue
+        lower = part.lower()
+        if lower in acronyms:
+            formatted.append(lower.upper())
+        elif lower in brands:
+            formatted.append(brands[lower])
+        elif lower.startswith("qwen"):
+            formatted.append("Qwen" + part[4:])
+        else:
+            formatted.append(part[:1].upper() + part[1:])
+    return re.sub(r"\s+", " ", "".join(formatted)).strip()
+
+
 def safe_read_csv(path: Path) -> Optional[pd.DataFrame]:
     if not path.exists():
         print(f"[WARN] Missing file: {path}")
@@ -114,7 +147,7 @@ def result_file(results_root: Path, model: str, *parts: str) -> Path:
 def humanize_original_label(text: object) -> object:
     if not isinstance(text, str):
         return text
-    return text.replace("ORIGINAL", "HUMAN").replace("Original", "Human").replace("original", "human")
+    return display_model_label(text)
 
 
 def humanize_figure_text(fig) -> None:

@@ -8,6 +8,10 @@ latency,Intelligibility and Interruption Metrics,133.87533875338752,415.39235412
 average number of interruptions per dialogues,Intelligibility and Interruption Metrics,0.0,0.5503018108651911,-0.5503018108651911,,,1107,,,interruption_segments
 interrupted time (s),Intelligibility and Interruption Metrics,0.0,0.5217686116700145,-0.5217686116700145,,,1107,,,interrupted
 number of dialogues with interruption,Intelligibility and Interruption Metrics,0/1107,377/994,-377.0,,,1107,,,interruptions count
+mean_nll,Turn Taking Surprisal,4.241854356793164,4.439063029374451,-0.19720867258128738,1.2384280756889783,8.48196687478558e-10,984,,,turntaking.group4-dualturn-full-all6-fvad256.csv; model-original; p-value is Mann-Whitney U Test
+tail_nll,Turn Taking Surprisal,4.950214720252353,5.285752121400148,-0.3355374011477954,1.5188591486447895,3.3519881608800924e-18,984,,,turntaking.group4-dualturn-full-all6-fvad256.csv; model-original; p-value is Mann-Whitney U Test
+dialog_nll,Turn Taking Surprisal,4.596034538522758,4.8624075753873,-0.2663730368645414,1.3272590003016633,2.0227560345284853e-15,984,,,turntaking.group4-dualturn-full-all6-fvad256.csv; model-original; p-value is Mann-Whitney U Test
+naturalness_score,Turn Taking Surprisal,4.596034538522758,4.8624075753873,-0.2663730368645414,1.3272590003016633,2.0227560345284853e-15,984,,,turntaking.group4-dualturn-full-all6-fvad256.csv; model-original; p-value is Mann-Whitney U Test
 English language detected in original answers (%),Language and Dialect ID,,,99.73544973544973,,,1134,,,percentage of language_id.csv rows with language=eng; numerator=1131; denominator=1134
 Second most spoken language in original answers,Language and Dialect ID,,,0.08818342151675485,,,1134,,,language=Vietnamese; numerator=1; denominator=1134
 English language detected in model answers (%),Language and Dialect ID,,,100.0,,,1150,,,percentage of language_id.csv rows with language=eng; numerator=1150; denominator=1150
@@ -44,27 +48,53 @@ Answer dialect: South African (%),Language and Dialect ID,,,0.0,,,1150,,,percent
 Answer dialect: Southeast Asia (%),Language and Dialect ID,,,0.08695652173913043,,,1150,,,percentage of dialect_id.csv rows where answer_dialect=Southeast Asia; numerator=1; denominator=1150
 Answer dialect: South Asia (%),Language and Dialect ID,,,0.0,,,1150,,,percentage of dialect_id.csv rows where answer_dialect=South Asia; numerator=0; denominator=1150
 Answer dialect: Welsh (%),Language and Dialect ID,,,0.0,,,1150,,,percentage of dialect_id.csv rows where answer_dialect=Welsh; numerator=0; denominator=1150
+Dialectal entrainment,Language and Dialect ID,,,0.46465577106583505,,,976,,,computed from dialect_logits.csv question_log_logits and answer_log_logits
+Dialectal variance,Language and Dialect ID,,,97.497879105587,,,976,,,computed from dialect_logits.csv question_log_logits and answer_log_logits
 Emotional naturalness,Emotional Naturalness,,,-3.631332924346129,1.2420911450108962,1.4072306996154418e-135,698,,,normalized naturalness_logit model-original
 Emotional naturalness by relationship: collaborative_storytelling,Emotional Naturalness,,,-3.718345451354967,,,4,,,relationship_type=collaborative_storytelling; original_mean=4.6170; model_mean=0.8987; original_n=4.0000; model_n=4.0000
 Emotional naturalness by relationship: grounded_gesture,Emotional Naturalness,,,-3.687747602803353,,,7,,,relationship_type=grounded_gesture; original_mean=7.3726; model_mean=3.6849; original_n=7.0000; model_n=8.0000
 Emotional naturalness by relationship: ipc_conversation,Emotional Naturalness,,,-4.185512065887437,,,15,,,relationship_type=ipc_conversation; original_mean=7.6983; model_mean=3.5128; original_n=15.0000; model_n=18.0000
 Emotional naturalness by relationship: stranger,Emotional Naturalness,,,-3.6030661612008137,,,751,,,relationship_type=stranger; original_mean=10.0313; model_mean=6.4282; original_n=751.0000; model_n=837.0000
-Q0 stance description,STANCE Descriptions,81.9672131147541,18.0327868852459,,,,61,,,"Based on the audio, does the TARGET speaker sound warm and affiliative, or cold and detached?"
-Q1 stance description,STANCE Descriptions,48.91304347826087,51.08695652173913,,,,92,,,"Based on the audio, does the TARGET speaker sound compassionate and supportive, or callous and unsympathetic?"
-Q2 stance description,STANCE Descriptions,28.88888888888889,71.11111111111111,,,,45,,,"Based on the audio, does the TARGET speaker sound polite and respectful, or rude and disrespectful?"
-Q3 stance description,STANCE Descriptions,19.10112359550562,80.89887640449439,,,,89,,,"Based on the audio, does the TARGET speaker sound assertive and self-confident, or hesitant and inhibited?"
-Q4 stance description,STANCE Descriptions,61.72839506172839,38.27160493827161,,,,81,,,"Based on the audio, does the TARGET speaker sound straightforward and sincere, or sly and manipulative?"
-Q5 stance description,STANCE Descriptions,100.0,0.0,,,,26,,,"Based on the audio, does the TARGET speaker sound attentive and focused, or confused and distracted?"
-Q6 stance description,STANCE Descriptions,24.528301886792452,75.47169811320755,,,,53,,,"Based on the audio, does the TARGET speaker sound organized and goal-driven, or disorganized and unmotivated?"
-Q7 stance description,STANCE Descriptions,66.10169491525424,33.898305084745765,,,,59,,,"Based on the audio, does the TARGET speaker sound socially engaged and expressive with the other speaker, or withdrawn and disengaged?"
-Q8 stance description,STANCE Descriptions,38.888888888888886,61.111111111111114,,,,54,,,"Based on the audio, does the TARGET speaker accommodate and yield to the other speaker’s preferences, or do they try to control and dominate?"
-Q9 stance description,STANCE Descriptions,0.0,100.0,,,,14,,,"Based on the audio, does the TARGET speaker stay calm and avoid confrontation, or are they hostile and aggressive?"
-STANCE results: original,STANCE Results,0.0,0.0,100.0,,,574,,,
-STANCE results: gpt-audio-1.5,STANCE Results,2.961672473867596,2.4390243902439024,95.1219512195122,,,574,,,
-f0_p10,Explainable Features,,,,,,0,0.5221191402561101,0.60625814863103,feature value model-original; p-value is Mann-Whitney U Test
-f0_p25,Explainable Features,,,,,,0,0.4759898764779209,0.615819209039548,feature value model-original; p-value is Mann-Whitney U Test
-f0_p75,Explainable Features,,,,,,0,0.7171639028444075,0.7631464580617123,feature value model-original; p-value is Mann-Whitney U Test
-f0_p90,Explainable Features,,,,,,0,0.783068031579345,0.7913950456323338,feature value model-original; p-value is Mann-Whitney U Test
-total_duration_s,Explainable Features,,,,,,0,,,feature value model-original; p-value is Mann-Whitney U Test
-voiced_duration_s,Explainable Features,,,,,,0,,,feature value model-original; p-value is Mann-Whitney U Test
-voiced_ratio,Explainable Features,,,,,,0,,,feature value model-original; p-value is Mann-Whitney U Test
+Q0 stance description,STANCE Descriptions,82.1917808219178,17.80821917808219,,,,73,,,"Based on the audio, does the TARGET speaker sound warm and affiliative, or cold and detached?"
+Q1 stance description,STANCE Descriptions,48.24561403508772,51.75438596491228,,,,114,,,"Based on the audio, does the TARGET speaker sound compassionate and supportive, or callous and unsympathetic?"
+Q2 stance description,STANCE Descriptions,32.142857142857146,67.85714285714286,,,,56,,,"Based on the audio, does the TARGET speaker sound polite and respectful, or rude and disrespectful?"
+Q3 stance description,STANCE Descriptions,21.428571428571427,78.57142857142857,,,,112,,,"Based on the audio, does the TARGET speaker sound assertive and self-confident, or hesitant and inhibited?"
+Q4 stance description,STANCE Descriptions,57.84313725490196,42.15686274509804,,,,102,,,"Based on the audio, does the TARGET speaker sound straightforward and sincere, or sly and manipulative?"
+Q5 stance description,STANCE Descriptions,100.0,0.0,,,,30,,,"Based on the audio, does the TARGET speaker sound attentive and focused, or confused and distracted?"
+Q6 stance description,STANCE Descriptions,23.076923076923077,76.92307692307692,,,,65,,,"Based on the audio, does the TARGET speaker sound organized and goal-driven, or disorganized and unmotivated?"
+Q7 stance description,STANCE Descriptions,67.94871794871794,32.05128205128205,,,,78,,,"Based on the audio, does the TARGET speaker sound socially engaged and expressive with the other speaker, or withdrawn and disengaged?"
+Q8 stance description,STANCE Descriptions,45.070422535211264,54.929577464788736,,,,71,,,"Based on the audio, does the TARGET speaker accommodate and yield to the other speaker’s preferences, or do they try to control and dominate?"
+Q9 stance description,STANCE Descriptions,0.0,100.0,,,,18,,,"Based on the audio, does the TARGET speaker stay calm and avoid confrontation, or are they hostile and aggressive?"
+STANCE results: original,STANCE Results,0.0,0.0,100.0,,,719,,,
+STANCE results: gpt-audio-1.5,STANCE Results,1.8080667593880388,1.5299026425591098,97.35744089012518,,,719,,,
+f0_p10,Explainable Features,,,0.045277512242723805,0.17586430220448668,3.8575349366393403e-28,994,0.6334783770372916,0.7710613993336506,feature value model-original; p-value is Mann-Whitney U Test
+f0_p25,Explainable Features,,,0.05414322732919252,0.18943396155648595,1.3198937430528913e-42,994,0.6501629469681686,0.7767729652546407,feature value model-original; p-value is Mann-Whitney U Test
+f0_p75,Explainable Features,,,-0.015574937042750037,0.3315074696223811,3.920790247063353e-05,994,0.7062828643041629,0.7953355544978582,feature value model-original; p-value is Mann-Whitney U Test
+f0_p90,Explainable Features,,,-0.0803103006243322,0.44761667687848244,0.9436393511706551,994,0.7358150710950436,0.7972394098048549,feature value model-original; p-value is Mann-Whitney U Test
+lexical_backchannel_ratio,Explainable Features,,,-0.04611480567807962,0.181980386367869,1.644444282015998e-21,994,0.5403241490496729,0.5649690623512613,feature value model-original; p-value is Mann-Whitney U Test
+lexical_content_word_count,Explainable Features,,,6.754839788505194,12.870633265436622,2.679511026342191e-131,994,0.8073840513723716,0.7491670633031889,feature value model-original; p-value is Mann-Whitney U Test
+lexical_density,Explainable Features,,,0.0683189339068227,0.1842303647969897,4.972867578019428e-44,994,0.6754960658258493,0.6677772489290814,feature value model-original; p-value is Mann-Whitney U Test
+lexical_discourse_marker_ratio,Explainable Features,,,-0.11071882919820138,0.31642052760935474,1.0448686440802298e-19,994,0.571923410380985,0.5797239409804855,feature value model-original; p-value is Mann-Whitney U Test
+lexical_entropy,Explainable Features,,,1.3788293364557722,1.4653710101386757,1.1734048367771912e-151,994,0.830950472482592,0.7810566396953832,feature value model-original; p-value is Mann-Whitney U Test
+lexical_function_word_count,Explainable Features,,,5.002372864104229,17.62710473998129,1.4299398964712322e-89,994,0.7530349213619567,0.737743931461209,feature value model-original; p-value is Mann-Whitney U Test
+lexical_hapax_ratio,Explainable Features,,,0.06915553581173473,0.2693628735519223,0.0034300885567877634,994,0.5366026329612726,0.6163731556401714,feature value model-original; p-value is Mann-Whitney U Test
+lexical_mattr_large,Explainable Features,,,0.17411304662671623,0.09409465541198066,1.0588624921360608e-31,89,0.9686366451384588,0.9212962962962964,feature value model-original; p-value is Mann-Whitney U Test
+lexical_mattr_ratio,Explainable Features,,,-0.10519954853413327,0.14015660941392857,8.208046843989932e-12,89,0.7733345129611607,0.7777777777777778,feature value model-original; p-value is Mann-Whitney U Test
+lexical_mattr_small,Explainable Features,,,0.11649575058517692,0.07448441236986968,9.936263263385319e-29,89,0.9448376537202512,0.8888888888888888,feature value model-original; p-value is Mann-Whitney U Test
+lexical_mtld,Explainable Features,,,50.83946163835851,37.81574834347195,9.483173385995783e-30,89,0.9531540299035652,0.8657407407407407,feature value model-original; p-value is Mann-Whitney U Test
+lexical_total_words,Explainable Features,,,11.757212652609429,29.819069186774424,5.583711117781552e-113,994,0.7849522609914228,0.7510709186101856,feature value model-original; p-value is Mann-Whitney U Test
+lexical_ttr,Explainable Features,,,0.043899404605205805,0.1590449073300965,0.013246120609491908,994,0.5309835526256,0.6082817705854355,feature value model-original; p-value is Mann-Whitney U Test
+lexical_unique_words,Explainable Features,,,13.134273572782678,19.119931582288483,2.79664613407335e-140,994,0.8180523974924524,0.7672536887196573,feature value model-original; p-value is Mann-Whitney U Test
+temporal_articulation_rate_wpm,Explainable Features,,,16.50380230158811,73.06099966718826,3.819478581715286e-15,939,0.6006995852706131,0.6603128054740958,feature value model-original; p-value is Mann-Whitney U Test
+temporal_articulation_rate_wps,Explainable Features,,,0.2750633716931361,1.217683327786471,3.819479085504361e-15,939,0.6006986232446634,0.6603128054740958,feature value model-original; p-value is Mann-Whitney U Test
+temporal_pause_count,Explainable Features,,,0.7875038601291231,4.4355565504171,3.421744028202676e-61,939,0.7090987452295539,0.7346041055718475,feature value model-original; p-value is Mann-Whitney U Test
+temporal_pause_mean_duration_s,Explainable Features,,,0.134941381316054,0.33620186690392867,6.596456867950504e-36,939,0.6600176243153983,0.7223851417399805,feature value model-original; p-value is Mann-Whitney U Test
+temporal_pause_ratio,Explainable Features,,,0.023852854125229028,0.13928115066458505,3.7185511378446176e-10,939,0.5801430147776806,0.7013685239491692,feature value model-original; p-value is Mann-Whitney U Test
+temporal_pause_total_duration_s,Explainable Features,,,0.28639611707086177,2.520077332879216,7.851213723786076e-55,939,0.6994871439662214,0.5410557184750733,feature value model-original; p-value is Mann-Whitney U Test
+temporal_speech_active_time_s,Explainable Features,,,2.5738219405410234,7.32608704864099,1.985007030250795e-86,939,0.7524120395623553,0.7316715542521994,feature value model-original; p-value is Mann-Whitney U Test
+temporal_speech_rate_wpm,Explainable Features,,,8.71273591768147,69.78901467087054,1.743928483693498e-12,939,0.5903491480779203,0.6759530791788856,feature value model-original; p-value is Mann-Whitney U Test
+temporal_speech_rate_wps,Explainable Features,,,0.14521226529469144,1.163150244514509,1.7658045012893573e-12,939,0.5903496290908952,0.6759530791788856,feature value model-original; p-value is Mann-Whitney U Test
+temporal_total_duration_s,Explainable Features,,,2.8602180576118874,9.591229282150712,2.8345892259429452e-80,939,0.7430250713582748,0.7429130009775171,feature value model-original; p-value is Mann-Whitney U Test
+total_duration_s,Explainable Features,,,1.8135261042315314,10.62068813461465,1.4506708792029576e-54,994,,,feature value model-original; p-value is Mann-Whitney U Test
+voiced_duration_s,Explainable Features,,,1.4408029500849135,5.2250152271793135,1.6551183788307067e-74,994,,,feature value model-original; p-value is Mann-Whitney U Test
+voiced_ratio,Explainable Features,,,0.02048800489269431,0.21217035222851802,0.1850367643208961,994,,,feature value model-original; p-value is Mann-Whitney U Test
