@@ -124,7 +124,7 @@ Important fields:
 - `seamless_assets_dir`: path to the benchmark assets directory, usually `data/seamless_assets`.
 - `protocol`: name of the benchmark protocol to create and evaluate. The current default is `seamless_2t_2s_questions`.
 - `data_dir`: derived output data directory for the selected protocol.
-- `llm_model`: speech-to-speech LLM used by single-model stages and ad hoc runs. Current proxy files include `gpt-audio-1.5`, `gpt-realtime-2`, `Qwen3-Omni-30B-A3B-Instruct`, `Qwen2.5-Omni-7B`, `mini-omni`, and the older `gpt-4o-audio-preview-2025-06-03`.
+- `llm_model`: speech-to-speech LLM used by single-model stages and ad hoc runs. Current proxy files include `gpt-audio-1.5`, `gpt-realtime-2`, `Qwen3-Omni-30B-A3B-Instruct`, `Qwen2.5-Omni-7B`, `mini-omni`, `gemini-2.5-flash-native-audio-preview`, and `gemini-3.1-flash-live-preview`.
 - `eval_models`: model list used by multi-model stages, including LLM inference, transcription, base metrics, language/dialect analysis, naturalness scoring, STANCE metric aggregation, explainable features, missing-file checks, report generation, benchmark-table merging, and article graph generation. Set it to the full model list for a complete benchmark, or to `($llm_model)` for one-model runs. Some scripts compare against `original` internally, while others only process the models listed here.
 - `language_id_model`: Hugging Face audio language ID model, currently `facebook/mms-lid-126`.
 - `dialect_id_model`: VoxLect dialect model used by the language/dialect stage.
@@ -137,6 +137,7 @@ OpenAI-based scripts read credentials from `openai_keys.sh`. Create or edit that
 ```bash
 openai_api_key="YOUR_API_KEY"
 org="YOUR_ORG_ID"
+gemini_api_key="GEMINI_KEY"
 ```
 
 ## Command Helpers
@@ -287,7 +288,15 @@ Computes answer-level base metrics for every split/subset/model combination in `
 results/$protocol/$model/$split/$subset/base_metrics.csv
 ```
 
-Current metrics include WER/CER when ASR transcripts are present, response latency from VAD, interruption count, interrupted time in milliseconds, and UTMOS speech quality. These metrics operate on `answer_audio_path` and use `answer_start_time` for interruption-related measures. The current shell script reads `metadata.csv` from each output directory; use `04_verify_file_integrity.sh` first when you want to inspect or promote verified metadata before metric computation.
+Current metrics include WER/CER when ASR transcripts are present, response latency from VAD, interruption count, interrupted time in milliseconds, and UTMOS speech quality. These metrics operate on `answer_audio_path` and use `answer_start_time` for turn-timing measures.
+
+Latency is VAD-aware. For each row, `bin/base_metrics.py` measures the trailing silence between the last voiced segment in `audio_path` and the end of the question clip, measures the leading silence before the first voiced segment in `answer_audio_path`, and defines latency as:
+
+```text
+question trailing silence + answer leading silence + max(answer_start_time, 0)
+```
+
+When `answer_start_time` is negative, the answer VAD is computed only on `answer_audio_path[-answer_start_time:]`, so speech that overlaps the question is not counted as leading silence. Negative `answer_start_time` values still indicate interruptions and are used by the interruption metrics. The current shell script reads `metadata.csv` from each output directory; use `04_verify_file_integrity.sh` first when you want to inspect or promote verified metadata before metric computation.
 
 ### `11_language_dialect.sh`
 
@@ -322,7 +331,7 @@ Dialect prediction uses language predictions to decide whether an utterance shou
 
 ### `12_dialect_loglogits.sh`
 
-Projects VoxLect dialect log-logits for `original` and every model in `eval_models`. It writes tabular outputs under:
+Projects VoxLect dialect log-logits for `original` and every model in `eval_models`. Plot labels use the same display cleanup as the report graphs: Gemini `-preview` suffixes are removed and model names are capitalized consistently. It writes tabular outputs under:
 
 ```text
 results/$protocol/dialect_logits/
@@ -584,7 +593,9 @@ Stage 1, `--lines`, writes one two-line CSV per evaluated model under:
 reports/$protocol/benchmark/$model.csv
 ```
 
-Each row aggregates test-set metrics across `improvised` and `naturalistic`, including latency, UTMOS, WER, ASR-to-ASR WER variation, interruption rate and timing, language and dialect percentages, emotional naturalness, STANCE shifts, and the general explainable-feature PCA value. Numeric values are rounded with `--n-digits`, which currently defaults to `3` in `62_benchmark.sh`. Add `--use-std` to include standard-deviation columns for mean-valued metrics:
+Each row aggregates test-set metrics across `improvised` and `naturalistic`, including latency, UTMOS, WER, ASR-to-ASR WER variation, interruption rate and timing, language and dialect percentages, emotional naturalness, STANCE shifts, and the general explainable-feature PCA value. Negative latency values are excluded before computing average latency. Interruption metrics are intentionally hidden in the benchmark table for non-streaming or half-duplex systems where they are not comparable (`gpt-audio-1.5`, `mini-omni`, and `Qwen2.5-Omni-7B`).
+
+STANCE polarity follows the article-facing positive/negative orientation. In particular, `aggression`, `inhibition`, `callousness`, and `disorganization` are reported as the inverted positive labels `Calmness`, `Disinhibition`, `Empathy`, and `Organization`, and the positive-vs-negative criterion is flipped consistently for those dimensions. Numeric values are rounded with `--n-digits`, which currently defaults to `3` in `62_benchmark.sh`. Add `--use-std` to include standard-deviation columns for mean-valued metrics:
 
 ```bash
 bash 62_benchmark.sh --lines --n-digits 3 --use-std
@@ -620,39 +631,9 @@ bash 63_generate_article_graphs.sh --stage4  # Emotional Naturalness
 bash 63_generate_article_graphs.sh --stage5  # AVD consistency
 bash 63_generate_article_graphs.sh --stage6  # Stances
 bash 63_generate_article_graphs.sh --stage7  # EXplainable features
-bash 63_generate_article_graphs.sh --stage8  # WER by answer audio length
+bash 63_generate_article_graphs.sh --stage8  # Turn-taking naturalness histogram
 bash 63_generate_article_graphs.sh --all
 ```
-
-Output filenames include the stage number:
-
-```text
-graphs/stage1_article_intelligibility_speech_quality.png
-graphs/stage2_article_interruptions_latency.png
-graphs/stage2_article_interruptions_latency.tex
-graphs/stage3_article_dialects.png
-graphs/stage3_dialects_nochange.png
-graphs/stage4_article_emotional_naturalness.png
-graphs/stage4_article_emotional_naturalness_short.png
-graphs/stage4_article_emotional_naturalness_violin.png
-graphs/stage5_article_avd_consistency.png
-graphs/stage6_article_stances.png
-graphs/stage6_article_stances_spider.png
-graphs/stage7_article_explainable_features.png
-graphs/stage7_article_explainable_features_combined.png
-graphs/stage8_article_wer_answer_length.png
-```
-
-The current figures use these encodings:
-
-- Stage 1: boxplots for CER, WER, and UTMOS, with CER/WER merged across ASR systems and columns for improvised vs naturalistic.
-- Stage 2: histograms for latency and interrupted time, restricted to streaming systems `original` and `gpt-realtime-2`, plus an interruption-rate bar plot for the binary interruption flag. It also writes `graphs/stage2_article_interruptions_latency.tex`, a LaTeX table with model, dataset, latency mean/std, mean interrupted time, and interruption rate.
-- Stage 3: log-scale spider plot for dialect score profiles, clamped at `1e-5`, plus merged question-to-answer dialect change-rate bars and a dialect no-change companion figure.
-- Stage 4: emotional naturalness boxplots for Overall, Naturalistic, Improvised, and naturalistic relationship categories, with each panel title showing the original-set sample count. It also writes a short boxplot figure containing only Overall/Naturalistic/Improvised and a violin version of those three panels.
-- Stage 5: AVD question-answer consistency in a 2x2 grid, using the fourth panel for the legend.
-- Stage 6: positive-stance spider plot using stance names, plus polarity agreement heatmaps.
-- Stage 7: normalized f0 profile line plot. The x-axis uses `f0_min_raw`, `f0_p10`, `f0_p25`, `f0_median_raw`, `f0_p75`, `f0_p90`, and `f0_max_raw`; each evaluated model has one curve, with additional curves for original questions and original answers. Shaded bands show plus/minus one standard deviation. A combined companion figure is also written.
-- Stage 8: scatter plots of WER percentage against answer audio length for improvised and naturalistic answers.
 
 Rendered article figures:
 
@@ -660,17 +641,17 @@ Rendered article figures:
 
 ![Stage 2: Interruptions and Latency](graphs/stage2_article_interruptions_latency.png)
 
-![Stage 3: Dialects](graphs/stage3_article_dialects.png)
+![Stage 3: Dialects](graphs/stage3_article_dialects_point.png)
 
-![Stage 4: Emotional Naturalness](graphs/stage4_article_emotional_naturalness.png)
+![Stage 4: Emotional Naturalness](graphs/stage4_article_emotional_naturalness_histogram.png)
 
 ![Stage 5: AVD consistency](graphs/stage5_article_avd_consistency.png)
 
-![Stage 6: Stances](graphs/stage6_article_stances.png)
+![Stage 6: Stances](graphs/stage6_article_stances_spider.png)
 
-![Stage 7: EXplainable features](graphs/stage7_article_explainable_features.png)
+![Stage 7: Explainable features](graphs/stage7_article_explainable_features_point_combined.png)
 
-![Stage 8: WER by answer audio length](graphs/stage8_article_wer_answer_length.png)
+![Stage 8: Turn-taking naturalness histogram](graphs/stage8_article_turntaking_naturalness_histogram.png)
 
 
 ## Outputs
@@ -728,30 +709,27 @@ Article figures from script `63` are written under:
 
 ```text
 graphs/stage*_article_*.png
+graphs/stage*_article_*_point.png
 ```
+
+Model labels in report graphs are normalized for readability: Gemini `-preview` suffixes are removed where appropriate, and model names shown in legends are capitalized consistently.
 
 ## Current Benchmark Summary
 
-The table below mirrors the article-ready LaTeX table in `reports/seamless_2t_2s_questions/benchmark.tex`. Values are aggregated over the `seamless_2t_2s_questions` protocol.
+The article-ready LaTeX table is generated at `reports/seamless_2t_2s_questions/benchmark.tex`, with values aggregated over the `seamless_2t_2s_questions` protocol. The summary table is generated from `reports/$protocol/benchmark.csv`. The website leaderboard adds two display columns before the metric columns: `inference_mode` and `open_weights`. Current model metadata used by the website is:
 
-| Model | UTMOS | WER % | CER % | Latency ms | Interr. time ms | Interr. % | English answers % | Dialectal entrain. beta | Dialectal variance tr(Sigma) | Emotional naturalness logit | Arousal corr. rho | Valence corr. rho | Dominance corr. rho | Same stance % | More negative % | More positive % | Answer duration s | Voiced ratio | Pitch variation std |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| original | 2.222 | 27.1 | 17.2 | 742 | 521 | 33.8 | 99.3 | 0.53 | 250.6 | 11.10 | 0.53 | 0.36 | 0.51 | 97.1 | 1.5 | 1.7 | 21.9 | 0.494 | 0.275 |
-| gpt-audio-1.5 | 4.362 | 5.8 | 1.4 | 131 | 0 | 0.0 | 100.0 | 0.46 | 104.2 | 10.91 | 0.11 | 0.29 | 0.09 | 98.0 | 0.8 | 1.2 | 9.7 | 0.548 | 0.118 |
-| gpt-realtime-2 | 4.275 | 14.9 | 5.8 | 104 | 431 | 23.6 | 100.0 | 0.41 | 90.0 | 10.89 | 0.06 | 0.21 | 0.08 | 97.5 | 1.5 | 0.9 | 19.3 | 0.508 | 0.164 |
-| mini-omni | 3.923 | 6.7 | 4.8 | 115 | 1243 | 58.1 | 100.0 | 0.41 | 138.5 | 9.21 | -0.02 | 0.20 | -0.02 | 95.7 | 4.2 | 0.2 | 11.4 | 0.592 | 0.128 |
-| Qwen2.5-Omni-7B | 4.192 | 19.4 | 7.5 | 277 | 0 | 0.0 | 98.9 | 0.28 | 84.5 | 10.20 | -0.02 | -0.03 | -0.03 | 97.3 | 1.6 | 1.3 | 7.2 | 0.384 | 0.175 |
-| Qwen3-Omni-30B-A3B-Instruct | 4.338 | 7.9 | 3.3 | 27 | 0 | 0.0 | 98.1 | 0.48 | 204.5 | 10.91 | 0.07 | 0.29 | 0.06 | 97.2 | 1.1 | 2.0 | 8.6 | 0.671 | 0.219 |
+| Model | Inference mode | Open weights |
+| --- | --- | --- |
+| Human/original | Human | - |
+| GPT-audio-1.5 | Non-streaming | no |
+| GPT-realtime-2 | Full-duplex | no |
+| Qwen3-Omni-30B-Instruct | Full-duplex | yes |
+| Qwen2.5-Omni-7B | Half-duplex | yes |
+| Gemini-2.5-flash-native-audio | Full-duplex | no |
+| Gemini-3.1-flash-live | Full-duplex | no |
+| Mini-omni | Half-duplex | yes |
 
-## Notes and Current Assumptions
-
-- Most scripts are intended to be launched from `SPEARBench/benchmark` and source `config.sh`.
-- Several scripts submit work with `srun`, so the expected execution environment is an HPC cluster with CPU and GPU partitions named in the scripts.
-- Audio metadata paths are stored as relative paths under the benchmark directory in the generated CSVs.
-- LLM output audio is answer-only. Scripts that need the full interaction reconstruct it from `audio_path`, `answer_audio_path`, and `answer_start_time`.
-- STANCE currently runs on `improvised` only.
-- Naturalness feature extraction skips already-computed embedding chunks; remove the existing `naturalness/voxprofile_features` directory if you need a clean recompute, especially after changing `--chunk-size` or `--hop-size`.
-
+For the current table, interruption columns are shown as `-` for GPT-audio-1.5, Mini-omni, and Qwen2.5-Omni-7B, and negative latency rows are excluded before the average latency is computed.
 
 ## References
 
