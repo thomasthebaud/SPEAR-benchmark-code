@@ -755,25 +755,21 @@ The table below mirrors the article-ready LaTeX table in `reports/seamless_2t_2s
 
 ## References
 
-The benchmark reuses or adapts feature pipelines from the following related work. Public arXiv IDs were not available in search at the time this README was updated, so the BibTeX entries keep `TBD` fields where exact paper metadata is still missing.
+The benchmark reuses or adapts feature pipelines from the following related work.
 
 ### TRACE Naturalness Features
 
 Used by scripts `20_naturalness_feats.sh`, `21_extract_relations_context.sh`, and `22_score_naturalness.sh`.
 
 - Paper: `TRACE: Temporal Relationship-Aware Conversational Entrainment Detection in Dyadic Speech`
-- ArXiv: TBD; [search by title](https://arxiv.org/search/?query=TRACE%3A+Temporal+Relationship-Aware+Conversational+Entrainment+Detection+in+Dyadic+Speech&searchtype=all)
 - Code: [github.com/SathvikNapa/NaturalnessPrediction](https://github.com/SathvikNapa/NaturalnessPrediction)
 
 ```bibtex
-@misc{trace2026,
-  title         = {{TRACE}: Temporal Relationship-Aware Conversational Entrainment Detection in Dyadic Speech},
-  author        = {{TRACE authors}},
-  year          = {2026},
-  archivePrefix = {arXiv},
-  eprint        = {TBD},
-  url           = {TBD},
-  note          = {Code: \url{https://github.com/SathvikNapa/NaturalnessPrediction}}
+@article{TRACE,
+  title={TRACE: Temporal Relationship-Aware Conversational Entrainment Detection in Dyadic Speech},
+  author={Sathvik Manikantan Napa Ugandhar and Hao Zhang and Alison Gunzler and Yuzhe Wang and Thomas Thebaud and Georgi Tinchev and Venkatesh Ravichandran and Laureano Moro-Velazquez},
+  journal={arXiv preprint arXiv:2606.30543},
+  year={2026}
 }
 ```
 
@@ -782,18 +778,14 @@ Used by scripts `20_naturalness_feats.sh`, `21_extract_relations_context.sh`, an
 Used by scripts `30_run_LLM_inference_STANCEs.sh` and `31_compute_STANCE_metrics.sh`.
 
 - Paper: `StanceBench: A Benchmark for Audio LLM-Based Interpersonal Stance Evaluation from Speech`
-- ArXiv: TBD; [search by title](https://arxiv.org/search/?query=StanceBench%3A+A+Benchmark+for+Audio+LLM-Based+Interpersonal+Stance+Evaluation+from+Speech&searchtype=all)
 - Code: [github.com/YuzheWangjhu/SPEAR_fine_grained_benchmark](https://github.com/YuzheWangjhu/SPEAR_fine_grained_benchmark)
 
 ```bibtex
-@misc{stancebench2026,
-  title         = {{StanceBench}: A Benchmark for Audio LLM-Based Interpersonal Stance Evaluation from Speech},
-  author        = {{StanceBench authors}},
-  year          = {2026},
-  archivePrefix = {arXiv},
-  eprint        = {TBD},
-  url           = {TBD},
-  note          = {Code: \url{https://github.com/YuzheWangjhu/SPEAR_fine_grained_benchmark}}
+@article{STANCE,
+  title={StanceBench: A Benchmark for Audio LLM-Based Interpersonal Stance Evaluation from Speech},
+  author={Yuzhe Wang and Thomas Thebaud and Jennifer Hu and Jes{\'u}s Villalba-Lopez and Venkatesh Ravichandran and Georgi Tinchev and Najim Dehak and Laureano Moro-Vel{\'a}zquez},
+  journal={arXiv preprint arXiv:2506.10827},
+  year={2026}
 }
 ```
 
@@ -801,33 +793,33 @@ Used by scripts `30_run_LLM_inference_STANCEs.sh` and `31_compute_STANCE_metrics
 
 Used by scripts `40_preprocess_audios.sh`, `41_extract_explainable_features.sh`, and `42_use_features_for_baseline.sh`.
 
-- Paper: `Distributional Baselines for Conversational Prosody and Rhythm`
-- ArXiv: TBD; [search by title](https://arxiv.org/search/?query=Distributional+Baselines+for+Conversational+Prosody+and+Rhythm&searchtype=all)
+- Paper: `Reference-Based Prosody and Rhythm Evaluation for Spoken Dialogue Systems`
 - Code: [github.com/Ashish-Hallur/SPEAR-Metrics](https://github.com/Ashish-Hallur/SPEAR-Metrics)
 
 ```bibtex
-@misc{distributionalbaselines2026,
-  title         = {Distributional Baselines for Conversational Prosody and Rhythm},
-  author        = {{Distributional Baselines authors}},
-  year          = {2026},
-  archivePrefix = {arXiv},
-  eprint        = {TBD},
-  url           = {TBD},
-  note          = {Code: \url{https://github.com/Ashish-Hallur/SPEAR-Metrics}}
+@article{DISTRIB,
+  title={Reference-Based Prosody and Rhythm Evaluation for Spoken Dialogue Systems},
+  author={Ashish G Hallur and Thomas Thebaud and Georgi Tinchev and Venkatesh Ravichandran and Laureano Moro-Velazquez},
+  journal={arXiv preprint arXiv:2506.10827},
+  year={2026}
 }
 ```
 
 ### Turn Taking Surprisal
 
-https://github.com/TedZhangHao/turn-taking-naturalness
+Used by script `50_turn_taking_inference.sh` and the turn-taking naturalness graph/report stages.
 
-Used by scripts `50_turn_taking_inference`.
+- Paper: `TurnNat: Automatic Evaluation of Turn-Taking Naturalness in Dyadic Spoken Dialogue`
+- Code: [github.com/TedZhangHao/turn-taking-naturalness](https://github.com/TedZhangHao/turn-taking-naturalness)
 
-- Paper: `TBD`
-- ArXiv: TBD; [search by title](https://arxiv.org/search/?query=Distributional+Baselines+for+Conversational+Prosody+and+Rhythm&searchtype=all)
-- Code: [https://github.com/TedZhangHao/turn-taking-naturalness](https://github.com/TedZhangHao/turn-taking-naturalness)
-
-BibTex: TODO
+```bibtex
+@article{TURNS,
+  title={TurnNat: Automatic Evaluation of Turn-Taking Naturalness in Dyadic Spoken Dialogue},
+  author={Hao Zhang and Thomas Thebaud and Georgi Tinchev and Venkatesh Ravichandran and Laureano Moro-Velazquez},
+  journal={arXiv preprint arXiv:2506.10827},
+  year={2026}
+}
+```
 
 ## Contact
 

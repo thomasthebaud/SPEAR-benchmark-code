@@ -121,7 +121,7 @@ def save_histogram_kde_figure(scores, systems: list[str], system_colors: dict[st
     plot_systems = [system for system in systems if system in set(scores["system"])]
     if not plot_systems:
         return
-    fig, ax = plt.subplots(1, 1, figsize=(11, 3.48))
+    fig, ax = plt.subplots(1, 1, figsize=(11, 5))
     sns.histplot(
         data=scores,
         x="naturalness_logit",
@@ -132,7 +132,7 @@ def save_histogram_kde_figure(scores, systems: list[str], system_colors: dict[st
         element="step",
         stat="density",
         common_norm=False,
-        alpha=0.22,
+        alpha=0.1,
         linewidth=1.4,
         ax=ax,
     )
@@ -146,6 +146,8 @@ def save_histogram_kde_figure(scores, systems: list[str], system_colors: dict[st
             linestyle="--" if system == ORIGINAL else "-",
             linewidth=1.8,
             ax=ax,
+            fill=system == ORIGINAL,
+            alpha=0.2 if system == ORIGINAL else 0.8
         )
     legend = ax.get_legend()
     legend_handles = []
@@ -156,6 +158,7 @@ def save_histogram_kde_figure(scores, systems: list[str], system_colors: dict[st
         legend.remove()
     ax.set_xlabel("Emotional Naturalness Scores")
     ax.set_ylabel("Density")
+    ax.set_xlim(-12, 22)
     ax.tick_params(axis="both", labelsize=9)
     if legend_handles:
         fig.legend(

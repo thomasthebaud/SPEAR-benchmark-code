@@ -167,6 +167,78 @@ def save_boxplot_figure(
     save_figure(fig, output_path)
 
 
+def save_pointplot_figure(
+    data: pd.DataFrame,
+    subsets: list[str],
+    labels: list[str],
+    colors: dict[str, str],
+    output_path: Path,
+    *,
+    title: str | None = None,
+    combined: bool = False,
+) -> None:
+    if not subsets:
+        return
+    fig_height = 8.2 if combined else (6.2 if len(subsets) == 1 else 7.0)
+    fig_width = 15.0 if combined else 9.5 * len(subsets)
+    fig, axes = plt.subplots(1, len(subsets), figsize=(fig_width, fig_height), sharey=True, squeeze=False)
+    available_features = set(data["feature"])
+    feature_order = [label for feature, label in zip(F0_PROFILE_FEATURES, F0_PROFILE_LABELS) if feature in available_features]
+    legend_handles = []
+    legend_labels = []
+    for ax, subset in zip(axes[0], subsets):
+        sub = data[data["subset"] == subset]
+        if sub.empty:
+            ax.set_axis_off()
+            continue
+        sns.pointplot(
+            data=sub,
+            x="feature_label",
+            y="value",
+            hue="label",
+            order=feature_order,
+            hue_order=labels,
+            palette=colors,
+            dodge=0.35,
+            errorbar="sd" if combined else ("ci", 95),
+            capsize=0.08,
+            err_kws={"linewidth": 1.2},
+            markers="o",
+            linestyles=["--" if label == "human" else "-" for label in labels],
+            ax=ax,
+        )
+        if not legend_handles:
+            legend_handles, legend_labels = ax.get_legend_handles_labels()
+        remove_axis_legend(ax)
+        ax.set_title("" if combined else subset.title())
+        ax.set_xlabel("f0 bins")
+        ax.tick_params(axis="x", labelsize=20)
+        ax.tick_params(axis="y", labelsize=20)
+        ax.grid(True, axis="y", alpha=0.35)
+        ax.set_title("")
+    axes[0, 0].set_ylabel("Normalized f0 values")
+
+    if legend_handles:
+        fig.legend(
+            legend_handles,
+            legend_labels,
+            loc="upper center",
+            ncol=max(1, int(np.ceil(len(legend_handles) / 2))),
+            bbox_to_anchor=(0.5, 1.02 if combined else 0.95),
+            frameon=True,
+            fontsize=18,
+            borderpad=0.25,
+            columnspacing=1.0,
+            handlelength=1.6,
+        )
+    title=None
+    if title:
+        fig.suptitle(title, y=1.02 if combined else 1.08)
+    plt.title("")
+    fig.tight_layout(rect=(0, 0, 1, 0.94 if combined else 0.9))
+    save_figure(fig, output_path)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Article graph: explainable f0 profiles.")
     add_common_graph_args(parser)
@@ -194,6 +266,8 @@ def main() -> int:
             return 0
 
     save_boxplot_figure(data, subsets, labels, colors, args.output_path, title="Normalized f0 Profiles Across Systems")
+    point_output_path = companion_output_path(args.output_path, "point")
+    save_pointplot_figure(data, subsets, labels, colors, point_output_path, title="Normalized f0 values by bins")
     if "combined" in set(data["subset"]):
         save_boxplot_figure(
             data,
@@ -204,6 +278,15 @@ def main() -> int:
             title="Normalized f0 Profiles Across Systems (Combined)",
             legend_inside=True,
             title_as_subplot=True,
+        )
+        save_pointplot_figure(
+            data,
+            ["combined"],
+            labels,
+            colors,
+            companion_output_path(point_output_path, "combined"),
+            title="Normalized f0 values by bins",
+            combined=True,
         )
     return 0
 

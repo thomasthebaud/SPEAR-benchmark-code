@@ -138,8 +138,8 @@ def save_pointplot_figure(scores, systems: list[str], palette: dict[str, str], o
     ax.set_ylim(1e-6, 1.0)
     ax.set_yticks([1e-6, 1e-5, 1e-4, 1e-3, 1e-2, 1e-1, 1.0])
     ax.set_yticklabels(["1e-6", "", "1e-4", "", "1e-2", "", "1"])
-    ax.tick_params(axis="x", rotation=25, labelsize=18)
-    ax.tick_params(axis="y", labelsize=18)
+    ax.tick_params(axis="x", rotation=25, labelsize=23)
+    ax.tick_params(axis="y", labelsize=23)
     ax.grid(True, axis="y", alpha=0.35)
     handles, labels = ax.get_legend_handles_labels()
     if handles:
