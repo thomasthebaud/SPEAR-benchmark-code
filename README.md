@@ -743,11 +743,14 @@ Used by scripts `20_naturalness_feats.sh`, `21_extract_relations_context.sh`, an
 - Code: [github.com/SathvikNapa/NaturalnessPrediction](https://github.com/SathvikNapa/NaturalnessPrediction)
 
 ```bibtex
-@article{TRACE,
-  title={TRACE: Temporal Relationship-Aware Conversational Entrainment Detection in Dyadic Speech},
-  author={Sathvik Manikantan Napa Ugandhar and Hao Zhang and Alison Gunzler and Yuzhe Wang and Thomas Thebaud and Georgi Tinchev and Venkatesh Ravichandran and Laureano Moro-Velazquez},
-  journal={arXiv preprint arXiv:2606.30543},
-  year={2026}
+@misc{TRACE,
+      title={TRACE: Temporal Relationship-Aware Conversational Entrainment Detection in Dyadic Speech}, 
+      author={Sathvik Manikantan Napa Ugandhar and Hao Zhang and Alison Gunzler and Yuzhe Wang and Thomas Thebaud and Georgi Tinchev and Venkatesh Ravichandran and Laureano Moro-Velázquez},
+      year={2026},
+      eprint={2606.30543},
+      archivePrefix={arXiv},
+      primaryClass={cs.CL},
+      url={https://arxiv.org/abs/2606.30543}, 
 }
 ```
 
@@ -775,11 +778,14 @@ Used by scripts `40_preprocess_audios.sh`, `41_extract_explainable_features.sh`,
 - Code: [github.com/Ashish-Hallur/SPEAR-Metrics](https://github.com/Ashish-Hallur/SPEAR-Metrics)
 
 ```bibtex
-@article{DISTRIB,
-  title={Reference-Based Prosody and Rhythm Evaluation for Spoken Dialogue Systems},
-  author={Ashish G Hallur and Thomas Thebaud and Georgi Tinchev and Venkatesh Ravichandran and Laureano Moro-Velazquez},
-  journal={arXiv preprint arXiv:2506.10827},
-  year={2026}
+@misc{DISTRIB,
+      title={Reference-Based Prosody and Rhythm Evaluation for Spoken Dialogue Systems}, 
+      author={Ashish Hallur and Thomas Thebaud and Georgi Tinchev and Venkatesh Ravichandran and Laureano Moro-Velazquez},
+      year={2026},
+      eprint={2606.31055},
+      archivePrefix={arXiv},
+      primaryClass={cs.CL},
+      url={https://arxiv.org/abs/2606.31055}, 
 }
 ```
 
@@ -791,11 +797,14 @@ Used by script `50_turn_taking_inference.sh` and the turn-taking naturalness gra
 - Code: [github.com/TedZhangHao/turn-taking-naturalness](https://github.com/TedZhangHao/turn-taking-naturalness)
 
 ```bibtex
-@article{TURNS,
-  title={TurnNat: Automatic Evaluation of Turn-Taking Naturalness in Dyadic Spoken Dialogue},
-  author={Hao Zhang and Thomas Thebaud and Georgi Tinchev and Venkatesh Ravichandran and Laureano Moro-Velazquez},
-  journal={arXiv preprint arXiv:2506.10827},
-  year={2026}
+@misc{TURNS,
+      title={TurnNat: Automatic Evaluation of Turn-Taking Naturalness in Dyadic Spoken Dialogue}, 
+      author={Hao Zhang and Thomas Thebaud and Georgi Tinchev and Venkatesh Ravichandran and Laureano Moro-Velazquez},
+      year={2026},
+      eprint={2607.01345},
+      archivePrefix={arXiv},
+      primaryClass={cs.CL},
+      url={https://arxiv.org/abs/2607.01345}, 
 }
 ```
 
