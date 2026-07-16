@@ -23,7 +23,7 @@ F0_PROFILE_FEATURES = [
 F0_FEATURE_FALLBACKS = {"f0_p52": "f0_p25"}
 TURNTAKING_EXPERIMENT = "group4-dualturn-full-all6-fvad256"
 TURNTAKING_FILE = f"turntaking.{TURNTAKING_EXPERIMENT}.csv"
-MODELS_WITHOUT_INTERRUPTION_METRICS = {"gpt-audio-1.5", "mini-omni", "qwen2.5-omni-7b"}
+MODELS_WITHOUT_INTERRUPTION_METRICS = {"gpt-audio-1.5"}
 STANCE_LABEL_OVERRIDES = {
     "aggression": "Calmness",
     "inhibition": "Disinhibition",

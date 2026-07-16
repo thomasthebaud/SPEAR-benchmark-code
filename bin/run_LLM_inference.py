@@ -1,5 +1,6 @@
 import argparse
 import io
+import inspect
 import importlib.util
 import sys
 from tqdm import tqdm
@@ -102,6 +103,7 @@ if __name__ == "__main__":
     parser.add_argument("--shard-index", type=int, default=0, help="Zero-based shard index to process.")
     parser.add_argument("--num-shards", type=int, default=1, help="Total number of metadata shards.")
     parser.add_argument("--output-csv-name", default="metadata.csv", help="Output metadata CSV filename inside the split/subset output directory.")
+    parser.add_argument("--verbose", action="store_true", help="Print detailed model/proxy progress diagnostics.")
 
     args = parser.parse_args()
     if args.num_shards < 1:
@@ -157,13 +159,18 @@ if __name__ == "__main__":
         output_path = output_dir / f"audio/{input_audio_path.stem}.wav"
         try:
             # get answer
-            audio_answer_bytes, transcript_answer, finish_reason, success, answer_start_time = model_proxy.get_reply_with_audio(
-                audio_path=input_audio_path,
-                instruction=args.prompt,
-                model_name=args.model,
-                org=args.org,
-                api_key=args.openai_api_key,
-            )
+            reply_kwargs = {
+                "audio_path": input_audio_path,
+                "instruction": args.prompt,
+                "model_name": args.model,
+                "org": args.org,
+                "api_key": args.openai_api_key,
+            }
+            if "verbose" in inspect.signature(model_proxy.get_reply_with_audio).parameters:
+                reply_kwargs["verbose"] = args.verbose
+            if args.verbose:
+                print(f"[run_LLM_inference:verbose] processing {input_audio_path}", flush=True)
+            audio_answer_bytes, transcript_answer, finish_reason, success, answer_start_time = model_proxy.get_reply_with_audio(**reply_kwargs)
             if not success:
                 if finish_reason not in failed_indices:
                     failed_indices[finish_reason] = []
